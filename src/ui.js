@@ -1,8 +1,8 @@
 // ===== UI =====
 (function () {
   const Q = window.QB,
-    F = Q.F,
-    byId = Q.byId,
+    F = window.QB_FLOW,
+    byId = Q.cardById,
     G = window.QB_GLOSSARY,
     DBG = window.QB_DEBUG;
   let S = null,
@@ -732,7 +732,7 @@
               "</ol>"
             : "") +
           '<div class="help">Resolve it with the matching decision page (rule 12). ' +
-          (Q.ON_TABLE(p.card) && !p.combat
+          (Q.staysOnTable(p.card) && !p.combat
             ? "It stays on the table until discarded."
             : "") +
           "</div>";
@@ -1132,7 +1132,7 @@
   }
   function diceHTML() {
     const d = S.dice,
-      av = Q.availDice(S);
+      av = Q.availableDice(S);
     let h =
       '<section class="panel" aria-labelledby="h-dice"><h2 class="ph" id="h-dice">Queller’s dice <span class="r">' +
       Q.diceCount(S) +
@@ -1239,15 +1239,15 @@
       '<section class="panel" aria-labelledby="h-cards"><h2 class="ph" id="h-cards">Queller’s cards <span class="r">' +
       hc.total +
       " in hand" +
-      (S.settings.wome ? " · " + hc.F + " faction" : "") +
+      (S.settings.wome ? " · " + hc.faction + " faction" : "") +
       "</span></h2>";
     h +=
       '<div class="hand"><ul aria-label="Cards in hand: ' +
-      hc.C +
+      hc.character +
       " Character, " +
-      hc.S +
+      hc.strategy +
       " Strategy" +
-      (S.settings.wome ? ", " + hc.F + " Faction Event" : "") +
+      (S.settings.wome ? ", " + hc.faction + " Faction Event" : "") +
       '">' +
       c.hand
         .map(
@@ -1354,7 +1354,7 @@
             .map(
               (k) =>
                 '<div class="row"><span>' +
-                esc(Q.SITU_Q[k]) +
+                esc(Q.SITUATIONAL_QUESTIONS[k]) +
                 "</span><b>" +
                 (S.situ[k] ? "Yes" : "No") +
                 "</b></div>",
@@ -1435,7 +1435,7 @@
           '"' +
           ((getT(k) | 0) === v ? " selected" : "") +
           ">" +
-          Q.snLabel(v) +
+          Q.politicalTrackLabel(v) +
           "</option>";
       return (
         '<div class="row"><label for="' +

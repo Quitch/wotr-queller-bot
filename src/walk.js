@@ -1,8 +1,8 @@
 // ===== Flowchart walk engine =====
 (function () {
   const Q = window.QB,
-    F = Q.F,
-    byId = Q.byId;
+    F = window.QB_FLOW,
+    byId = Q.cardById;
   const SN_NAME = {
       sauron: "Sauron",
       isengard: "Isengard",
@@ -347,8 +347,8 @@
     const auto = (v, why) => decided(S, text(n), x.bold, v, true, why);
     const bauto = (v, why) => (T ? auto(v, why) : ask(S, n));
     const hc = Q.handCounts(S);
-    const handC = () => Q.handBy(S, "C"),
-      handS = () => Q.handBy(S, "S");
+    const handC = () => Q.handCardsOfDeck(S, "C"),
+      handS = () => Q.handCardsOfDeck(S, "S");
     // Evaluate which of `ids` are playable (asking the player as needed), keep them as this walk's candidates and answer "any playable?"
     const playableCount = (ids, ctx, noun) => {
       const r = evalPlayable(S, ids, ctx);
@@ -363,11 +363,12 @@
         if (cards) return auto(hc.total > 6, "hand: " + hc.total);
         return ask(S, n);
       case "C14.strat1":
-        if (cards) return auto(hc.S > 1, "Strategy cards: " + hc.S);
+        if (cards)
+          return auto(hc.strategy > 1, "Strategy cards: " + hc.strategy);
         return ask(S, n);
       case "C14.more4f":
       case "M14.more4f":
-        if (cards) return auto(hc.F > 4, "Faction cards: " + hc.F);
+        if (cards) return auto(hc.faction > 4, "Faction cards: " + hc.faction);
         return ask(S, n);
       case "C14.corrLow":
         return bauto(
@@ -416,7 +417,8 @@
               "Fellowship not on the Mordor track or revealed",
             );
         }
-        if (cards) return auto(hc.C > 0, "Character cards: " + hc.C);
+        if (cards)
+          return auto(hc.character > 0, "Character cards: " + hc.character);
         return ask(
           S,
           n,
@@ -452,7 +454,7 @@
           });
           w.sub = 1;
         }
-        const seNot = !Q.snAtWar(S, "se"),
+        const seNot = !Q.shadowNationAtWar(S, "se"),
           noFac = S.settings.wome && !Q.shadowFactionInPlay(S);
         let why =
           "S&E at war" + (S.settings.wome ? ", a faction is in play" : "");
@@ -563,7 +565,7 @@
         return ask(S, n);
       case "MU.notWar": {
         if (!T) return ask(S, n);
-        const nw = !Q.snAllAtWar(S);
+        const nw = !Q.allShadowNationsAtWar(S);
         const nf = S.settings.wome && !Q.shadowFactionInPlay(S);
         let why = "all at war" + (S.settings.wome ? ", faction in play" : "");
         if (nw) why = "a Shadow nation is not at war";
@@ -606,7 +608,7 @@
           return auto(hc.total < 4, "Event cards in hand: " + hc.total);
         return ask(S, n);
       case "EV.less3f":
-        if (cards) return auto(hc.F < 3, "Faction cards: " + hc.F);
+        if (cards) return auto(hc.faction < 3, "Faction cards: " + hc.faction);
         return ask(S, n);
       case "EV.anyPlay":
         if (cards)
@@ -619,11 +621,11 @@
       case "EV.aboveFull":
         if (cards)
           return auto(
-            hc.total > 6 || hc.F > 4,
+            hc.total > 6 || hc.faction > 4,
             "hand " +
               hc.total +
               "/6" +
-              (S.settings.wome ? ", faction " + hc.F + "/4" : ""),
+              (S.settings.wome ? ", faction " + hc.faction + "/4" : ""),
           );
         return ask(S, n);
       case "EV.revCard":
@@ -663,7 +665,8 @@
         if (w.die) return auto(w.die === "FPlay", "using " + DIE_NAME[w.die]);
         return ask(S, n);
       case "FA.aboveFull":
-        if (cards) return auto(hc.F > 4, "faction hand " + hc.F + "/4");
+        if (cards)
+          return auto(hc.faction > 4, "faction hand " + hc.faction + "/4");
         return ask(S, n);
       case "FA.eligible":
         if (w.factionChoice)
@@ -699,7 +702,7 @@
       case "BA.ctb":
         if (!S.settings.wome) return auto(false, "WoME not in play");
         if (cards) {
-          const r = evalPlayable(S, Q.ctbCards(S), "combat");
+          const r = evalPlayable(S, Q.callToBattleCards(S), "combat");
           if (r === PENDING) return;
           w.ctb = r;
           return auto(
@@ -739,8 +742,8 @@
   // ----- playability evaluation with lazy prompts -----
   // A card's precondition in this context: the combat test in a battle, the board test when the tracker is on, otherwise taken as met.
   function playablePre(S, c, id, ctx) {
-    if (ctx === "combat") return Q.combatPre(c, S);
-    return S.settings.tracker ? Q.precondition(id, S) : true;
+    if (ctx === "combat") return Q.combatPrecondition(S, c);
+    return S.settings.tracker ? Q.precondition(S, id) : true;
   }
   function evalPlayable(S, ids, ctx) {
     const out = [];
@@ -832,7 +835,7 @@
     const can =
       w.mode !== "ringAny" &&
       Q.ringAvailable(S) &&
-      (!S.settings.dice || Q.availDice(S).some((d) => d.k === "A"));
+      (!S.settings.dice || Q.availableDice(S).some((d) => d.k === "A"));
     if (can) {
       trail(S, { kind: "jump", text: label });
       const entry = w.entry;
@@ -1067,7 +1070,7 @@
         " — done: Queller now holds " +
         hc.total +
         " Event card" +
-        (S.settings.wome ? "s and " + hc.F + " Faction Event card" : "") +
+        (S.settings.wome ? "s and " + hc.faction + " Faction Event card" : "") +
         "s.",
       node: w.node,
       auto: true,
@@ -1105,7 +1108,7 @@
       case "C5.discardDie":
       case "M5.discardDie":
         if (dice) {
-          const av = Q.availDice(S);
+          const av = Q.availableDice(S);
           if (!av.length) {
             trail(S, {
               kind: "skip",
@@ -1261,9 +1264,9 @@
             "Move " +
             w.nationChoice +
             " down one on the Political Track (" +
-            Q.snLabel(now) +
+            Q.politicalTrackLabel(now) +
             " → " +
-            Q.snLabel(next) +
+            Q.politicalTrackLabel(next) +
             ").",
           node: w.node,
           nation: k,
@@ -1376,7 +1379,9 @@
           return cont(
             "hand: " +
               Q.handCounts(S).total +
-              (S.settings.wome ? " + " + Q.handCounts(S).F + " faction" : ""),
+              (S.settings.wome
+                ? " + " + Q.handCounts(S).faction + " faction"
+                : ""),
           );
         }
         return setPrompt(S, {
@@ -1418,7 +1423,7 @@
         });
       case "C14.rollHunt":
         if (dice) {
-          const r = Q.rnd(6) + 1;
+          const r = Q.randomBelow(6) + 1;
           const k = r <= 3 ? 0 : 1;
           Q.log(
             S,
@@ -1485,7 +1490,7 @@
       case "C14.sogRoll":
       case "M14.sogRoll":
         if (dice) {
-          const r = Q.rnd(6) + 1;
+          const r = Q.randomBelow(6) + 1;
           Q.log(S, "Strategy roll: " + r + ".");
           trail(S, {
             kind: "step",
@@ -1557,7 +1562,7 @@
           if (r === PENDING) return;
           w.cands = r;
           if (S.settings.wome) {
-            const b = evalPlayable(S, Q.ctbCards(S), "combat");
+            const b = evalPlayable(S, Q.callToBattleCards(S), "combat");
             if (b === PENDING) return;
             w.ctb = b;
           } else w.ctb = [];
@@ -1712,13 +1717,13 @@
         });
       }
       const opts = [];
-      if (!Q.snAtWar(S, "isengard")) opts.push("Isengard");
+      if (!Q.shadowNationAtWar(S, "isengard")) opts.push("Isengard");
       if (S.settings.wome && !allFac) opts.push("Faction");
-      if (!Q.snAtWar(S, "sauron")) opts.push("Sauron");
-      if (!Q.snAtWar(S, "se")) opts.push("Southrons and Easterlings");
+      if (!Q.shadowNationAtWar(S, "sauron")) opts.push("Sauron");
+      if (!Q.shadowNationAtWar(S, "se")) opts.push("Southrons and Easterlings");
       w.nationChoice = opts[0] || null;
       const pos = ["sauron", "isengard", "se"]
-        .map((k) => SN_NAME[k] + ": " + Q.snLabel(N[k] | 0))
+        .map((k) => SN_NAME[k] + ": " + Q.politicalTrackLabel(N[k] | 0))
         .join(", ");
       trail(S, {
         kind: "pri",
@@ -1895,7 +1900,7 @@
               S,
               SN_NAME[p.nation] +
                 " is now " +
-                Q.snLabel(S.board.nations[p.nation]) +
+                Q.politicalTrackLabel(S.board.nations[p.nation]) +
                 ".",
             );
           }

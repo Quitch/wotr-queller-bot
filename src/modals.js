@@ -1,7 +1,7 @@
 // ===== Modals: glossary, flowcharts (SVG), rules, calculator, save/load, settings, jump-to =====
 (function () {
   const Q = window.QB,
-    F = Q.F,
+    F = window.QB_FLOW,
     U = window.QBUI,
     G = window.QB_GLOSSARY,
     DBG = window.QB_DEBUG;

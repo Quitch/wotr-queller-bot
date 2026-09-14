@@ -4,7 +4,7 @@
 // reload that failed to render a saved game.
 (function () {
   const Q = window.QB,
-    F = Q.F;
+    F = window.QB_FLOW;
   const FORMAT = "queller-debug/1";
   const LIMITS = { actions: 300, errors: 30, walks: 8, states: 5 };
   const D = {

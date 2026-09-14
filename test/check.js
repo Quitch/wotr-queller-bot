@@ -19,7 +19,7 @@ for (const m of src.matchAll(/"([A-Z0-9]+)\.([A-Za-z0-9]+)"/g)) {
   if (F[p] && !F[p].nodes[n])
     fail("walk.js refers to missing node " + p + "." + n);
 }
-// 2. every criterion on a card priority list is understood by critFn
+// 2. every criterion on a card priority list is understood by criterionTest
 const S = Q.newState({ dice: true, cards: true, tracker: true, wome: true });
 const cardLists = [
   "C14.disc14",
@@ -45,8 +45,8 @@ for (const k of cardLists) {
     continue;
   }
   for (const it of node[6].items)
-    if (!Q.critFn(it, S, null, {}))
-      fail(k + ': critFn cannot resolve "' + it + '"');
+    if (!Q.criterionTest(it, S, null, { eventFull: false, factionFull: false }))
+      fail(k + ': criterionTest cannot resolve "' + it + '"');
 }
 // 3. every grey box has a JUMPS entry; every decision has two arrows; every non-action box has a way out
 for (const p in F)
@@ -64,14 +64,14 @@ for (const p in F)
 for (const c of W.QB_CARDS) {
   if (c.pre) {
     try {
-      Q.precondition(c.id, S);
+      Q.precondition(S, c.id);
     } catch (e) {
       fail(c.id + ' pre "' + c.pre + '": ' + e.message);
     }
   }
   if (c.cpre) {
     try {
-      Q.combatPre(c, { ...S, battle: { figures: {} } });
+      Q.combatPrecondition({ ...S, battle: { figures: {} } }, c);
     } catch (e) {
       fail(c.id + ' cpre "' + c.cpre + '": ' + e.message);
     }

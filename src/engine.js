@@ -1,26 +1,25 @@
 // ===== Queller Runner engine: state, dice, cards, playability =====
 (function () {
-  const F = window.QB_FLOW,
-    CARDS = window.QB_CARDS;
-  const byId = {};
+  const CARDS = window.QB_CARDS;
+  const cardById = {};
   // Initiative as a number: "3-5" counts as 4, no initiative as 0.
-  function initN(c) {
-    if (typeof c.init === "number") return c.init;
-    return c.init === "3-5" ? 4 : 0;
+  function initiativeValue(card) {
+    if (typeof card.init === "number") return card.init;
+    return card.init === "3-5" ? 4 : 0;
   }
-  CARDS.forEach((c) => {
-    byId[c.id] = c;
-    c.initN = initN(c);
+  CARDS.forEach((card) => {
+    cardById[card.id] = card;
+    card.initiative = initiativeValue(card);
   });
-  const rnd = (n) => Math.floor(Math.random() * n);
-  const pick = (a) => a[rnd(a.length)];
-  const shuffle = (a) => {
-    a = a.slice();
-    for (let i = a.length - 1; i > 0; i--) {
-      const j = rnd(i + 1);
-      [a[i], a[j]] = [a[j], a[i]];
+  const randomBelow = (limit) => Math.floor(Math.random() * limit);
+  const pick = (items) => items[randomBelow(items.length)];
+  const shuffle = (items) => {
+    items = items.slice();
+    for (let i = items.length - 1; i > 0; i--) {
+      const j = randomBelow(i + 1);
+      [items[i], items[j]] = [items[j], items[i]];
     }
-    return a;
+    return items;
   };
   const VERSION = 59; // app version (shown in the debug log and stamped on saves)
   const PALANTIR = "sa045",
@@ -37,21 +36,21 @@
   // ---------- card flags ----------
   // Static flags come from cards.js; only `preferred` and `factionInPlay` depend on the game state.
   // The strategy's preferred card type: Character cards under corruption, any other type under military.
-  function preferred(c, strat) {
-    if (!c.type) return false;
-    return strat === "corruption"
-      ? c.type === "Character"
-      : c.type !== "Character";
+  function preferred(card, strategy) {
+    if (!card.type) return false;
+    return strategy === "corruption"
+      ? card.type === "Character"
+      : card.type !== "Character";
   }
-  function cardFlags(c, S) {
+  function cardFlags(card, state) {
     return {
-      revealed: !!c.revealed,
-      tile: !!c.tile,
-      corruption: !!c.corruption,
-      init: c.initN,
-      preferred: preferred(c, S.strategy),
-      factionInPlay: c.faction
-        ? !!S.board.factions[c.faction.toLowerCase()]
+      revealed: !!card.revealed,
+      tile: !!card.tile,
+      corruption: !!card.corruption,
+      init: card.initiative,
+      preferred: preferred(card, state.strategy),
+      factionInPlay: card.faction
+        ? !!state.board.factions[card.faction.toLowerCase()]
         : false,
     };
   }
@@ -85,63 +84,82 @@
     sa028: 1,
     sa033: 1,
   };
-  const ON_TABLE = (id) => !!byId[id].onTable;
-  const handBy = (S, deck) => S.cards.hand.filter((i) => byId[i].deck === deck);
+  const staysOnTable = (id) => !!cardById[id].onTable;
+  const handCardsOfDeck = (state, deckKey) =>
+    state.cards.hand.filter((i) => cardById[i].deck === deckKey);
   // Cards Queller may use as a combat card: the hand, plus table cards whose text allows it (Balrog of Moria).
-  const combatCandidates = (S) =>
-    S.cards.hand.concat(S.cards.table.filter((i) => byId[i].tableCombat));
-  const ctbCards = (S) =>
+  const combatCandidates = (state) =>
+    state.cards.hand.concat(
+      state.cards.table.filter((i) => cardById[i].tableCombat),
+    );
+  const callToBattleCards = (state) =>
     CARDS.filter(
-      (c) => c.deck === "B" && S.board.factions[c.faction.toLowerCase()],
-    ).map((c) => c.id);
+      (card) =>
+        card.deck === "B" && state.board.factions[card.faction.toLowerCase()],
+    ).map((card) => card.id);
 
   // ---------- board helpers ----------
-  // Shadow nations on the Political Track: nations.sauron/isengard/se = steps above "At War" (0 = At War, 1-3 = Active +N). Start: Sauron 1, Isengard 1, S&E 2.
-  const SN_START = { sauron: 1, isengard: 1, se: 2 };
-  function snAtWar(S, k) {
-    return (S.board.nations[k] | 0) === 0;
+  // Shadow nations on the Political Track: nations.sauron/isengard/se = steps above "At War" (0 = At War, 1-3 = Active +N). Start: Sauron 1, Isengard 1, state&E 2.
+  const SHADOW_NATION_START = { sauron: 1, isengard: 1, se: 2 };
+  function shadowNationAtWar(state, nation) {
+    return (state.board.nations[nation] | 0) === 0;
   }
-  function snAllAtWar(S) {
-    return snAtWar(S, "sauron") && snAtWar(S, "isengard") && snAtWar(S, "se");
-  }
-  function snLabel(v) {
-    return v === 0 ? "At War" : "Active +" + v;
-  }
-  function fpNationAtWar(S) {
-    return ["gondor", "rohan", "north", "dwarves", "elves"].some(
-      (k) => S.board.nations[k] === "war",
+  function allShadowNationsAtWar(state) {
+    return (
+      shadowNationAtWar(state, "sauron") &&
+      shadowNationAtWar(state, "isengard") &&
+      shadowNationAtWar(state, "se")
     );
   }
-  function shadowFactionInPlay(S) {
-    return S.settings.wome && SHADOW_FACTIONS.some((k) => S.board.factions[k]);
+  function politicalTrackLabel(steps) {
+    return steps === 0 ? "At War" : "Active +" + steps;
   }
-  function allShadowFactionsInPlay(S) {
-    return SHADOW_FACTIONS.every((k) => S.board.factions[k]);
+  function fpNationAtWar(state) {
+    return ["gondor", "rohan", "north", "dwarves", "elves"].some(
+      (nation) => state.board.nations[nation] === "war",
+    );
+  }
+  function shadowFactionInPlay(state) {
+    return (
+      state.settings.wome &&
+      SHADOW_FACTIONS.some((factionKey) => state.board.factions[factionKey])
+    );
+  }
+  function allShadowFactionsInPlay(state) {
+    return SHADOW_FACTIONS.every(
+      (factionKey) => state.board.factions[factionKey],
+    );
   }
   // Whether the app knows how many Elven Rings the Shadow holds: the full tracker has the field, and so does the minimal tracker when dice are rolled.
-  function ringsKnown(S) {
-    return !!(S.settings.tracker || S.settings.dice);
+  function ringsKnown(state) {
+    return !!(state.settings.tracker || state.settings.dice);
   }
-  function ringAvailable(S) {
-    return !S.ringUsedThisTurn && (!ringsKnown(S) || S.board.rings > 0);
+  function ringAvailable(state) {
+    return (
+      !state.ringUsedThisTurn && (!ringsKnown(state) || state.board.rings > 0)
+    );
   }
   // Hunt box maximum (rulebook: the number of Companions, but always at least one) — rule 34 caps the flowchart allocations at it.
-  function huntCap(S) {
-    return Math.max(1, S.board.fs.companions | 0);
+  function huntCap(state) {
+    return Math.max(1, state.board.fs.companions | 0);
   }
   // Minions Queller could muster now, in priority order (Muster page); the first is the one it musters.
-  function minionsAvailable(S) {
-    const c = S.board.chars,
+  function minionsAvailable(state) {
+    const chars = state.board.chars,
       out = [];
-    if (snAtWar(S, "isengard") && !c.saruman)
+    if (shadowNationAtWar(state, "isengard") && !chars.saruman)
       out.push({ name: "Saruman", key: "saruman", why: "Isengard at war" });
-    if (snAtWar(S, "sauron") && fpNationAtWar(S) && !c.witchKing)
+    if (
+      shadowNationAtWar(state, "sauron") &&
+      fpNationAtWar(state) &&
+      !chars.witchKing
+    )
       out.push({
         name: "Witch King",
         key: "witchKing",
         why: "Sauron at war and a Free Peoples nation at war",
       });
-    if (snAllAtWar(S) && !c.mouth)
+    if (allShadowNationsAtWar(state) && !chars.mouth)
       out.push({
         name: "Mouth of Sauron",
         key: "mouth",
@@ -150,27 +168,29 @@
     return out;
   }
   // Older saves kept the Shadow nations as booleans (true = at war); now they are steps above At War.
-  function migrateNations(n) {
-    for (const k of ["sauron", "isengard", "se"]) {
-      if (typeof n[k] === "boolean") n[k] = n[k] ? 0 : SN_START[k];
-      else if (typeof n[k] !== "number") n[k] = SN_START[k];
+  function migrateNations(nations) {
+    for (const nation of ["sauron", "isengard", "se"]) {
+      if (typeof nations[nation] === "boolean")
+        nations[nation] = nations[nation] ? 0 : SHADOW_NATION_START[nation];
+      else if (typeof nations[nation] !== "number")
+        nations[nation] = SHADOW_NATION_START[nation];
     }
   }
-  function migrate(o) {
-    if (o.settings && o.settings.tracker === undefined) {
-      o.settings.tracker = o.settings.walk !== false;
-      delete o.settings.walk;
+  function migrate(save) {
+    if (save.settings && save.settings.tracker === undefined) {
+      save.settings.tracker = save.settings.walk !== false;
+      delete save.settings.walk;
     }
-    if (o.board?.nations) migrateNations(o.board.nations);
-    if (o.board && o.board.rings === undefined) o.board.rings = 0;
-    delete o.shownCard;
-    delete o.lastAction;
-    return o;
+    if (save.board?.nations) migrateNations(save.board.nations);
+    if (save.board && save.board.rings === undefined) save.board.rings = 0;
+    delete save.shownCard;
+    delete save.lastAction;
+    return save;
   }
 
   // ---------- playability preconditions ----------
-  // Each returns true/false, or asks a situational question (answered once per turn) via situ().
-  const SITU_Q = {
+  // Each returns true/false, or asks a situational question (answered once per turn) via situationalAnswer().
+  const SITUATIONAL_QUESTIONS = {
     mtSiege: "Is Minas Tirith under siege by a Shadow army?",
     nazNearFP:
       "Is a Shadow army containing Nazgûl adjacent to, or in the same region as, a Free Peoples army?",
@@ -183,77 +203,84 @@
       "Is the Fellowship or a Companion inside the borders of a Free Peoples nation that is not at war?",
     siegeEngine: "Is a Shadow Siege Engine in this battle?",
   };
-  function situ(S, key) {
-    const v = S.situ[key];
-    if (v === undefined) return { situ: key, q: SITU_Q[key] };
-    return v;
+  function situationalAnswer(state, key) {
+    const answer = state.situ[key];
+    if (answer === undefined)
+      return { situ: key, q: SITUATIONAL_QUESTIONS[key] };
+    return answer;
   }
   const PRECONDITIONS = {
-    fsNotInFPSettlement: (S) => !S.board.fs.inFPSettlement,
-    fsProgress1: (S) => S.board.fs.progress >= 1,
-    fsRevealed: (S) => S.board.fs.revealed,
-    saruman: (S) => S.board.chars.saruman,
-    witchKing: (S) => S.board.chars.witchKing,
-    aragorn: (S) => S.board.chars.aragorn,
-    isengardAtWar: (S) => snAtWar(S, "isengard"),
-    sauronAtWar: (S) => snAtWar(S, "sauron"),
-    seAtWar: (S) => snAtWar(S, "se"),
-    allAtWar: snAllAtWar,
-    dunlendings: (S) => S.board.factions.dunlendings,
-    corsairs: (S) => S.board.factions.corsairs,
-    fpFaction: (S) => {
-      const f = S.board.factions;
-      return f.ents || f.eagles || f.deadmen;
+    fsNotInFPSettlement: (state) => !state.board.fs.inFPSettlement,
+    fsProgress1: (state) => state.board.fs.progress >= 1,
+    fsRevealed: (state) => state.board.fs.revealed,
+    saruman: (state) => state.board.chars.saruman,
+    witchKing: (state) => state.board.chars.witchKing,
+    aragorn: (state) => state.board.chars.aragorn,
+    isengardAtWar: (state) => shadowNationAtWar(state, "isengard"),
+    sauronAtWar: (state) => shadowNationAtWar(state, "sauron"),
+    seAtWar: (state) => shadowNationAtWar(state, "se"),
+    allAtWar: allShadowNationsAtWar,
+    dunlendings: (state) => state.board.factions.dunlendings,
+    corsairs: (state) => state.board.factions.corsairs,
+    fpFaction: (state) => {
+      const factions = state.board.factions;
+      return factions.ents || factions.eagles || factions.deadmen;
     },
-    mtSiege: (S) => situ(S, "mtSiege"),
-    nazNearFP: (S) => situ(S, "nazNearFP"),
-    elvenStronghold: (S) => situ(S, "elvenStronghold"),
-    fpNotWar: (S) => situ(S, "fpNotWar"),
-    wkBesieging: (S) =>
-      S.board.chars.witchKing ? situ(S, "wkBesieging") : false,
-    isenBesieging: (S) =>
-      S.board.chars.saruman ? situ(S, "isenBesieging") : false,
+    mtSiege: (state) => situationalAnswer(state, "mtSiege"),
+    nazNearFP: (state) => situationalAnswer(state, "nazNearFP"),
+    elvenStronghold: (state) => situationalAnswer(state, "elvenStronghold"),
+    fpNotWar: (state) => situationalAnswer(state, "fpNotWar"),
+    wkBesieging: (state) =>
+      state.board.chars.witchKing
+        ? situationalAnswer(state, "wkBesieging")
+        : false,
+    isenBesieging: (state) =>
+      state.board.chars.saruman
+        ? situationalAnswer(state, "isenBesieging")
+        : false,
     // The Lidless Eye has no effect without an unused die (rule 17); only checkable when the app rolls the dice.
-    unusedDice: (S) =>
-      !S.settings.dice ||
-      availDice(S).some(
-        (d) =>
-          d.k === "A" && !(S.walk && S.dice.pool.indexOf(d) === S.walk.dieObj),
+    unusedDice: (state) =>
+      !state.settings.dice ||
+      availableDice(state).some(
+        (die) =>
+          die.k === "A" &&
+          !(state.walk && state.dice.pool.indexOf(die) === state.walk.dieObj),
       ),
   };
-  function precondition(id, S) {
-    const k = byId[id].pre;
-    return k ? PRECONDITIONS[k](S) : true;
+  function precondition(state, cardId) {
+    const key = cardById[cardId].pre;
+    return key ? PRECONDITIONS[key](state) : true;
   }
   // combat-card precondition from the battle form
   const COMBAT_PRECONDITIONS = {
-    nazLead1: (S, B) => (B.nazLead | 0) >= 1,
-    nazLead2: (S, B) => (B.nazLead | 0) >= 2,
-    nazInBattle: (S, B) => (B.nazLead | 0) > 0,
-    siegeEngine: (S) => situ(S, "siegeEngine"),
-    isengardStronghold: (S, B) => !!B.isengardStronghold,
-    seElite: (S, B) => !!B.seElite,
-    shadowElite: (S, B) => !!B.shadowElite,
-    nearMoria: (S, B) => !!B.nearMoria,
-    defInFs: (S, B) => !!B.defInFs,
+    nazLead1: (state, battle) => (battle.nazLead | 0) >= 1,
+    nazLead2: (state, battle) => (battle.nazLead | 0) >= 2,
+    nazInBattle: (state, battle) => (battle.nazLead | 0) > 0,
+    siegeEngine: (state) => situationalAnswer(state, "siegeEngine"),
+    isengardStronghold: (state, battle) => !!battle.isengardStronghold,
+    seElite: (state, battle) => !!battle.seElite,
+    shadowElite: (state, battle) => !!battle.shadowElite,
+    nearMoria: (state, battle) => !!battle.nearMoria,
+    defInFs: (state, battle) => !!battle.defInFs,
     ctb: () => true,
-    ctbNotBesieged: (S, B) => !B.underSiege,
-    ctbAttackingSiege: (S, B) => !!B.attackingSiege,
+    ctbNotBesieged: (state, battle) => !battle.underSiege,
+    ctbAttackingSiege: (state, battle) => !!battle.attackingSiege,
   };
-  function combatPre(c, S) {
-    const B = S.battle || {};
-    if (c.deck === "B") {
-      const fac = c.faction.toLowerCase();
-      if (!S.board.factions[fac] || !B.figures?.[fac]) return false;
+  function combatPrecondition(state, card) {
+    const battle = state.battle || {};
+    if (card.deck === "B") {
+      const factionKey = card.faction.toLowerCase();
+      if (!state.board.factions[factionKey] || !battle.figures?.[factionKey])
+        return false;
     }
-    return c.cpre ? COMBAT_PRECONDITIONS[c.cpre](S, B) : true;
+    return card.cpre ? COMBAT_PRECONDITIONS[card.cpre](state, battle) : true;
   }
 
   // ---------- initial state ----------
   function newState(settings) {
-    const S = {
+    const state = {
       appVersion: VERSION,
-      createdVersion: VERSION, // the version that last saved this game, and the one that created it
+      createdVersion: VERSION, // appVersion: the version that last saved this game; createdVersion: the one that created it
       settings: {
         dice: true,
         cards: true,
@@ -323,24 +350,25 @@
       walk: null,
       log: [],
     };
-    buildDecks(S);
-    return S;
+    buildDecks(state);
+    return state;
   }
   // Whether a card goes into this game's decks: Call to Battle cards never do, WoME cards only with the expansion, and the two cards
   // that have a base-game and a WoME version (sa028/sa038 and their b2 twins) contribute whichever version applies.
-  function inDecks(c, wome) {
-    if (c.deck === "B") return false;
-    if (c.set === "WoME" && !wome) return false;
-    if (c.id === "sa028b2" || c.id === "sa038b2") return !wome;
-    if (c.id === "sa028" || c.id === "sa038") return wome;
+  function inDecks(card, wome) {
+    if (card.deck === "B") return false;
+    if (card.set === "WoME" && !wome) return false;
+    if (card.id === "sa028b2" || card.id === "sa038b2") return !wome;
+    if (card.id === "sa028" || card.id === "sa038") return wome;
     return true;
   }
-  function buildDecks(S) {
-    const w = S.settings.wome;
+  function buildDecks(state) {
+    const wome = state.settings.wome;
     const decks = { C: [], S: [], F: [] };
-    for (const c of CARDS)
-      if (inDecks(c, w) && decks[c.deck]) decks[c.deck].push(c.id);
-    S.cards.decks = {
+    for (const card of CARDS)
+      if (inDecks(card, wome) && decks[card.deck])
+        decks[card.deck].push(card.id);
+    state.cards.decks = {
       C: shuffle(decks.C),
       S: shuffle(decks.S),
       F: shuffle(decks.F),
@@ -364,88 +392,93 @@
     "Eye",
     "Wild",
   ];
-  function diceCount(S) {
-    const c = S.board.chars;
-    return 7 + (c.saruman ? 1 : 0) + (c.witchKing ? 1 : 0) + (c.mouth ? 1 : 0);
+  function diceCount(state) {
+    const chars = state.board.chars;
+    return (
+      7 +
+      (chars.saruman ? 1 : 0) +
+      (chars.witchKing ? 1 : 0) +
+      (chars.mouth ? 1 : 0)
+    );
   }
-  function recoverDice(S) {
-    const n = diceCount(S);
-    S.dice.pool = [];
-    S.dice.hunt = 0;
-    for (let i = 0; i < n; i++)
-      S.dice.pool.push({ k: "A", face: null, st: DIE_STATE.POOL });
+  function recoverDice(state) {
+    const count = diceCount(state);
+    state.dice.pool = [];
+    state.dice.hunt = 0;
+    for (let i = 0; i < count; i++)
+      state.dice.pool.push({ k: "A", face: null, st: DIE_STATE.POOL });
     // WoME p.8: the Faction die joins the pool at the start of the turn after the first Shadow Faction enters play, and leaves it the turn after the last one is gone.
-    S.dice.factionDie = shadowFactionInPlay(S);
-    if (S.dice.factionDie)
-      S.dice.pool.push({ k: "F", face: null, st: DIE_STATE.POOL });
-    S.minionReserved = false;
-    S.ringUsedThisTurn = false;
-    S.situ = {};
-    S.playable = {};
+    state.dice.factionDie = shadowFactionInPlay(state);
+    if (state.dice.factionDie)
+      state.dice.pool.push({ k: "F", face: null, st: DIE_STATE.POOL });
+    state.minionReserved = false;
+    state.ringUsedThisTurn = false;
+    state.situ = {};
+    state.playable = {};
     log(
-      S,
+      state,
       "Recovered " +
-        n +
+        count +
         " action dice" +
-        (S.dice.factionDie ? " and the Faction die" : "") +
+        (state.dice.factionDie ? " and the Faction die" : "") +
         ".",
     );
   }
-  function assignHunt(S, n) {
-    const pool = S.dice.pool.filter(
-      (d) => d.k === "A" && d.st === DIE_STATE.POOL,
+  function assignHunt(state, requested) {
+    const pool = state.dice.pool.filter(
+      (die) => die.k === "A" && die.st === DIE_STATE.POOL,
     );
-    const cap = huntCap(S),
-      k = Math.min(n, cap, pool.length);
-    for (let i = 0; i < k; i++) {
+    const cap = huntCap(state),
+      placed = Math.min(requested, cap, pool.length);
+    for (let i = 0; i < placed; i++) {
       pool[i].st = DIE_STATE.HUNT;
       pool[i].face = "Eye";
     }
-    S.dice.hunt += k;
+    state.dice.hunt += placed;
     log(
-      S,
+      state,
       "Placed " +
-        k +
+        placed +
         " " +
-        (k === 1 ? "die" : "dice") +
+        (placed === 1 ? "die" : "dice") +
         " in the Hunt box before rolling" +
-        (k < n && cap < n
+        (placed < requested && cap < requested
           ? " (rule 34: maximum " +
             cap +
             " for " +
-            (S.board.fs.companions | 0) +
+            (state.board.fs.companions | 0) +
             " Companions)"
           : "") +
         ".",
     );
-    return k;
+    return placed;
   }
-  function rollRemaining(S) {
+  function rollRemaining(state) {
     let eyes = 0;
     const out = [];
-    for (const d of S.dice.pool) {
-      if (d.st !== DIE_STATE.POOL) continue;
-      d.face = d.k === "A" ? pick(SHADOW_FACES) : pick(FACTION_FACES);
-      if (d.face === "Eye") {
-        d.st = DIE_STATE.HUNT;
-        S.dice.hunt++;
+    for (const die of state.dice.pool) {
+      if (die.st !== DIE_STATE.POOL) continue;
+      die.face = die.k === "A" ? pick(SHADOW_FACES) : pick(FACTION_FACES);
+      if (die.face === "Eye") {
+        die.st = DIE_STATE.HUNT;
+        state.dice.hunt++;
         eyes++;
-      } else d.st = DIE_STATE.AVAIL;
-      out.push(d.face);
+      } else die.st = DIE_STATE.AVAIL;
+      out.push(die.face);
     }
     let hunt = "";
     if (eyes)
       hunt = " — " + eyes + " Eye" + (eyes > 1 ? "s" : "") + " to the Hunt box";
-    log(S, "Rolled: " + out.join(", ") + hunt + ".");
+    log(state, "Rolled: " + out.join(", ") + hunt + ".");
     return out;
   }
-  function preferredFaces(S) {
-    return S.strategy === "corruption"
+  function preferredFaces(state) {
+    return state.strategy === "corruption"
       ? ["Character"]
       : ["Army", "Muster", "Army/Muster"];
   }
   // which available dice satisfy a requirement
-  const REQ = {
+  const DIE_REQUIREMENT_FACES = {
     Army: ["Army", "Army/Muster", "Wild"],
     Muster: ["Muster", "Army/Muster", "Wild"],
     Character: ["Character", "Wild"],
@@ -464,164 +497,178 @@
           (have === "Character" || have === "Muster")))
     );
   }
-  function availDice(S) {
-    return S.dice.pool.filter((d) => d.st === DIE_STATE.AVAIL);
+  function availableDice(state) {
+    return state.dice.pool.filter((die) => die.st === DIE_STATE.AVAIL);
   }
-  function findDie(S, req) {
-    const faces = REQ[req] || [req];
-    const av = availDice(S);
-    for (const f of faces) {
-      const d = av.find((x) => x.face === f);
-      if (d) return d;
+  function findDie(state, req) {
+    const faces = DIE_REQUIREMENT_FACES[req] || [req];
+    const available = availableDice(state);
+    for (const face of faces) {
+      const die = available.find((candidate) => candidate.face === face);
+      if (die) return die;
     }
     return null;
   }
-  function spendDie(S, die, why) {
+  function spendDie(state, die, why) {
     if (!die) return;
     die.st = DIE_STATE.USED;
-    log(S, "Used the " + die.face + " die" + (why ? " — " + why : "") + ".");
+    log(
+      state,
+      "Used the " + die.face + " die" + (why ? " — " + why : "") + ".",
+    );
   }
   // rule 36 / 23 selection: at random from the dice that do not show a preferred result; from all dice if every die does
-  function nonPreferredFirst(S, dice, n) {
-    const pref = preferredFaces(S);
-    let cands = dice.filter((d) => !pref.includes(d.face));
-    if (!cands.length) cands = dice.slice();
+  function nonPreferredFirst(state, dice, count) {
+    const preferredResults = preferredFaces(state);
+    let candidates = dice.filter((die) => !preferredResults.includes(die.face));
+    if (!candidates.length) candidates = dice.slice();
     const out = [];
-    while (out.length < n && cands.length) {
-      const i = rnd(cands.length);
-      out.push(cands.splice(i, 1)[0]);
+    while (out.length < count && candidates.length) {
+      const i = randomBelow(candidates.length);
+      out.push(candidates.splice(i, 1)[0]);
     }
     return out;
   }
-  function ringChange(S, req) {
+  function ringChange(state, req) {
     // rule 36: change one non-preferred available die to the required result
-    const av = availDice(S).filter((d) => d.k === "A");
-    if (!av.length) return null;
-    const d = nonPreferredFirst(S, av, 1)[0];
-    const from = d.face;
+    const available = availableDice(state).filter((die) => die.k === "A");
+    if (!available.length) return null;
+    const die = nonPreferredFirst(state, available, 1)[0];
+    const from = die.face;
     let face = req;
     if (req === "CharOrMuster") face = "Character";
     else if (req.startsWith("F")) face = "Wild";
-    d.face = face;
-    S.board.rings = Math.max(0, S.board.rings - 1);
-    S.ringUsedThisTurn = true;
+    die.face = face;
+    state.board.rings = Math.max(0, state.board.rings - 1);
+    state.ringUsedThisTurn = true;
     log(
-      S,
+      state,
       "Used an Elven Ring: changed a " +
         from +
         " die to " +
-        d.face +
+        die.face +
         " (rule 36). Rings left: " +
-        S.board.rings +
+        state.board.rings +
         ".",
     );
-    return d;
+    return die;
   }
 
   // ---------- cards ----------
-  function drawCard(S, deck) {
-    const D = S.cards.decks[deck];
-    if (!D.length) {
-      const disc = S.cards.discards[deck];
-      if (!disc.length) {
-        log(S, "The " + deckName(deck) + " deck is empty.");
+  function drawCard(state, deckKey) {
+    const deck = state.cards.decks[deckKey];
+    if (!deck.length) {
+      const discards = state.cards.discards[deckKey];
+      if (!discards.length) {
+        log(state, "The " + deckName(deckKey) + " deck is empty.");
         return null;
       }
-      S.cards.decks[deck] = shuffle(disc);
-      S.cards.discards[deck] = [];
-      log(S, "Reshuffled the " + deckName(deck) + " discards into a new deck.");
+      state.cards.decks[deckKey] = shuffle(discards);
+      state.cards.discards[deckKey] = [];
+      log(
+        state,
+        "Reshuffled the " + deckName(deckKey) + " discards into a new deck.",
+      );
     }
-    const id = S.cards.decks[deck].shift();
-    if (deck === "F") S.cards.factionHand.push(id);
-    else S.cards.hand.push(id);
+    const id = state.cards.decks[deckKey].shift();
+    if (deckKey === "F") state.cards.factionHand.push(id);
+    else state.cards.hand.push(id);
     log(
-      S,
+      state,
       "Drew a " +
-        deckName(deck) +
+        deckName(deckKey) +
         " card (" +
-        (deck === "F" ? S.cards.factionHand.length : S.cards.hand.length) +
+        (deckKey === "F"
+          ? state.cards.factionHand.length
+          : state.cards.hand.length) +
         " in hand).",
     );
     return id;
   }
-  function deckName(d) {
-    if (d === "C") return "Character";
-    return d === "S" ? "Strategy" : "Faction Event";
+  function deckName(deckKey) {
+    if (deckKey === "C") return "Character";
+    return deckKey === "S" ? "Strategy" : "Faction Event";
   }
-  function handCounts(S) {
+  function handCounts(state) {
     return {
-      C: handBy(S, "C").length,
-      S: handBy(S, "S").length,
-      total: S.cards.hand.length,
-      F: S.cards.factionHand.length,
+      character: handCardsOfDeck(state, "C").length,
+      strategy: handCardsOfDeck(state, "S").length,
+      total: state.cards.hand.length,
+      faction: state.cards.factionHand.length,
     };
   }
-  function removeFromLists(S, id) {
-    for (const l of [
-      S.cards.hand,
-      S.cards.factionHand,
-      S.cards.table,
-      S.cards.factionTable,
+  function removeFromLists(state, id) {
+    for (const list of [
+      state.cards.hand,
+      state.cards.factionHand,
+      state.cards.table,
+      state.cards.factionTable,
     ]) {
-      const i = l.indexOf(id);
+      const i = list.indexOf(id);
       if (i >= 0) {
-        l.splice(i, 1);
+        list.splice(i, 1);
         return true;
       }
     }
     return false;
   }
-  function discardCard(S, id, why) {
-    const c = byId[id];
-    removeFromLists(S, id);
-    S.cards.discards[c.deck].push(id);
-    log(S, "Discarded “" + c.title + "”" + (why ? " — " + why : "") + ".", {
-      card: id,
-    });
-  }
-  function playCard(S, id, ctx) {
-    const c = byId[id];
-    const combat = !!ctx?.combat;
-    removeFromLists(S, id);
-    const onTable = ON_TABLE(id) && !combat;
-    if (onTable) {
-      (c.deck === "F" ? S.cards.factionTable : S.cards.table).push(id);
-    } else if (c.deck !== "B") S.cards.discards[c.deck].push(id);
-    delete S.playable[(combat ? "B:" : "") + id];
+  function discardCard(state, id, why) {
+    const card = cardById[id];
+    removeFromLists(state, id);
+    state.cards.discards[card.deck].push(id);
     log(
-      S,
+      state,
+      "Discarded “" + card.title + "”" + (why ? " — " + why : "") + ".",
+      {
+        card: id,
+      },
+    );
+  }
+  function playCard(state, id, play) {
+    const card = cardById[id];
+    const combat = !!play?.combat;
+    removeFromLists(state, id);
+    const onTable = staysOnTable(id) && !combat;
+    if (onTable) {
+      (card.deck === "F" ? state.cards.factionTable : state.cards.table).push(
+        id,
+      );
+    } else if (card.deck !== "B") state.cards.discards[card.deck].push(id);
+    delete state.playable[(combat ? "B:" : "") + id];
+    log(
+      state,
       (combat ? "Combat card: " : "Played: ") +
         "“" +
-        c.title +
+        card.title +
         "”" +
         (onTable ? " (stays on the table)" : "") +
         ".",
       { card: id, combat },
     );
-    return c;
+    return card;
   }
   // Card effects that change Queller's hand, dice or board and are not steps on a flowchart page. Returns trail entries.
   const FACTION_PICK = ["Preferred card", "Faction in play"]; // rule 3 breaks the tie
-  function resolveCardEffects(S, id, ctx) {
-    const c = byId[id];
+  function resolveCardEffects(state, id, play) {
+    const card = cardById[id];
     const out = [];
-    if (ctx?.combat) return out;
-    const K = S.cards;
-    if (c.effect === "servants") {
-      if (K.decks.F.length < 3 && K.discards.F.length) {
-        K.decks.F = K.decks.F.concat(shuffle(K.discards.F));
-        K.discards.F = [];
+    if (play?.combat) return out;
+    const cards = state.cards;
+    if (card.effect === "servants") {
+      if (cards.decks.F.length < 3 && cards.discards.F.length) {
+        cards.decks.F = cards.decks.F.concat(shuffle(cards.discards.F));
+        cards.discards.F = [];
       }
-      const drawn = K.decks.F.splice(0, 3);
-      const r = applyPriority(S, drawn, FACTION_PICK);
-      if (r.chosen) {
-        K.factionHand.push(r.chosen);
+      const drawn = cards.decks.F.splice(0, 3);
+      const picked = applyPriority(state, drawn, FACTION_PICK);
+      if (picked.chosen) {
+        cards.factionHand.push(picked.chosen);
       }
-      const rest = drawn.filter((x) => x !== r.chosen);
-      K.decks.F = shuffle(K.decks.F.concat(rest, K.discards.F));
-      K.discards.F = [];
+      const rest = drawn.filter((id) => id !== picked.chosen);
+      cards.decks.F = shuffle(cards.decks.F.concat(rest, cards.discards.F));
+      cards.discards.F = [];
       log(
-        S,
+        state,
         "Servants of Sauron: drew " +
           drawn.length +
           " Faction Event cards, kept one, reshuffled the rest and the discards into the deck.",
@@ -630,47 +677,47 @@
         kind: "pri",
         text: "Servants of Sauron — keep one of " + drawn.length + " cards",
         items: FACTION_PICK.concat("Otherwise at random (rule 3)"),
-        steps: r.steps,
-        card: r.chosen,
+        steps: picked.steps,
+        card: picked.chosen,
       });
-    } else if (c.effect === "hisWill") {
-      const r = applyPriority(
-        S,
-        K.discards.F.filter((x) => x !== id),
+    } else if (card.effect === "hisWill") {
+      const picked = applyPriority(
+        state,
+        cards.discards.F.filter((other) => other !== id),
         FACTION_PICK,
       );
-      if (r.chosen) {
-        K.discards.F.splice(K.discards.F.indexOf(r.chosen), 1);
-        K.factionHand.push(r.chosen);
+      if (picked.chosen) {
+        cards.discards.F.splice(cards.discards.F.indexOf(picked.chosen), 1);
+        cards.factionHand.push(picked.chosen);
         log(
-          S,
+          state,
           "His Will and His Malice: “" +
-            byId[r.chosen].title +
+            cardById[picked.chosen].title +
             "” returned from the discard pile to the hand.",
         );
       } else
         log(
-          S,
+          state,
           "His Will and His Malice: no Faction Event card in the discard pile.",
         );
       out.push({
         kind: "pri",
         text: "His Will and His Malice — take a card from the Faction discard pile",
         items: FACTION_PICK.concat("Otherwise at random (rule 3)"),
-        steps: r.chosen ? r.steps : ["Discard pile empty"],
-        card: r.chosen,
+        steps: picked.chosen ? picked.steps : ["Discard pile empty"],
+        card: picked.chosen,
       });
-    } else if (c.effect === "lidlessEye" && S.settings.dice) {
+    } else if (card.effect === "lidlessEye" && state.settings.dice) {
       const chosen = nonPreferredFirst(
-        S,
-        availDice(S).filter((d) => d.k === "A"),
+        state,
+        availableDice(state).filter((die) => die.k === "A"),
         3,
       );
-      const from = chosen.map((d) => d.face);
-      for (const d of chosen) {
-        d.face = "Eye";
-        d.st = DIE_STATE.HUNT;
-        S.dice.hunt++;
+      const from = chosen.map((die) => die.face);
+      for (const die of chosen) {
+        die.face = "Eye";
+        die.st = DIE_STATE.HUNT;
+        state.dice.hunt++;
       }
       let logText = "no unused die to change.",
         noteText = "no unused die to change";
@@ -690,45 +737,45 @@
           from.join(", ") +
           ") to the Hunt box, non-preferred results first (rule 23)";
       }
-      log(S, "The Lidless Eye: " + logText);
+      log(state, "The Lidless Eye: " + logText);
       out.push({ kind: "note", text: "The Lidless Eye: " + noteText });
-    } else if (c.effect === "recruitFaction") {
-      const k = c.faction.toLowerCase();
-      if (!S.board.factions[k]) {
-        S.board.factions[k] = true;
-        S.playable = {};
+    } else if (card.effect === "recruitFaction") {
+      const factionKey = card.faction.toLowerCase();
+      if (!state.board.factions[factionKey]) {
+        state.board.factions[factionKey] = true;
+        state.playable = {};
         log(
-          S,
-          c.faction +
+          state,
+          card.faction +
             " are now in play (tracker updated; the Faction die joins the pool next turn).",
         );
         out.push({
           kind: "note",
-          text: c.faction + " enter play — tracker updated",
+          text: card.faction + " enter play — tracker updated",
         });
       }
     }
     // The Palantír of Orthanc: after an Event die plays an Event card, draw another card (a preferred one: Character under the corruption strategy, Strategy under military).
     if (
-      ctx?.die === "Event" &&
-      (c.deck === "C" || c.deck === "S") &&
-      ctx.palantirBefore
+      play?.die === "Event" &&
+      (card.deck === "C" || card.deck === "S") &&
+      play.palantirBefore
     ) {
-      const deck = S.strategy === "corruption" ? "C" : "S";
-      const got = drawCard(S, deck);
+      const deckKey = state.strategy === "corruption" ? "C" : "S";
+      const got = drawCard(state, deckKey);
       log(
-        S,
+        state,
         "The Palantír of Orthanc: drew a " +
-          deckName(deck) +
+          deckName(deckKey) +
           " card after playing “" +
-          c.title +
+          card.title +
           "” with an Event die.",
       );
       out.push({
         kind: "note",
         text:
           "The Palantír of Orthanc: drew a " +
-          deckName(deck) +
+          deckName(deckKey) +
           " card" +
           (got ? "" : " — deck empty"),
       });
@@ -739,12 +786,13 @@
   const TABLE_TRIGGERS = [
     {
       id: "sa051",
-      check: (S, ch) => {
-        if (ch.key === "chars.saruman" && !ch.to) return "Saruman eliminated";
+      check: (state, change) => {
+        if (change.key === "chars.saruman" && !change.to)
+          return "Saruman eliminated";
         if (
-          ch.key === "nations.rohan" &&
-          ch.from === "passive" &&
-          ch.to !== "passive"
+          change.key === "nations.rohan" &&
+          change.from === "passive" &&
+          change.to !== "passive"
         )
           return "Rohan activated";
         return false;
@@ -752,17 +800,19 @@
     },
     {
       id: PALANTIR,
-      check: (S, ch) =>
-        ch.key === "chars.saruman" && !ch.to ? "Saruman eliminated" : false,
+      check: (state, change) =>
+        change.key === "chars.saruman" && !change.to
+          ? "Saruman eliminated"
+          : false,
     },
     {
       id: "sa050",
-      check: (S, ch) => {
-        if (!/^nations\.(gondor|rohan|north|dwarves|elves)$/.test(ch.key))
+      check: (state, change) => {
+        if (!/^nations\.(gondor|rohan|north|dwarves|elves)$/.test(change.key))
           return false;
-        const r = { passive: 0, active: 1, war: 2 };
-        if (r[ch.to] <= r[ch.from]) return false;
-        if (ch.from === "passive")
+        const rank = { passive: 0, active: 1, war: 2 };
+        if (rank[change.to] <= rank[change.from]) return false;
+        if (change.from === "passive")
           return "a Free Peoples nation advanced from passive (only an attack, a Companion or a Fellowship declaration can do that while the card is in play)";
         return {
           q: "Threats and Promises: did the nation go to war because of an attack or a Companion’s special ability (not a Muster die)?",
@@ -771,8 +821,8 @@
     },
     {
       id: "sa009",
-      check: (S, ch) =>
-        fsDeclaredInFP(S, ch)
+      check: (state, change) =>
+        fsDeclaredInFP(state, change)
           ? {
               q: "Flocks of Crebain: was the Fellowship declared in an unconquered Free Peoples City or Stronghold?",
             }
@@ -780,31 +830,31 @@
     },
     {
       id: "sa052",
-      check: (S, ch) =>
-        fsDeclaredInFP(S, ch)
+      check: (state, change) =>
+        fsDeclaredInFP(state, change)
           ? {
               q: "Worn with Sorrow and Toil: was the Fellowship declared in an unconquered Free Peoples City or Stronghold?",
             }
           : false,
     },
   ];
-  function fsDeclaredInFP(S, ch) {
+  function fsDeclaredInFP(state, change) {
     return (
-      (ch.key === "fs.revealed" || ch.key === "fs.inFPSettlement") &&
-      !!ch.to &&
-      S.board.fs.revealed &&
-      S.board.fs.inFPSettlement
+      (change.key === "fs.revealed" || change.key === "fs.inFPSettlement") &&
+      !!change.to &&
+      state.board.fs.revealed &&
+      state.board.fs.inFPSettlement
     );
   }
   // After a tracker change {key, from, to}: discards the table cards whose condition is now met; returns the questions the app cannot answer itself.
-  function tableTriggers(S, ch) {
+  function tableTriggers(state, change) {
     const asks = [];
-    for (const t of TABLE_TRIGGERS) {
-      if (!S.cards.table.includes(t.id)) continue;
-      const r = t.check(S, ch);
-      if (!r) continue;
-      if (typeof r === "string") discardCard(S, t.id, r);
-      else asks.push({ card: t.id, q: r.q });
+    for (const trigger of TABLE_TRIGGERS) {
+      if (!state.cards.table.includes(trigger.id)) continue;
+      const outcome = trigger.check(state, change);
+      if (!outcome) continue;
+      if (typeof outcome === "string") discardCard(state, trigger.id, outcome);
+      else asks.push({ card: trigger.id, q: outcome.q });
     }
     return asks;
   }
@@ -812,25 +862,29 @@
   // The cards a criterion keeps: those its predicate accepts, or for a rank spec the best-ranked of the cards `only` selects
   // (the cards it does not select are kept alongside the best).
   function narrow(opts, test) {
-    if (!test.rank) return opts.filter((id) => test(byId[id]));
-    const ranked = opts.filter((id) => !test.only || test.only(byId[id]));
+    if (!test.rank) return opts.filter((id) => test(cardById[id]));
+    const ranked = opts.filter((id) => !test.only || test.only(cardById[id]));
     let best = null;
     for (const id of ranked) {
-      const v = test.rank(byId[id]);
-      if (best === null || (test.max ? v > best : v < best)) best = v;
+      const value = test.rank(cardById[id]);
+      if (best === null || (test.max ? value > best : value < best))
+        best = value;
     }
     return opts.filter(
-      (id) => !ranked.includes(id) || test.rank(byId[id]) === best,
+      (id) => !ranked.includes(id) || test.rank(cardById[id]) === best,
     );
   }
-  function applyPriority(S, ids, criteria, ctx) {
+  function applyPriority(state, ids, criteria, play) {
     let opts = ids.slice();
     const steps = [];
-    const fullEvent = S.cards.hand.length >= 6,
-      fullFac = S.cards.factionHand.length >= 4;
+    const eventHandFull = state.cards.hand.length >= 6,
+      factionHandFull = state.cards.factionHand.length >= 4;
     for (const crit of criteria) {
       if (opts.length <= 1) break;
-      const test = critFn(crit, S, ctx, { fullEvent, fullFac });
+      const test = criterionTest(crit, state, play, {
+        eventFull: eventHandFull,
+        factionFull: factionHandFull,
+      });
       if (!test) {
         steps.push(crit + " → not a card criterion, skipped");
         continue;
@@ -850,97 +904,135 @@
     } else chosen = opts[0] || null;
     return { chosen, steps };
   }
-  const notCtB = (c) => c.deck !== "B"; // rule 19: Call to Battle cards ignore initiative
-  // The card criteria of the priority lists, matched in order (a longer phrase before the prefix it shares). Each entry builds a predicate
-  // on a card, or a rank spec {rank, max, only} that applyPriority resolves; fl(c) is the card's flags for this game, H the hand-limit facts.
-  const eq = (s) => (t) => t === s,
-    prefix = (s) => (t) => t.startsWith(s);
-  const fullHand = (c, H) => (c.deck === "F" ? H.fullFac : H.fullEvent);
+  const notCallToBattle = (card) => card.deck !== "B"; // rule 19: Call to Battle cards ignore initiative
+  // The card criteria of the priority lists, matched in order (a longer phrase before the phraseStartsWith it shares). Each entry builds a predicate
+  // on a card, or a rank spec {rank, max, only} that applyPriority resolves; flagsOf(card) is the card's flags for this game, handLimits the hand-limit facts.
+  const phraseIs = (phrase) => (text) => text === phrase,
+    phraseStartsWith = (phrase) => (text) => text.startsWith(phrase);
+  const fullHand = (card, handLimits) =>
+    card.deck === "F" ? handLimits.factionFull : handLimits.eventFull;
   const CRITERIA = [
-    [prefix("doesn't use the term"), (fl) => (c) => !fl(c).revealed],
     [
-      prefix("doesn't place a tile or add corruption"),
-      (fl) => (c) => !fl(c).tile && !fl(c).corruption,
-    ],
-    [prefix("doesn't place a tile"), (fl) => (c) => !fl(c).tile],
-    [eq("strategy card"), () => (c) => c.deck === "S"],
-    [eq("character card"), () => (c) => c.deck === "C"],
-    [
-      prefix("descending order"),
-      (fl) => ({ rank: (c) => fl(c).init, max: true, only: notCtB }),
+      phraseStartsWith("doesn't use the term"),
+      (flagsOf) => (card) => !flagsOf(card).revealed,
     ],
     [
-      prefix("ascending order of initiative on character"),
-      (fl) => ({
-        rank: (c) => fl(c).init,
-        max: false,
-        only: (c) => c.deck === "C",
+      phraseStartsWith("doesn't place a tile or add corruption"),
+      (flagsOf) => (card) => !flagsOf(card).tile && !flagsOf(card).corruption,
+    ],
+    [
+      phraseStartsWith("doesn't place a tile"),
+      (flagsOf) => (card) => !flagsOf(card).tile,
+    ],
+    [phraseIs("strategy card"), () => (card) => card.deck === "S"],
+    [phraseIs("character card"), () => (card) => card.deck === "C"],
+    [
+      phraseStartsWith("descending order"),
+      (flagsOf) => ({
+        rank: (card) => flagsOf(card).init,
+        max: true,
+        only: notCallToBattle,
       }),
     ],
     [
-      prefix("ascending order"),
-      (fl) => ({ rank: (c) => fl(c).init, max: false, only: notCtB }),
-    ],
-    [eq("no faction picture"), () => (c) => !c.faction],
-    [
-      eq("faction not in play"),
-      (fl) => (c) => !!c.faction && !fl(c).factionInPlay,
-    ],
-    [eq("faction in play"), (fl) => (c) => fl(c).factionInPlay],
-    [eq("not preferred card"), (fl) => (c) => !fl(c).preferred],
-    [eq("preferred card"), (fl) => (c) => fl(c).preferred],
-    [
-      eq("preferred event card"),
-      (fl) => (c) => fl(c).preferred && c.deck !== "F",
+      phraseStartsWith("ascending order of initiative on character"),
+      (flagsOf) => ({
+        rank: (card) => flagsOf(card).init,
+        max: false,
+        only: (card) => card.deck === "C",
+      }),
     ],
     [
-      eq("preferred faction event card"),
-      (fl) => (c) => fl(c).preferred && c.deck === "F",
+      phraseStartsWith("ascending order"),
+      (flagsOf) => ({
+        rank: (card) => flagsOf(card).init,
+        max: false,
+        only: notCallToBattle,
+      }),
+    ],
+    [phraseIs("no faction picture"), () => (card) => !card.faction],
+    [
+      phraseIs("faction not in play"),
+      (flagsOf) => (card) => !!card.faction && !flagsOf(card).factionInPlay,
     ],
     [
-      eq("full hand with preferred card"),
-      (fl, H) => (c) => fl(c).preferred && fullHand(c, H),
+      phraseIs("faction in play"),
+      (flagsOf) => (card) => flagsOf(card).factionInPlay,
     ],
-    [eq("full hand"), (fl, H) => (c) => fullHand(c, H)],
-    [eq("event card"), () => (c) => c.deck === "C" || c.deck === "S"],
-    [eq("faction event card"), () => (c) => c.deck === "F"],
     [
-      prefix("strategy card which cancels"),
-      () => (c) => c.deck === "S" && c.ct === "Swarm of Bats",
+      phraseIs("not preferred card"),
+      (flagsOf) => (card) => !flagsOf(card).preferred,
     ],
-    [eq("durin's bane"), () => (c) => c.ct === "Durin's Bane"],
-    [eq("call to battle card"), () => (c) => c.deck === "B"],
     [
-      eq("mobile army attacks target"),
-      () => (c) => FACTION_CAT[c.id] === "attack",
+      phraseIs("preferred card"),
+      (flagsOf) => (card) => flagsOf(card).preferred,
     ],
-    [eq("moves mobile army"), () => (c) => FACTION_CAT[c.id] === "move"],
-    [eq("muster"), () => (c) => FACTION_CAT[c.id] === "muster"],
+    [
+      phraseIs("preferred event card"),
+      (flagsOf) => (card) => flagsOf(card).preferred && card.deck !== "F",
+    ],
+    [
+      phraseIs("preferred faction event card"),
+      (flagsOf) => (card) => flagsOf(card).preferred && card.deck === "F",
+    ],
+    [
+      phraseIs("full hand with preferred card"),
+      (flagsOf, handLimits) => (card) =>
+        flagsOf(card).preferred && fullHand(card, handLimits),
+    ],
+    [
+      phraseIs("full hand"),
+      (flagsOf, handLimits) => (card) => fullHand(card, handLimits),
+    ],
+    [
+      phraseIs("event card"),
+      () => (card) => card.deck === "C" || card.deck === "S",
+    ],
+    [phraseIs("faction event card"), () => (card) => card.deck === "F"],
+    [
+      phraseStartsWith("strategy card which cancels"),
+      () => (card) => card.deck === "S" && card.ct === "Swarm of Bats",
+    ],
+    [phraseIs("durin's bane"), () => (card) => card.ct === "Durin's Bane"],
+    [phraseIs("call to battle card"), () => (card) => card.deck === "B"],
+    [
+      phraseIs("mobile army attacks target"),
+      () => (card) => FACTION_CAT[card.id] === "attack",
+    ],
+    [
+      phraseIs("moves mobile army"),
+      () => (card) => FACTION_CAT[card.id] === "move",
+    ],
+    [phraseIs("muster"), () => (card) => FACTION_CAT[card.id] === "muster"],
   ];
-  function critFn(crit, S, ctx, H) {
-    const fl = (c) => cardFlags(c, S);
-    const t = crit.replaceAll("*", "").toLowerCase();
-    const hit = CRITERIA.find(([match]) => match(t));
-    return hit ? hit[1](fl, H) : null;
+  function criterionTest(crit, state, play, handLimits) {
+    const flagsOf = (card) => cardFlags(card, state);
+    const phrase = crit.replaceAll("*", "").toLowerCase();
+    const entry = CRITERIA.find(([matches]) => matches(phrase));
+    return entry ? entry[1](flagsOf, handLimits) : null;
   }
-  function autoDiscard(S, criteria, deck) {
+  function autoDiscard(state, criteria, deckKey) {
     // discard down to the limit using a priority list (discard = the card that best fits)
-    const limit = deck === "F" ? 4 : 6;
-    const hand = deck === "F" ? S.cards.factionHand : S.cards.hand;
+    const limit = deckKey === "F" ? 4 : 6;
+    const hand = deckKey === "F" ? state.cards.factionHand : state.cards.hand;
     const done = [];
     let guard = 0;
     while (hand.length > limit && guard++ < 10) {
-      const r = applyPriority(S, hand.slice(), criteria);
-      if (!r.chosen) break;
-      discardCard(S, r.chosen, "hand above the limit; " + r.steps.join("; "));
-      done.push(r.chosen);
+      const picked = applyPriority(state, hand.slice(), criteria);
+      if (!picked.chosen) break;
+      discardCard(
+        state,
+        picked.chosen,
+        "hand above the limit; " + picked.steps.join("; "),
+      );
+      done.push(picked.chosen);
     }
     return done;
   }
 
-  function log(S, text, extra) {
-    S.log.push({ t: text, turn: S.turn, ...extra });
-    if (S.log.length > 400) S.log.shift();
+  function log(state, text, extra) {
+    state.log.push({ t: text, turn: state.turn, ...extra });
+    if (state.log.length > 400) state.log.shift();
   }
 
   window.QB = {
@@ -949,10 +1041,10 @@
     BALROG,
     SHADOW_FACTIONS,
     DIE_STATE,
-    SN_START,
-    snAtWar,
-    snAllAtWar,
-    snLabel,
+    SHADOW_NATION_START,
+    shadowNationAtWar,
+    allShadowNationsAtWar,
+    politicalTrackLabel,
     fpNationAtWar,
     shadowFactionInPlay,
     allShadowFactionsInPlay,
@@ -961,22 +1053,21 @@
     huntCap,
     minionsAvailable,
     migrate,
-    F,
     CARDS,
-    byId,
-    rnd,
+    cardById,
+    randomBelow,
     pick,
     shuffle,
     cardFlags,
     FACTION_CAT,
     MUSTER_CHOICE,
-    ON_TABLE,
-    handBy,
+    staysOnTable,
+    handCardsOfDeck,
     combatCandidates,
-    ctbCards,
-    SITU_Q,
+    callToBattleCards,
+    SITUATIONAL_QUESTIONS,
     precondition,
-    combatPre,
+    combatPrecondition,
     newState,
     buildDecks,
     SHADOW_FACES,
@@ -986,9 +1077,9 @@
     assignHunt,
     rollRemaining,
     preferredFaces,
-    REQ,
+    DIE_REQUIREMENT_FACES,
     dieSatisfies,
-    availDice,
+    availableDice,
     findDie,
     spendDie,
     ringChange,
@@ -998,7 +1089,7 @@
     discardCard,
     playCard,
     applyPriority,
-    critFn,
+    criterionTest,
     autoDiscard,
     resolveCardEffects,
     tableTriggers,

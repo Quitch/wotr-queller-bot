@@ -296,12 +296,12 @@ function base(st, strategy) {
   S2.dice.pool = [die("Event")];
   S2.walk = { dieObj: 0 };
   ok(
-    Q.precondition("sa043", S2) === false,
+    Q.precondition(S2, "sa043") === false,
     "6.4 Lidless Eye unplayable when the only unused die is the one that would play it",
   );
   S2.dice.pool.push(die("Army"));
   ok(
-    Q.precondition("sa043", S2) === true,
+    Q.precondition(S2, "sa043") === true,
     "6.4 …and playable once another unused die exists",
   );
 }
