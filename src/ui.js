@@ -840,8 +840,7 @@
       "></label>"
     );
   }
-  function rowNum(id, label, value, attrs) {
-    const a = attrs || "";
+  function rowNum(id, label, value, attrs = "") {
     return (
       '<div class="row"><span id="' +
       id +
@@ -850,7 +849,7 @@
       '</span><span class="stepper" role="group" aria-labelledby="' +
       id +
       '-l"><button type="button" ' +
-      a +
+      attrs +
       ' data-d="-1" aria-label="Decrease ' +
       esc(plain(label)) +
       '">\u2212</button><span class="n" id="' +
@@ -858,7 +857,7 @@
       '-n" aria-live="polite">' +
       value +
       '</span><button type="button" ' +
-      a +
+      attrs +
       ' data-d="1" aria-label="Increase ' +
       esc(plain(label)) +
       '">+</button></span></div>'
