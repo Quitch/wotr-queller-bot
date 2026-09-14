@@ -45,6 +45,13 @@ The Node tests never touch the DOM: `test/load.js` evals flow, anchors, cards, r
 
 `styles.css` is written one declaration per line on purpose and its class/id names are camelCase because JS references them; stylelint is configured to allow both.
 
+## Reference material (not tracked)
+
+`docs/ref/` holds the two rulebooks as PDF and extracted text, and the
+draw.io flowchart that `flow.js` was transcribed from. Grep the `.txt`
+files for rules questions rather than reading them whole. The flowchart
+XML is the source of truth when node text in `flow.js` looks wrong.
+
 ## Conventions
 
 - Bump `VERSION` in `engine.js` for every published build; saved games carry it and `migrate` upgrades old saves.
