@@ -1,6 +1,11 @@
 require("./load.js")();
+const crypto = require("node:crypto");
 const Q = window.QB;
 let seed = +process.argv[2] || 1;
+// --digest: print a sha1 over every final game state, so a refactor that
+// should not change behaviour can be checked against a recorded hash
+const wantDigest = process.argv.includes("--digest");
+const digest = crypto.createHash("sha1");
 const rnd = () => {
   seed = (seed * 1103515245 + 12345) & 0x7fffffff;
   return seed / 0x7fffffff;
@@ -144,13 +149,13 @@ function game(settings, g) {
   const S = Q.newState(settings);
   const tag0 = JSON.stringify(settings) + " g" + g;
   Q.startPhase(S, "setup");
-  if (!finish(S, tag0 + " setup")) return;
+  if (!finish(S, tag0 + " setup")) return S;
   for (let turn = 0; turn < 4; turn++) {
     const tag = tag0 + " T" + S.turn;
     if (rnd() < 0.7) randomBoard(S);
     for (const ph of ["p1", "p2", "p3", "p4"]) {
       Q.startPhase(S, ph);
-      if (S.walk && !finish(S, tag + " " + ph)) return;
+      if (S.walk && !finish(S, tag + " " + ph)) return S;
     }
     // Phase 5: walk until dice are gone (dice on) or 12 walks (dice off)
     let walks = 0;
@@ -176,20 +181,21 @@ function game(settings, g) {
         break;
       }
       Q.startPhase(S, "p5");
-      if (!finish(S, tag + " p5#" + walks)) return;
+      if (!finish(S, tag + " p5#" + walks)) return S;
       walks++;
       if (rnd() < 0.25) {
         Q.startBattle(S, 1);
-        if (!finish(S, tag + " battle1")) return;
+        if (!finish(S, tag + " battle1")) return S;
         if (S.walk.result === "battleNext") {
           Q.startBattle(S, 2);
-          if (!finish(S, tag + " battle2")) return;
+          if (!finish(S, tag + " battle2")) return S;
         }
       }
       if (rnd() < 0.3) randomBoard(S);
     }
     Q.nextTurn(S);
   }
+  return S;
 }
 let g = 0;
 for (let i = 0; i < 16; i++) {
@@ -199,9 +205,10 @@ for (let i = 0; i < 16; i++) {
     tracker: !!(i & 4),
     wome: !!(i & 8),
   };
-  for (let k = 0; k < 25; k++) game(st, g++);
+  for (let k = 0; k < 25; k++) digest.update(JSON.stringify(game(st, g++)));
 }
 console.log("games:", g);
+if (wantDigest) console.log("digest:", digest.digest("hex"));
 for (const k in problems)
   console.log(problems[k].n + "x", k, "\n   e.g.", problems[k].ex);
 process.exit(Object.keys(problems).length ? 1 : 0);
