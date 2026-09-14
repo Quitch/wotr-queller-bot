@@ -1,6 +1,6 @@
 // Loads the engine and walker (no DOM) from ../src into a fake window and returns it.
-const fs = require("fs"),
-  path = require("path");
+const fs = require("node:fs"),
+  path = require("node:path");
 module.exports = function load() {
   const window = {};
   global.window = window;

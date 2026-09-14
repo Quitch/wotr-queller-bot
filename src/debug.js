@@ -43,7 +43,9 @@
         D.errors = (o.errors || []).slice(-LIMITS.errors);
         D.walks = (o.walks || []).slice(-LIMITS.walks);
       }
-    } catch (e) {}
+    } catch (e) {
+      // Storage unavailable or the saved log is corrupt: start with an empty log.
+    }
   }
 
   // A one-line picture of the game after an action: enough to follow the timeline without opening the full state.
@@ -56,7 +58,7 @@
       phase: S.phase,
       strategy: S.strategy,
       walk: w ? w.page + "." + w.node : null,
-      prompt: w && w.prompt ? w.prompt.type : null,
+      prompt: w?.prompt ? w.prompt.type : null,
       done: w ? !!w.done : null,
       result: w ? w.result : null,
       trail: w ? w.trail.length : 0,
@@ -83,7 +85,7 @@
     try {
       return digest(S);
     } catch (e) {
-      return { digestFailed: String((e && e.message) || e) };
+      return { digestFailed: String(e?.message || e) };
     }
   }
   function walkKey(S, w) {
@@ -125,8 +127,8 @@
   // Walks are recorded once they finish (or are abandoned), so the trail of a walk the player has moved on from is still in the log.
   function noteWalk(S, w, note) {
     const key = walkKey(S, w);
-    const last = D.walks[D.walks.length - 1];
-    if (last && last.key === key) return;
+    const last = D.walks.at(-1);
+    if (last?.key === key) return;
     const c = compactWalk(S, w, note);
     c.key = key;
     push(D.walks, c, LIMITS.walks);
@@ -134,7 +136,7 @@
 
   // begin/end bracket a state-changing action (ui.js act()); action() records something that changed no game state.
   function begin(info, S) {
-    D.inflight = Object.assign({ t: Date.now() }, info || { a: "act" });
+    D.inflight = { t: Date.now(), ...(info || { a: "act" }) };
     D.preWalk = S ? S.walk : null;
     if (S) D.inflight.before = safeDigest(S);
   }
@@ -143,7 +145,7 @@
     D.inflight = null;
     if (S) {
       e.after = safeDigest(S);
-      const w = S && S.walk;
+      const w = S.walk;
       if (
         D.preWalk &&
         D.preWalk !== w &&
@@ -152,7 +154,7 @@
         e.a !== "load"
       )
         noteWalk(S, D.preWalk, "replaced or abandoned");
-      if (w && w.done) noteWalk(S, w);
+      if (w?.done) noteWalk(S, w);
     }
     D.preWalk = null;
     push(D.actions, e, LIMITS.actions);
@@ -164,7 +166,7 @@
     return end(S);
   }
   function error(err, info, S) {
-    const e = Object.assign({ t: Date.now() }, info || {});
+    const e = { t: Date.now(), ...info };
     if (err && typeof err === "object") {
       e.message = String(err.message || err);
       e.name = err.name;
@@ -172,8 +174,7 @@
         e.stack = String(err.stack).split("\n").slice(0, 12).join("\n");
     } else e.message = String(err);
     if (D.inflight && !e.during) e.during = D.inflight;
-    else if (!e.during && D.actions.length)
-      e.lastAction = D.actions[D.actions.length - 1];
+    else if (!e.during && D.actions.length) e.lastAction = D.actions.at(-1);
     if (S) e.state = safeDigest(S);
     push(D.errors, e, LIMITS.errors);
     D.inflight = null;
@@ -188,14 +189,13 @@
       return String(t);
     }
   };
-  const withTimes = (list) =>
-    list.map((e) => Object.assign({ when: iso(e.t) }, e));
+  const withTimes = (list) => list.map((e) => ({ when: iso(e.t), ...e }));
   function summary(S, env, errors) {
     const s = [];
     s.push(
       "Queller Bot Runner version " +
         Q.VERSION +
-        (env && env.built ? " (built " + env.built + ")" : ""),
+        (env?.built ? " (built " + env.built + ")" : ""),
     );
     if (!S) s.push("No game in progress (New game screen)");
     else {
@@ -273,7 +273,7 @@
     const errors = withTimes(D.errors);
     return {
       format: FORMAT,
-      app: { version: Q.VERSION, built: (ctx.env && ctx.env.built) || null },
+      app: { version: Q.VERSION, built: ctx.env?.built || null },
       exported: iso(Date.now()),
       report: ctx.report || "",
       summary: summary(S, ctx.env, errors),
@@ -284,7 +284,7 @@
       errors,
       actions: withTimes(D.actions),
       walks: withTimes(D.walks).map((w) => {
-        const o = Object.assign({}, w);
+        const o = { ...w };
         delete o.key;
         return o;
       }),

@@ -1,9 +1,9 @@
 // Browser smoke test: boots the built page the way the artifact host does, plays through a turn with every option on,
 // exercises the tracker triggers, the table-card list, the die tap, undo and every modal. Fails on any page error.
 const { chromium } = require("playwright");
-const fs = require("fs"),
-  path = require("path"),
-  http = require("http");
+const fs = require("node:fs"),
+  path = require("node:path"),
+  http = require("node:http");
 (async () => {
   const html =
     '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"></head><body>' +
@@ -257,8 +257,7 @@ const fs = require("fs"),
   if (
     log.errors.length !== 2 ||
     !log.errors[0].rolledBack ||
-    !log.errors[0].during ||
-    log.errors[0].during.a !== "smokeFail" ||
+    log.errors[0].during?.a !== "smokeFail" ||
     !log.errors[1].lastAction
   )
     dbgErrors.push("errors not recorded as expected");
@@ -271,7 +270,7 @@ const fs = require("fs"),
   // 8. reload from autosave; the action history survives the reload
   await page.reload({ waitUntil: "load" });
   s = await S();
-  console.log("reloaded turn", s && s.turn, "phase", s && s.phase);
+  console.log("reloaded turn", s?.turn, "phase", s?.phase);
   await page.click("#newGameBtn");
   await page.click('#modal [data-ask="ok"]');
   console.log("setup screen:", !!(await page.$("#start")));
@@ -315,13 +314,12 @@ const fs = require("fs"),
   log = JSON.parse(await page.inputValue("#dbgTxt"));
   console.log(
     "broken save in log: turn",
-    log.brokenAutosave && log.brokenAutosave.turn,
+    log.brokenAutosave?.turn,
     "boot error:",
-    (log.errors.find((e) => e.a === "boot-render") || {}).message,
+    log.errors.find((e) => e.a === "boot-render")?.message,
   );
   if (
-    !log.brokenAutosave ||
-    log.brokenAutosave.turn !== 3 ||
+    log.brokenAutosave?.turn !== 3 ||
     !log.errors.some((e) => e.a === "boot-render")
   )
     dbgErrors.push("broken autosave not captured");

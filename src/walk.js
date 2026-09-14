@@ -106,7 +106,7 @@
     return (/^[AEIOU]/.test(n) ? "an " : "a ") + n;
   }
   function norm(t) {
-    return t.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+    return t.replaceAll("\n", " ").replaceAll(/\s+/g, " ").trim();
   }
   function jumpSpec(t) {
     t = norm(t);
@@ -214,6 +214,24 @@
 
   // --- main loop ---
   const RUN_GUARD = 300;
+  // A start box: the walk's own start point is passed through; any other start point reached is where the walk ends (the next phase).
+  function atStart(S, w, n) {
+    const first = w.trail[0];
+    if (first.page === w.page && first.node === w.node) follow(S, null);
+    else
+      endWalk(S, "phase:" + norm(text(n)), "Reached “" + norm(text(n)) + "”.");
+  }
+  // The handler for each box kind (see flow.js); notes are passed through.
+  const STEP = {
+    S: atStart,
+    N: (S) => follow(S, null),
+    D: (S, w, n) => handleDecision(S, n),
+    d: (S, w, n) => handleDecision(S, n),
+    J: (S, w, n) => handleJump(S, n),
+    A: (S, w, n) => handleAction(S, n),
+    T: (S, w, n) => handleStep(S, n),
+    P: (S, w, n) => handlePriority(S, n),
+  };
   function run(S) {
     let guard = 0;
     while (S.walk && !S.walk.done && !S.walk.prompt) {
@@ -230,45 +248,11 @@
       const w = S.walk,
         n = cur(S),
         k = kind(n);
-      if (k === "S") {
-        const first = w.trail[0];
-        if (!(first.page === w.page && first.node === w.node)) {
-          endWalk(
-            S,
-            "phase:" + norm(text(n)),
-            "Reached “" + norm(text(n)) + "”.",
-          );
-          break;
-        }
-        follow(S, null);
-        continue;
+      if (!STEP[k]) {
+        endWalk(S, "noaction", "Unknown box kind “" + k + "”.");
+        break;
       }
-      if (k === "N") {
-        follow(S, null);
-        continue;
-      }
-      if (k === "D" || k === "d") {
-        handleDecision(S, n);
-        continue;
-      }
-      if (k === "J") {
-        handleJump(S, n);
-        continue;
-      }
-      if (k === "A") {
-        handleAction(S, n);
-        continue;
-      }
-      if (k === "T") {
-        handleStep(S, n);
-        continue;
-      }
-      if (k === "P") {
-        handlePriority(S, n);
-        continue;
-      }
-      endWalk(S, "noaction", "Unknown box kind “" + k + "”.");
-      break;
+      STEP[k](S, w, n);
     }
   }
   // Board consequences of a decision the player answered (the tracker keeps up with what the flowchart just established).
@@ -305,19 +289,14 @@
     }
   }
   function ask(S, n, txt, opts) {
-    setPrompt(
-      S,
-      Object.assign(
-        {
-          type: "yesno",
-          text: txt || text(n),
-          node: S.walk.node,
-          page: S.walk.page,
-          kind: kind(n),
-        },
-        opts || {},
-      ),
-    );
+    setPrompt(S, {
+      type: "yesno",
+      text: txt || text(n),
+      node: S.walk.node,
+      page: S.walk.page,
+      kind: kind(n),
+      ...opts,
+    });
   }
   // A board fact: from the tracker when it is on, otherwise asked of the player once per node (answers live in w.parts). Returns PENDING while the question is open.
   function boardFact(S, k, question, trackerValue, range) {
@@ -445,6 +424,7 @@
         );
       case "C5.wkNotMob":
       case "M5.wkNotMob":
+      case "CH.wkJoin":
         if (T && !B.chars.witchKing)
           return auto(false, "Witch King not in play");
         return ask(S, n);
@@ -474,19 +454,11 @@
         }
         const seNot = !Q.snAtWar(S, "se"),
           noFac = S.settings.wome && !Q.shadowFactionInPlay(S);
-        return decided(
-          S,
-          x.t2,
-          false,
-          seNot || noFac,
-          true,
-          seNot
-            ? "Southrons & Easterlings not at war"
-            : noFac
-              ? "no faction recruited"
-              : "S&E at war" +
-                (S.settings.wome ? ", a faction is in play" : ""),
-        );
+        let why =
+          "S&E at war" + (S.settings.wome ? ", a faction is in play" : "");
+        if (seNot) why = "Southrons & Easterlings not at war";
+        else if (noFac) why = "no faction recruited";
+        return decided(S, x.t2, false, seNot || noFac, true, why);
       }
       case "C5.mordorWin": {
         if (w.sub === 0) {
@@ -522,6 +494,7 @@
           );
         return ask(S, n);
       case "M5.playMuster":
+      case "MU.musterCard":
         if (cards)
           return playableCount(
             handS().filter((i) => byId[i].type === "Muster"),
@@ -541,10 +514,7 @@
             " Nazgûl" +
             (B.chars.witchKing ? ", Witch King in play" : ""),
         );
-      case "CH.wkJoin":
-        if (T && !B.chars.witchKing)
-          return auto(false, "Witch King not in play");
-        return ask(S, n);
+      // CH.wkJoin shares the Witch King check with C5/M5.wkNotMob above.
       case "CH.nazFs":
       case "CH.nazJoin":
         if (T && B.nazgul === 0) return auto(false, "no Nazgûl on the map");
@@ -595,28 +565,17 @@
         if (!T) return ask(S, n);
         const nw = !Q.snAllAtWar(S);
         const nf = S.settings.wome && !Q.shadowFactionInPlay(S);
-        return auto(
-          nw || nf,
-          nw
-            ? "a Shadow nation is not at war"
-            : nf
-              ? "no faction in play"
-              : "all at war" + (S.settings.wome ? ", faction in play" : ""),
-        );
+        let why = "all at war" + (S.settings.wome ? ", faction in play" : "");
+        if (nw) why = "a Shadow nation is not at war";
+        else if (nf) why = "no faction in play";
+        return auto(nw || nf, why);
       }
       case "MU.facTop":
         return auto(
           w.nationChoice === "Faction",
           "priority chose " + (w.nationChoice || "nothing"),
         );
-      case "MU.musterCard":
-        if (cards)
-          return playableCount(
-            handS().filter((i) => byId[i].type === "Muster"),
-            "event",
-            "playable Muster card",
-          );
-        return ask(S, n);
+      // MU.musterCard shares the playable Muster card count with M5.playMuster above.
       case "MU.cardChoice":
         if (cards && w.chosen)
           return auto(
@@ -778,6 +737,11 @@
   }
 
   // ----- playability evaluation with lazy prompts -----
+  // A card's precondition in this context: the combat test in a battle, the board test when the tracker is on, otherwise taken as met.
+  function playablePre(S, c, id, ctx) {
+    if (ctx === "combat") return Q.combatPre(c, S);
+    return S.settings.tracker ? Q.precondition(id, S) : true;
+  }
   function evalPlayable(S, ids, ctx) {
     const out = [];
     for (const id of ids) {
@@ -787,12 +751,7 @@
         if (S.playable[cacheKey]) out.push(id);
         continue;
       }
-      let pre =
-        ctx === "combat"
-          ? Q.combatPre(c, S)
-          : S.settings.tracker
-            ? Q.precondition(id, S)
-            : true;
+      let pre = playablePre(S, c, id, ctx);
       if (pre && typeof pre === "object") {
         setPrompt(S, { type: "situ", key: pre.situ, text: pre.q });
         return PENDING;
@@ -822,92 +781,90 @@
       exitJump(S);
       return;
     }
-    if (spec.kind === "return") {
-      trail(S, { kind: "ret", text: label });
-      doReturn(S);
+    const handler = JUMP_KIND[spec.kind];
+    if (handler) handler(S, w, spec, label);
+    else jumpWithDie(S, spec, label);
+  }
+  // "Switch to military/Corruption": change strategy and either end the walk or restart it on the other strategy's page (rule 40).
+  function switchStrategy(S, w, spec, label) {
+    S.strategy = spec.strategy;
+    Q.log(S, "Strategy changed to " + spec.strategy + " (rule 40).");
+    trail(S, { kind: "jump", text: label });
+    if (spec.endWalk) {
+      endWalk(S, "phase:" + spec.endWalk, spec.text);
       return;
     }
-    if (spec.kind === "endPhase4") {
-      endWalk(S, "phase:Phase 5", "Phase 5 begins — you act first.");
-      return;
-    }
-    if (spec.kind === "battleNext") {
-      endWalk(
-        S,
-        "battleNext",
-        "Another combat round: walk again from “Battle (next round)”.",
-      );
-      return;
-    }
-    if (spec.kind === "switch") {
-      S.strategy = spec.strategy;
-      Q.log(S, "Strategy changed to " + spec.strategy + " (rule 40).");
-      trail(S, { kind: "jump", text: label });
-      if (spec.endWalk) {
-        endWalk(S, "phase:" + spec.endWalk, spec.text);
-        return;
-      }
-      goto(S, spec.page, findStart(spec.page, spec.start));
-      w.trail[0] = {
-        kind: "start",
-        text: spec.start,
-        page: spec.page,
-        node: w.node,
-      };
-      follow(S, null);
-      return;
-    }
-    if (spec.kind === "reserve") {
-      // A die already set aside and brought back by "Use Muster die set aside for minion" must be used now (Rulings), not set aside again.
-      if (w.fromReserve) {
-        trail(S, {
-          kind: "skip",
-          text: label,
-          why: "this die was already set aside — it must be used now",
-        });
-        exitJump(S);
-        return;
-      }
-      S.minionReserved = true;
-      if (w.dieObj != null && S.settings.dice) {
-        S.dice.pool[w.dieObj].st = Q.DIE_STATE.RESERVED;
-      }
-      delete w.dieAns.Muster;
-      delete w.dieAns.CharOrMuster; // the die the player said Queller had is no longer available
-      Q.log(S, "Muster die set aside for a minion (Rulings).");
-      trail(S, { kind: "note", text: "Muster die set aside for a minion" });
-      w.dieObj = null;
-      w.die = null;
-      doReturn(S);
-      return;
-    }
-    if (spec.kind === "ringAny") {
-      const can =
-        w.mode !== "ringAny" &&
-        Q.ringAvailable(S) &&
-        (!S.settings.dice || Q.availDice(S).some((d) => d.k === "A"));
-      if (can) {
-        trail(S, { kind: "jump", text: label });
-        const entry = w.entry;
-        w.done = true;
-        S.walk = null;
-        startWalk(S, entry.page, entry.start, { mode: "ringAny" });
-        return;
-      }
+    goto(S, spec.page, findStart(spec.page, spec.start));
+    w.trail[0] = {
+      kind: "start",
+      text: spec.start,
+      page: spec.page,
+      node: w.node,
+    };
+    follow(S, null);
+  }
+  // "Save muster die for minion": set the die aside and return to the calling page.
+  function reserveDie(S, w, spec, label) {
+    // A die already set aside and brought back by "Use Muster die set aside for minion" must be used now (Rulings), not set aside again.
+    if (w.fromReserve) {
       trail(S, {
         kind: "skip",
         text: label,
-        why: S.ringUsedThisTurn
-          ? "a ring was already used this turn"
-          : Q.ringsKnown(S) && !S.board.rings
-            ? "no Elven Ring"
-            : "no die to change",
+        why: "this die was already set aside — it must be used now",
       });
       exitJump(S);
       return;
     }
-    jumpWithDie(S, spec, label);
+    S.minionReserved = true;
+    if (w.dieObj != null && S.settings.dice) {
+      S.dice.pool[w.dieObj].st = Q.DIE_STATE.RESERVED;
+    }
+    delete w.dieAns.Muster;
+    delete w.dieAns.CharOrMuster; // the die the player said Queller had is no longer available
+    Q.log(S, "Muster die set aside for a minion (Rulings).");
+    trail(S, { kind: "note", text: "Muster die set aside for a minion" });
+    w.dieObj = null;
+    w.die = null;
+    doReturn(S);
   }
+  // "Phase 5 (use a ring)": restart the walk looking for a ring use (rule 37) when a ring and a die to change are available.
+  function ringAnyJump(S, w, spec, label) {
+    const can =
+      w.mode !== "ringAny" &&
+      Q.ringAvailable(S) &&
+      (!S.settings.dice || Q.availDice(S).some((d) => d.k === "A"));
+    if (can) {
+      trail(S, { kind: "jump", text: label });
+      const entry = w.entry;
+      w.done = true;
+      S.walk = null;
+      startWalk(S, entry.page, entry.start, { mode: "ringAny" });
+      return;
+    }
+    let why = "no die to change";
+    if (S.ringUsedThisTurn) why = "a ring was already used this turn";
+    else if (Q.ringsKnown(S) && !S.board.rings) why = "no Elven Ring";
+    trail(S, { kind: "skip", text: label, why });
+    exitJump(S);
+  }
+  // Grey boxes that do not name a page, by the `kind` of their JUMPS entry; a page name goes through jumpWithDie instead.
+  const JUMP_KIND = {
+    return: (S, w, spec, label) => {
+      trail(S, { kind: "ret", text: label });
+      doReturn(S);
+    },
+    endPhase4: (S) =>
+      endWalk(S, "phase:Phase 5", "Phase 5 begins — you act first."),
+    battleNext: (S) =>
+      endWalk(
+        S,
+        "battleNext",
+        "Another combat round: walk again from “Battle (next round)”.",
+      ),
+    switch: switchStrategy,
+    reserve: reserveDie,
+    ringAny: ringAnyJump,
+  };
   // Grey box naming a page: enter it with the die it needs (or the die already held), or skip it.
   function jumpWithDie(S, spec, label) {
     const w = S.walk;
@@ -935,28 +892,34 @@
         });
       return !!ok;
     }
-    if (S.settings.dice) {
-      let d = Q.findDie(S, req);
-      if (!d && ringPossible(S)) {
-        d = Q.ringChange(S, req);
-        if (d)
-          trail(S, {
-            kind: "ring",
-            text: "Elven Ring: die changed to " + d.face,
-          });
-      }
-      w.ringArmed = false;
-      if (!d) {
+    if (S.settings.dice) return ensureDieFromPool(S, w, req, label);
+    return askForDie(S, w, req, label);
+  }
+  // With dice rolled by the app: take a matching die from the pool, changing one with an Elven Ring when that is armed.
+  function ensureDieFromPool(S, w, req, label) {
+    let d = Q.findDie(S, req);
+    if (!d && ringPossible(S)) {
+      d = Q.ringChange(S, req);
+      if (d)
         trail(S, {
-          kind: "skip",
-          text: label,
-          why: "no " + DIE_NAME[req] + " die available",
+          kind: "ring",
+          text: "Elven Ring: die changed to " + d.face,
         });
-        return false;
-      }
-      w.dieObj = S.dice.pool.indexOf(d);
-      return true;
     }
+    w.ringArmed = false;
+    if (!d) {
+      trail(S, {
+        kind: "skip",
+        text: label,
+        why: "no " + DIE_NAME[req] + " die available",
+      });
+      return false;
+    }
+    w.dieObj = S.dice.pool.indexOf(d);
+    return true;
+  }
+  // Without dice: ask the player whether Queller has the die (once per type per walk), then offer an Elven Ring before giving up.
+  function askForDie(S, w, req, label) {
     if (w.dieAns[req] === undefined) {
       setPrompt(S, {
         type: "diecheck",
@@ -1069,6 +1032,12 @@
 
   // ----- actions -----
   // Draw steps and actions on the Event/Faction pages: the deck depends on the box; with cards off the player draws.
+  // The deck a draw node draws from: Character or Faction Event where the node says so, otherwise the strategy's preferred deck.
+  function drawDeck(S, key) {
+    if (key === "EV.drawChar") return "C";
+    if (key === "EV.drawFac" || key === "FA.drawT") return "F";
+    return S.strategy === "corruption" ? "C" : "S";
+  }
   function drawStep(S, n, key) {
     const w = S.walk,
       txt = norm(text(n)),
@@ -1079,14 +1048,7 @@
         text: txt,
         node: w.node,
       });
-    const deck =
-      key === "EV.drawChar"
-        ? "C"
-        : key === "EV.drawFac" || key === "FA.drawT"
-          ? "F"
-          : S.strategy === "corruption"
-            ? "C"
-            : "S";
+    const deck = drawDeck(S, key);
     const id = Q.drawCard(S, deck);
     trail(S, {
       kind: "note",
@@ -1248,7 +1210,7 @@
       case "MU.musterCardA":
       case "M5.playCharDie":
       case "M5.playEventDie": {
-        if (cards && !w.chosen && w.cands && w.cands.length) {
+        if (cards && !w.chosen && w.cands?.length) {
           const r = Q.applyPriority(S, w.cands, [
             "Ascending order of initiative",
           ]);
@@ -1355,7 +1317,7 @@
   }
   function spendCurrentDie(S, why) {
     const w = S.walk;
-    if (!w || !w.die) return;
+    if (!w?.die) return;
     if (S.settings.dice && w.dieObj != null) {
       Q.spendDie(S, S.dice.pool[w.dieObj], why);
     } else
@@ -1563,7 +1525,7 @@
       text: txt,
       items: x.items,
       node: w.node,
-      move: /^Move/.test(txt),
+      move: txt.startsWith("Move"),
     });
   }
 
@@ -1824,7 +1786,7 @@
   // ----- answers from the UI -----
   function answer(S, v) {
     const w = S.walk;
-    if (!w || !w.prompt) return;
+    if (!w?.prompt) return;
     const p = w.prompt;
     w.prompt = null;
     const n = cur(S);
@@ -1853,7 +1815,7 @@
         break;
       }
       case "count": {
-        const c = Math.max(p.min, Math.min(p.max, parseInt(v, 10) || 0));
+        const c = Math.max(p.min, Math.min(p.max, Number.parseInt(v, 10) || 0));
         w.parts[p.part] = c;
         trail(S, { kind: "q", text: p.text, answer: String(c) });
         break;
@@ -2055,7 +2017,6 @@
     if (phase === "p5") {
       S.phase = "p5";
       startWalk(S, p5Page(S), "Phase 5");
-      return;
     }
   }
   function startBattle(S, round) {

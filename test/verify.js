@@ -10,25 +10,28 @@ const ok = (c, m) => {
   } else console.log("ok  ", m);
 };
 const die = (face, st) => ({ k: "A", face, st: st || D.AVAIL });
+// The answer a scenario gives when none of its rules match: No to every question, an empty battle form, "done" otherwise.
+function defaultAnswer(p) {
+  if (["yesno", "situ", "confirm", "diecheck", "ring"].includes(p.type))
+    return false;
+  return p.type === "battleForm" ? { nazLead: 0, figures: {} } : "done";
+}
+// The scenario's answer to a prompt: the first rule whose pattern matches the prompt's text, type or card (a value, or a function of the prompt).
+function ruleAnswer(p, rules) {
+  for (const [re, v] of rules) {
+    if (re.test((p.text || "") + " " + p.type + " " + (p.card || "")))
+      return typeof v === "function" ? v(p) : v;
+  }
+  return undefined;
+}
 function drive(S, rules, max) {
   let g = 0;
   const seen = [];
   while (S.walk && !S.walk.done && g++ < (max || 80)) {
     const p = S.walk.prompt;
     seen.push(p);
-    let a;
-    for (const [re, v] of rules) {
-      if (re.test((p.text || "") + " " + p.type + " " + (p.card || ""))) {
-        a = typeof v === "function" ? v(p) : v;
-        break;
-      }
-    }
-    if (a === undefined)
-      a = ["yesno", "situ", "confirm", "diecheck", "ring"].includes(p.type)
-        ? false
-        : p.type === "battleForm"
-          ? { nazLead: 0, figures: {} }
-          : "done";
+    let a = ruleAnswer(p, rules);
+    if (a === undefined) a = defaultAnswer(p);
     Q.answer(S, a);
   }
   return seen;
@@ -129,7 +132,7 @@ function base(st, strategy) {
     [/threat\b.*muster/, false],
   ]);
   const asks = seen.filter(
-    (p) => p && p.type === "diecheck" && /Muster/.test(p.text),
+    (p) => p?.type === "diecheck" && /Muster/.test(p.text),
   ).length;
   ok(
     asks >= 2,
@@ -182,11 +185,8 @@ function base(st, strategy) {
   S.dice.pool = [die("Event"), die("Army")]; // no Character die → "Play card using event die"
   Q.startPhase(S, "p5");
   const seen = drive(S, [[/confirm/, true]]);
-  const pc = seen.find((p) => p && p.type === "playcard");
-  ok(
-    pc && pc.card === "sa017",
-    "6.1 playcard prompt raised for Lure of the Ring",
-  );
+  const pc = seen.find((p) => p?.type === "playcard");
+  ok(pc?.card === "sa017", "6.1 playcard prompt raised for Lure of the Ring");
   ok(
     !S.cards.hand.includes("sa017") && S.cards.discards.C.includes("sa017"),
     "6.1 card left the hand",
@@ -217,9 +217,9 @@ function base(st, strategy) {
     [/Witch King/, false],
     [/laying siege/, true],
   ]);
-  const pc = seen.find((p) => p && p.type === "playcard");
+  const pc = seen.find((p) => p?.type === "playcard");
   ok(
-    pc && pc.card === "sa001b2" && pc.combat,
+    pc?.card === "sa001b2" && pc.combat,
     "6.2 Durin's Bane chosen from the table",
   );
   ok(
@@ -402,8 +402,7 @@ function base(st, strategy) {
   E.length = 0;
   E.push(...saved);
   ok(
-    S2.walk &&
-      S2.walk.done &&
+    S2.walk?.done &&
       S2.walk.result === "noaction" &&
       /did not finish/.test(S2.walk.trail[S2.walk.trail.length - 1].text),
     "7.3 run() ends a walk that never reaches a prompt instead of leaving it in limbo",

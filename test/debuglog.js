@@ -18,6 +18,19 @@ const storage = {
 };
 DBG.restore(storage);
 DBG.reset();
+// The answer that moves a prompt on: No to every question, the minimum or first option otherwise.
+const ANSWERS = {
+  count: (p) => p.min,
+  choice: (p) => p.options[0].v,
+  roll: (p) => p.options[0],
+  priority: () => "ok",
+};
+function defaultAnswer(p) {
+  if (["yesno", "situ", "confirm", "diecheck", "ring"].includes(p.type))
+    return false;
+  const f = ANSWERS[p.type];
+  return f ? f(p) : "done";
+}
 function drive(S) {
   let g = 0;
   while (S.walk && !S.walk.done && g++ < 80) {
@@ -32,20 +45,7 @@ function drive(S) {
       },
       S,
     );
-    Q.answer(
-      S,
-      ["yesno", "situ", "confirm", "diecheck", "ring"].includes(p.type)
-        ? false
-        : p.type === "count"
-          ? p.min
-          : p.type === "choice"
-            ? p.options[0].v
-            : p.type === "roll"
-              ? p.options[0]
-              : p.type === "priority"
-                ? "ok"
-                : "done",
-    );
+    Q.answer(S, defaultAnswer(p));
     DBG.end(S);
   }
 }
@@ -150,8 +150,7 @@ ok(
   err.message.startsWith("Cannot read") &&
     err.name === "TypeError" &&
     err.stack &&
-    err.during &&
-    err.during.a === "answer" &&
+    err.during?.a === "answer" &&
     err.state &&
     err.state.turn === S.turn,
   "an error during an action records the action, the stack and a state digest",
@@ -238,10 +237,7 @@ if (L) {
     L.walks.length > 0 && !("key" in L.walks[0]) && L.walks[0].trail.length,
     "recent walk trails included",
   );
-  ok(
-    L.brokenAutosave && L.brokenAutosave.settings,
-    "the broken autosave is included, parsed",
-  );
+  ok(L.brokenAutosave?.settings, "the broken autosave is included, parsed");
   ok(
     L.environment.userAgent === "node" &&
       L.dom.prompt === "x" &&
@@ -279,7 +275,10 @@ for (let t = 0; t < 8; t++) {
   }
   Q.nextTurn(S3);
 }
-const big = DBG.text({ S: S3, history: Array(60).fill(JSON.stringify(S3)) });
+const big = DBG.text({
+  S: S3,
+  history: new Array(60).fill(JSON.stringify(S3)),
+});
 ok(
   big.length < 600000,
   "an 8-turn game with a full undo history exports under 600 KB (" +

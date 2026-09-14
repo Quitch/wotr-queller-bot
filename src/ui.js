@@ -36,10 +36,10 @@
               "</button>"
           : "<i>" + w + "</i>";
       })
-      .replace(/\n/g, "<br>");
+      .replaceAll("\n", "<br>");
   }
   function plain(t) {
-    return String(t || "").replace(/\*/g, "");
+    return String(t || "").replaceAll("*", "");
   }
 
   // ---------- persistence ----------
@@ -95,7 +95,7 @@
   }
   function loadJSON(txt) {
     const o = JSON.parse(txt);
-    if (!o || !o.settings || !o.board) throw new Error("not a Queller save");
+    if (!o?.settings || !o.board) throw new Error("not a Queller save");
     return Q.migrate(o);
   }
 
@@ -162,15 +162,7 @@
     });
     document.body.addEventListener("mouseout", (e) => {
       const t = e.target.closest(".term");
-      if (
-        t &&
-        !(
-          e.relatedTarget &&
-          e.relatedTarget.closest &&
-          e.relatedTarget.closest("#tip")
-        )
-      )
-        hideTip();
+      if (t && !e.relatedTarget?.closest?.("#tip")) hideTip();
     });
     document.body.addEventListener("focusin", (e) => {
       const t = e.target.closest(".term");
@@ -235,7 +227,7 @@
     bar.innerHTML =
       '<div class="wrap"><span class="msg"><b>Something went wrong in the app</b> — ' +
       esc(last ? last.message : "an error was recorded") +
-      (last && last.rolledBack
+      (last?.rolledBack
         ? ". Your last action was undone; the game continues."
         : ".") +
       " Please export a debug log and send it with a description of what you were doing.</span>" +
@@ -285,12 +277,12 @@
           '="' +
           el.getAttribute(a) +
           '"]' +
-          (el.hasAttribute("data-d")
-            ? '[data-d="' + el.getAttribute("data-d") + '"]'
-            : "") +
-          (el.hasAttribute("data-id")
-            ? '[data-id="' + el.getAttribute("data-id") + '"]'
-            : "")
+          (el.dataset.d === undefined
+            ? ""
+            : '[data-d="' + el.dataset.d + '"]') +
+          (el.dataset.id === undefined
+            ? ""
+            : '[data-id="' + el.dataset.id + '"]')
         );
     }
     return null;
@@ -299,10 +291,7 @@
     const root = $("#app");
     hideTip();
     const prevKey = focusKey(document.activeElement),
-      prevWasAnswer =
-        document.activeElement &&
-        document.activeElement.hasAttribute &&
-        document.activeElement.hasAttribute("data-ans");
+      prevWasAnswer = document.activeElement?.dataset?.ans !== undefined;
     const openMore = [...root.querySelectorAll("details.more")].map(
       (d) => d.open,
     );
@@ -311,7 +300,26 @@
       wireSetup();
       return;
     }
-    // With the full board tracker on, the dice and cards panels sit under the walkthrough in the left column; otherwise they share a top row.
+    root.innerHTML = gameHTML();
+    wire();
+    root.querySelectorAll("details.more").forEach((d, i) => {
+      if (openMore[i]) d.open = true;
+    });
+    const live = $("#live");
+    const last = S.log[S.log.length - 1];
+    if (live && last && S.walk) live.textContent = last.t;
+    if (prevWasAnswer || (S.walk?.prompt && !prevKey)) {
+      const p = $(".prompt, .result");
+      if (p) p.focus();
+    } else if (prevKey) {
+      const el = root.querySelector(prevKey);
+      if (el) el.focus();
+    }
+    if (modal) renderModal();
+  }
+  // The game screen: header, the dice and cards panels, the walkthrough, the board tracker and the footer.
+  // With the full board tracker on, the dice and cards panels sit under the walkthrough in the left column; otherwise they share a top row.
+  function gameHTML() {
     const below = S.settings.tracker;
     const panels =
       (S.settings.dice ? diceHTML() : "") +
@@ -320,7 +328,7 @@
     const tr = trackerHTML();
     const body =
       (top
-        ? '<div class="toprow" aria-label="Queller\u2019s dice and cards">' +
+        ? '<div class="toprow" aria-label="Queller’s dice and cards">' +
           top +
           "</div>"
         : "") +
@@ -333,27 +341,13 @@
         ? '<aside class="side" aria-label="Board tracker">' + tr + "</aside>"
         : "") +
       "</div>";
-    root.innerHTML =
+    return (
       '<a class="skip" href="#main">Skip to the walkthrough</a>' +
       headerHTML() +
       body +
       footerHTML() +
-      '<div id="live" class="sr" aria-live="polite" aria-atomic="true"></div>';
-    wire();
-    root.querySelectorAll("details.more").forEach((d, i) => {
-      if (openMore[i]) d.open = true;
-    });
-    const live = $("#live");
-    const last = S.log[S.log.length - 1];
-    if (live && last && S.walk) live.textContent = last.t;
-    if (prevWasAnswer || (S.walk && S.walk.prompt && !prevKey)) {
-      const p = $(".prompt, .result");
-      if (p) p.focus();
-    } else if (prevKey) {
-      const el = root.querySelector(prevKey);
-      if (el) el.focus();
-    }
-    if (modal) renderModal();
+      '<div id="live" class="sr" aria-live="polite" aria-atomic="true"></div>'
+    );
   }
   const LEGAL =
     '<p><b>You need a copy of War of the Ring (2nd Edition) to play.</b> This app runs the Queller Bot; it does not replace the board, figures, dice or cards. With the Warriors of Middle-earth option on, you also need that expansion.</p><p>Queller Bot for War of the Ring © Quitch, licensed under <a href="https://creativecommons.org/licenses/by-nc/4.0/" target="_blank" rel="noopener">Creative Commons Attribution-NonCommercial 4.0 International<span class="sr"> (opens in a new tab)</span></a>. Bot text, flowcharts and rules reproduced with the author’s permission; <a href="https://boardgamegeek.com/filepage/141333/queller-bot-solo-play" target="_blank" rel="noopener">file page on BoardGameGeek<span class="sr"> (opens in a new tab)</span></a>.</p><p>War of the Ring, Middle-earth and The Lord of the Rings and the characters, items, events, and places therein are trademarks of Middle-earth Enterprises, LLC used under license by Ares Games srl. War of the Ring Second Edition and Warriors of Middle-earth © Ares Games srl. Event card and Action die text is reproduced here only as a play aid for owners of the game. This is an unofficial fan-made tool and is not affiliated with, endorsed or sponsored by Ares Games or Middle-earth Enterprises.</p>';
@@ -414,23 +408,23 @@
       LEGAL +
       "</footer></div>"
     );
-    function opt(id, t, d, onT, offT, on) {
-      return (
-        '<label class="opt"><input type="checkbox" id="opt-' +
-        id +
-        '" ' +
-        (on ? "checked" : "") +
-        "><div><b>" +
-        t +
-        "</b><span>" +
-        fmt(d) +
-        '<span class="oo"><b>On:</b> ' +
-        fmt(onT) +
-        '</span><span class="oo"><b>Off:</b> ' +
-        fmt(offT) +
-        "</span></span></div></label>"
-      );
-    }
+  }
+  function opt(id, t, d, onT, offT, on) {
+    return (
+      '<label class="opt"><input type="checkbox" id="opt-' +
+      id +
+      '" ' +
+      (on ? "checked" : "") +
+      "><div><b>" +
+      t +
+      "</b><span>" +
+      fmt(d) +
+      '<span class="oo"><b>On:</b> ' +
+      fmt(onT) +
+      '</span><span class="oo"><b>Off:</b> ' +
+      fmt(offT) +
+      "</span></span></div></label>"
+    );
   }
   function wireSetup() {
     $("#start").onclick = () => {
@@ -500,7 +494,7 @@
     const w = S.walk;
     if (w && !w.done) {
       h += promptHTML(w);
-    } else if (w && w.done) {
+    } else if (w?.done) {
       h += resultHTML(w);
     } else h += '<div class="idle">' + idleText() + "</div>";
     if (w)
@@ -540,59 +534,48 @@
     }
     return "";
   }
+  const phaseBtn = (id, label, primary) =>
+    '<button class="btn ' +
+    (primary ? "primary" : "") +
+    '" data-phase="' +
+    id +
+    '">' +
+    label +
+    "</button>";
+  // The start-point buttons offered in each phase (the military strategy has no Phase 2).
+  const PHASE_BUTTONS = {
+    setup: () => [phaseBtn("setup", "Start of game", true)],
+    p1: () => [phaseBtn("p1", "Phase 1", true)],
+    p2: () => [
+      S.strategy === "corruption"
+        ? phaseBtn("p2", "Phase 2", true)
+        : phaseBtn("p3", "Phase 3", true),
+    ],
+    p3: () => [phaseBtn("p3", "Phase 3", true)],
+    p4: () => [phaseBtn("p4", "Phase 4", true)],
+    p5: () => {
+      const b = [
+        dicePoolSpent()
+          ? phaseBtn("p6", "Phase 6", true)
+          : phaseBtn("p5", "Phase 5", true),
+        S.battleOpen
+          ? phaseBtn("battle2", "Battle (next round)")
+          : phaseBtn("battle1", "Battle"),
+      ];
+      if (!S.settings.dice) b.push(phaseBtn("p6", "Phase 6"));
+      return b;
+    },
+    p6: () => [phaseBtn("next", "Phase 1 (turn " + (S.turn + 1) + ")", true)],
+  };
   function phaseButtonsHTML(minimal) {
     const b = [];
-    const P = S.phase,
-      dice = S.settings.dice;
-    const btn = (id, label, primary) =>
-      '<button class="btn ' +
-      (primary ? "primary" : "") +
-      '" data-phase="' +
-      id +
-      '">' +
-      label +
-      "</button>";
+    const P = S.phase;
     const busy = S.walk && !S.walk.done;
     if (busy) {
       b.push(
         '<button class="btn small ghost" data-phase="abandon">Abandon this walk</button>',
       );
-    } else
-      switch (P) {
-        case "setup":
-          b.push(btn("setup", "Start of game", true));
-          break;
-        case "p1":
-          b.push(btn("p1", "Phase 1", true));
-          break;
-        case "p2":
-          b.push(
-            S.strategy === "corruption"
-              ? btn("p2", "Phase 2", true)
-              : btn("p3", "Phase 3", true),
-          );
-          break;
-        case "p3":
-          b.push(btn("p3", "Phase 3", true));
-          break;
-        case "p4":
-          b.push(btn("p4", "Phase 4", true));
-          break;
-        case "p5":
-          b.push(
-            dicePoolSpent()
-              ? btn("p6", "Phase 6", true)
-              : btn("p5", "Phase 5", true),
-            S.battleOpen
-              ? btn("battle2", "Battle (next round)")
-              : btn("battle1", "Battle"),
-          );
-          if (!dice) b.push(btn("p6", "Phase 6"));
-          break;
-        case "p6":
-          b.push(btn("next", "Phase 1 (turn " + (S.turn + 1) + ")", true));
-          break;
-      }
+    } else if (PHASE_BUTTONS[P]) b.push(...PHASE_BUTTONS[P]());
     if (!busy && P !== "setup")
       b.push(
         '<button class="btn small ghost" data-phase="jumpto">Other start point…</button>',
@@ -644,7 +627,7 @@
       '<button class="btn yes" data-ans="yes">Yes</button><button class="btn no" data-ans="no">No</button>';
     switch (p.type) {
       case "yesno": {
-        const isRing = p.bold || (node[6] && node[6].bold && !p.sub);
+        const isRing = p.bold || (node[6]?.bold && !p.sub);
         body =
           (p.board ? '<div class="eyebrow">Board question</div>' : "") +
           '<p class="q">' +
@@ -729,15 +712,7 @@
           fmt(p.text) +
           "</p>" +
           (p.help ? '<div class="help">' + fmt(p.help) + "</div>" : "") +
-          (p.pass
-            ? ""
-            : '<div class="help">' +
-              (S.settings.dice && w.dieObj != null
-                ? "Uses the " + esc(S.dice.pool[w.dieObj].face) + " die."
-                : w.die
-                  ? "Uses a " + esc(Q.DIE_NAME[w.die]) + " die."
-                  : "") +
-              "</div>");
+          (p.pass ? "" : '<div class="help">' + dieHelpText(w) + "</div>");
         answers =
           '<button class="btn yes" data-ans="done">Done</button>' +
           (p.auto
@@ -751,7 +726,7 @@
           (p.combat ? " as its combat card" : "") +
           ":</p>" +
           cardHTML(c) +
-          (w.steps && w.steps.length
+          (w.steps?.length
             ? '<ol class="steps">' +
               w.steps.map((s) => "<li>" + fmt(s) + "</li>").join("") +
               "</ol>"
@@ -787,7 +762,8 @@
           )
           .join("");
         break;
-      case "priority":
+      case "priority": {
+        const half = w.page === "BA" ? "combat" : "event";
         body =
           '<p class="q">' +
           fmt(p.text) +
@@ -800,9 +776,7 @@
               "</ol>"
             : "") +
           (p.card
-            ? "<div><b>Chosen:</b> " +
-              cardHTML(byId[p.card], w.page === "BA" ? "combat" : "event") +
-              "</div>"
+            ? "<div><b>Chosen:</b> " + cardHTML(byId[p.card], half) + "</div>"
             : "") +
           (p.choice ? "<p><b>Result:</b> " + esc(p.choice) + "</p>" : "") +
           (!p.steps && !p.card
@@ -810,6 +784,7 @@
             : "");
         answers = '<button class="btn yes" data-ans="ok">Continue</button>';
         break;
+      }
       case "battleForm":
         body = battleFormHTML(p);
         answers = '<button class="btn yes" id="bfOk">Start the round</button>';
@@ -840,8 +815,7 @@
       "></label>"
     );
   }
-  function rowNum(id, label, value, attrs) {
-    const a = attrs || "";
+  function rowNum(id, label, value, attrs = "") {
     return (
       '<div class="row"><span id="' +
       id +
@@ -850,7 +824,7 @@
       '</span><span class="stepper" role="group" aria-labelledby="' +
       id +
       '-l"><button type="button" ' +
-      a +
+      attrs +
       ' data-d="-1" aria-label="Decrease ' +
       esc(plain(label)) +
       '">\u2212</button><span class="n" id="' +
@@ -858,7 +832,7 @@
       '-n" aria-live="polite">' +
       value +
       '</span><button type="button" ' +
-      a +
+      attrs +
       ' data-d="1" aria-label="Increase ' +
       esc(plain(label)) +
       '">+</button></span></div>'
@@ -941,17 +915,45 @@
       attackingSiege: g("attackingSiege"),
     };
   }
+  // Which die the walk's current action uses, for the action prompt's help line.
+  function dieHelpText(w) {
+    if (S.settings.dice && w.dieObj != null)
+      return "Uses the " + esc(S.dice.pool[w.dieObj].face) + " die.";
+    return w.die ? "Uses a " + esc(Q.DIE_NAME[w.die]) + " die." : "";
+  }
+  // The deck line above a card's title.
+  function cardTag(c) {
+    if (c.deck === "F") return "Faction Event · " + (c.faction || "Sauron");
+    if (c.deck === "B") return "Call to Battle · " + c.faction;
+    return (
+      (c.deck === "C" ? "Character" : "Strategy") +
+      " · " +
+      (c.type || "") +
+      " symbol"
+    );
+  }
+  // Card text as paragraphs (blank lines separate them).
+  const paragraphsHTML = (text) =>
+    esc(text || "")
+      .split("\n\n")
+      .map((p) => "<p>" + p + "</p>")
+      .join("");
+  // The combat (bottom) half of a card; `only` when the event half is not shown above it.
+  function combatHalfHTML(c, showEvent) {
+    return (
+      '<div class="combat' +
+      (showEvent ? "" : " only") +
+      '"><div class="ct"><b style="font-size:.9rem">' +
+      esc(c.ct) +
+      '</b><span class="tag">combat</span></div>' +
+      (c.cc ? '<div class="cond">' + esc(c.cc) + "</div>" : "") +
+      paragraphsHTML(c.ctext) +
+      "</div>"
+    );
+  }
   function cardHTML(c, half) {
     // half: "event" (top half only), "combat" (bottom half only) or omitted for the whole card
-    const tag =
-      c.deck === "F"
-        ? "Faction Event · " + (c.faction || "Sauron")
-        : c.deck === "B"
-          ? "Call to Battle · " + c.faction
-          : (c.deck === "C" ? "Character" : "Strategy") +
-            " · " +
-            (c.type || "") +
-            " symbol";
+    const tag = cardTag(c);
     const showEvent = half !== "combat" || c.deck === "B",
       showCombat = half !== "event" && !!c.ct;
     let h =
@@ -965,25 +967,9 @@
       "</span></div>";
     if (showEvent) {
       if (c.cond) h += '<div class="cond">' + esc(c.cond) + "</div>";
-      h += esc(c.text || "")
-        .split("\n\n")
-        .map((p) => "<p>" + p + "</p>")
-        .join("");
+      h += paragraphsHTML(c.text);
     }
-    if (showCombat) {
-      h +=
-        '<div class="combat' +
-        (showEvent ? "" : " only") +
-        '"><div class="ct"><b style="font-size:.9rem">' +
-        esc(c.ct) +
-        '</b><span class="tag">combat</span></div>' +
-        (c.cc ? '<div class="cond">' + esc(c.cc) + "</div>" : "") +
-        esc(c.ctext || "")
-          .split("\n\n")
-          .map((p) => "<p>" + p + "</p>")
-          .join("") +
-        "</div>";
-    }
+    if (showCombat) h += combatHalfHTML(c, showEvent);
     if (half)
       h +=
         '<div class="tag halfnote">' +
@@ -1338,28 +1324,30 @@
     return h + "</section>";
   }
   // ---------- tracker ----------
-  function trackerHTML() {
-    const idOf = (k) => "t-" + k.replace(/\./g, "-");
-    const chk = (k, l) => rowChk(idOf(k), l, getT(k), 'data-t="' + k + '"');
-    const num = (k, l) => rowNum(idOf(k), l, getT(k), 'data-step="' + k + '"');
-    const sel = (k, l) =>
-      '<div class="row"><label for="' +
-      idOf(k) +
-      '">' +
-      l +
-      '</label><select id="' +
-      idOf(k) +
-      '" data-t="' +
-      k +
-      '"><option value="passive"' +
-      (getT(k) === "passive" ? " selected" : "") +
-      '>Passive</option><option value="active"' +
-      (getT(k) === "active" ? " selected" : "") +
-      '>Active</option><option value="war"' +
-      (getT(k) === "war" ? " selected" : "") +
-      ">At war</option></select></div>";
+  // Tracker rows: a checkbox, a number stepper and a Free Peoples nation selector, keyed by the tracker path (e.g. "fs.progress").
+  const tId = (k) => "t-" + k.replaceAll(".", "-");
+  const tChk = (k, l) => rowChk(tId(k), l, getT(k), 'data-t="' + k + '"');
+  const tNum = (k, l) => rowNum(tId(k), l, getT(k), 'data-step="' + k + '"');
+  const tSel = (k, l) =>
+    '<div class="row"><label for="' +
+    tId(k) +
+    '">' +
+    l +
+    '</label><select id="' +
+    tId(k) +
+    '" data-t="' +
+    k +
+    '"><option value="passive"' +
+    (getT(k) === "passive" ? " selected" : "") +
+    '>Passive</option><option value="active"' +
+    (getT(k) === "active" ? " selected" : "") +
+    '>Active</option><option value="war"' +
+    (getT(k) === "war" ? " selected" : "") +
+    ">At war</option></select></div>";
+  // The situational card checks answered this turn, with a button to forget them (and the playability cache).
+  function situBlockHTML() {
     const sk = Object.keys(S.situ);
-    const situBlock = () =>
+    return (
       '<h3>Card checks answered this turn</h3><div class="situ">' +
       (sk.length
         ? sk
@@ -1376,63 +1364,68 @@
       (sk.length || Object.keys(S.playable).length
         ? '<div class="row"><span></span><button class="btn small" data-t-reset="1">Forget</button></div>'
         : "") +
-      "</div>";
-    if (!S.settings.tracker) {
-      let m = "";
-      if (S.settings.dice)
-        m +=
-          "<h3>Minions in play (sizes the dice pool)</h3>" +
-          chk("chars.saruman", "Saruman") +
-          chk("chars.witchKing", "Witch King") +
-          chk("chars.mouth", "Mouth of Sauron");
-      if ((S.settings.cards || S.settings.dice) && S.settings.wome)
-        m +=
-          "<h3>Shadow factions in play (" +
-          (S.settings.cards ? "card priorities" : "") +
-          (S.settings.cards && S.settings.dice ? ", " : "") +
-          (S.settings.dice ? "Faction die" : "") +
-          ")</h3>" +
-          chk("factions.corsairs", "Corsairs") +
-          chk("factions.dunlendings", "Dunlendings") +
-          chk("factions.spiders", "Spiders");
-      if (S.settings.dice)
-        m +=
-          "<h3>Hunt box and Elven Rings</h3>" +
-          num("fs.companions", "Companions in the Fellowship") +
-          num("rings", "Elven Rings held by the Shadow");
-      if (S.settings.cards) m += situBlock();
-      if (!m) return "";
-      return (
-        '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">minimal</span></h2><div class="tracker">' +
-        m +
-        "</div></section>"
-      );
-    }
+      "</div>"
+    );
+  }
+  // Without the full tracker, only the facts the dice pool and card priorities need are tracked.
+  function minimalTrackerHTML() {
+    let m = "";
+    if (S.settings.dice)
+      m +=
+        "<h3>Minions in play (sizes the dice pool)</h3>" +
+        tChk("chars.saruman", "Saruman") +
+        tChk("chars.witchKing", "Witch King") +
+        tChk("chars.mouth", "Mouth of Sauron");
+    if ((S.settings.cards || S.settings.dice) && S.settings.wome)
+      m +=
+        "<h3>Shadow factions in play (" +
+        (S.settings.cards ? "card priorities" : "") +
+        (S.settings.cards && S.settings.dice ? ", " : "") +
+        (S.settings.dice ? "Faction die" : "") +
+        ")</h3>" +
+        tChk("factions.corsairs", "Corsairs") +
+        tChk("factions.dunlendings", "Dunlendings") +
+        tChk("factions.spiders", "Spiders");
+    if (S.settings.dice)
+      m +=
+        "<h3>Hunt box and Elven Rings</h3>" +
+        tNum("fs.companions", "Companions in the Fellowship") +
+        tNum("rings", "Elven Rings held by the Shadow");
+    if (S.settings.cards) m += situBlockHTML();
+    if (!m) return "";
+    return (
+      '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">minimal</span></h2><div class="tracker">' +
+      m +
+      "</div></section>"
+    );
+  }
+  function trackerHTML() {
+    if (!S.settings.tracker) return minimalTrackerHTML();
     let h =
       '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">answers what it can</span></h2><div class="tracker">';
     h +=
       "<h3>Score</h3>" +
-      num("shadowVP", "Shadow victory points") +
-      num("corruption", "Corruption") +
-      num("rings", "Elven Rings held by the Shadow");
+      tNum("shadowVP", "Shadow victory points") +
+      tNum("corruption", "Corruption") +
+      tNum("rings", "Elven Rings held by the Shadow");
     h +=
       "<h3>Fellowship</h3>" +
-      num("fs.progress", "Progress counter") +
-      num("fs.companions", "Companions in the Fellowship") +
-      chk("fs.revealed", "Revealed") +
-      chk("fs.mordor", "On the Mordor track") +
-      chk("fs.atStart", "Figure in Rivendell") +
-      chk("fs.inFPSettlement", "Figure in a Free Peoples settlement region") +
-      chk("fs.inStrongholdOrSea", "Figure in a Stronghold or at sea") +
-      chk("fs.guideGollum", "Gollum is the Guide");
+      tNum("fs.progress", "Progress counter") +
+      tNum("fs.companions", "Companions in the Fellowship") +
+      tChk("fs.revealed", "Revealed") +
+      tChk("fs.mordor", "On the Mordor track") +
+      tChk("fs.atStart", "Figure in Rivendell") +
+      tChk("fs.inFPSettlement", "Figure in a Free Peoples settlement region") +
+      tChk("fs.inStrongholdOrSea", "Figure in a Stronghold or at sea") +
+      tChk("fs.guideGollum", "Gollum is the Guide");
     h +=
       "<h3>Characters in play</h3>" +
-      chk("chars.saruman", "Saruman") +
-      chk("chars.witchKing", "Witch King") +
-      chk("chars.mouth", "Mouth of Sauron") +
-      num("nazgul", "Nazg\u00fbl on the map") +
-      chk("chars.gandalfWhite", "Gandalf the White") +
-      chk("chars.aragorn", "Aragorn, Heir to Isildur");
+      tChk("chars.saruman", "Saruman") +
+      tChk("chars.witchKing", "Witch King") +
+      tChk("chars.mouth", "Mouth of Sauron") +
+      tNum("nazgul", "Nazg\u00fbl on the map") +
+      tChk("chars.gandalfWhite", "Gandalf the White") +
+      tChk("chars.aragorn", "Aragorn, Heir to Isildur");
     const selN = (k, l, max) => {
       let o = "";
       for (let v = 0; v <= max; v++)
@@ -1446,11 +1439,11 @@
           "</option>";
       return (
         '<div class="row"><label for="' +
-        idOf(k) +
+        tId(k) +
         '">' +
         l +
         '</label><select id="' +
-        idOf(k) +
+        tId(k) +
         '" data-t="' +
         k +
         '" data-num="1">' +
@@ -1465,21 +1458,21 @@
       selN("nations.se", "Southrons & Easterlings", 3);
     h +=
       "<h3>Free Peoples nations</h3>" +
-      sel("nations.gondor", "Gondor") +
-      sel("nations.rohan", "Rohan") +
-      sel("nations.north", "North") +
-      sel("nations.dwarves", "Dwarves") +
-      sel("nations.elves", "Elves");
+      tSel("nations.gondor", "Gondor") +
+      tSel("nations.rohan", "Rohan") +
+      tSel("nations.north", "North") +
+      tSel("nations.dwarves", "Dwarves") +
+      tSel("nations.elves", "Elves");
     if (S.settings.wome)
       h +=
         "<h3>Factions in play</h3>" +
-        chk("factions.corsairs", "Corsairs") +
-        chk("factions.dunlendings", "Dunlendings") +
-        chk("factions.spiders", "Spiders") +
-        chk("factions.ents", "Ents") +
-        chk("factions.eagles", "Eagles") +
-        chk("factions.deadmen", "Dead Men");
-    h += situBlock();
+        tChk("factions.corsairs", "Corsairs") +
+        tChk("factions.dunlendings", "Dunlendings") +
+        tChk("factions.spiders", "Spiders") +
+        tChk("factions.ents", "Ents") +
+        tChk("factions.eagles", "Eagles") +
+        tChk("factions.deadmen", "Dead Men");
+    h += situBlockHTML();
     return h + "</div></section>";
   }
   // dotted paths into S.board ("fs.progress")
@@ -1589,56 +1582,20 @@
           {
             a: "answer",
             prompt: "count",
-            page: S.walk && S.walk.page,
-            node: S.walk && S.walk.node,
+            page: S.walk?.page,
+            node: S.walk?.node,
             value: v,
           },
         );
       };
-    document.querySelectorAll("[data-spend]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          const i = +b.dataset.spend;
-          const d = S.dice.pool[i];
-          if (!d || d.st !== "avail") return;
-          ask({
-            title: "Mark this die as used?",
-            text:
-              "The " +
-              d.face +
-              (d.k === "F" ? " Faction" : "") +
-              " die will be marked as used for the rest of this turn. Undo reverses it.",
-            buttons: [
-              { v: "ok", label: "Mark as used", primary: true },
-              { v: "no", label: "Cancel" },
-            ],
-            onPick: (v) => {
-              if (v !== "ok") return;
-              act(
-                () => {
-                  const d2 = S.dice.pool[i];
-                  if (d2 && d2.st === "avail")
-                    Q.spendDie(S, d2, "marked by you");
-                },
-                { a: "spendDie", index: i, face: d.face },
-              );
-            },
-          });
-        }),
-    );
+    document
+      .querySelectorAll("[data-spend]")
+      .forEach((b) => (b.onclick = () => spendDieClick(+b.dataset.spend)));
     document
       .querySelectorAll("[data-card]")
       .forEach((b) => (b.onclick = () => onCard(b.dataset.card, b.dataset.id)));
     document.querySelectorAll(".tracker [data-t]").forEach((el) => {
-      el.onchange = () =>
-        trackerChange(
-          el.dataset.t,
-          el.type === "checkbox"
-            ? el.checked
-            : el.dataset.num
-              ? +el.value
-              : el.value,
-        );
+      el.onchange = () => trackerChange(el.dataset.t, trackerValue(el));
     });
     document.querySelectorAll("[data-step]").forEach(
       (b) =>
@@ -1664,7 +1621,7 @@
   }
   function onAnswer(a) {
     const w = S.walk,
-      p = w && w.prompt;
+      p = w?.prompt;
     if (!p) return;
     act(
       () => {
@@ -1685,9 +1642,41 @@
       },
     );
   }
+  // A tracker field's value: checkboxes give a boolean, numeric fields a number, the rest their text.
+  function trackerValue(el) {
+    if (el.type === "checkbox") return el.checked;
+    return el.dataset.num ? +el.value : el.value;
+  }
+  // The player marks an available die as used by hand (the [data-spend] buttons in the dice row).
+  function spendDieClick(i) {
+    const d = S.dice.pool[i];
+    if (d?.st !== "avail") return;
+    ask({
+      title: "Mark this die as used?",
+      text:
+        "The " +
+        d.face +
+        (d.k === "F" ? " Faction" : "") +
+        " die will be marked as used for the rest of this turn. Undo reverses it.",
+      buttons: [
+        { v: "ok", label: "Mark as used", primary: true },
+        { v: "no", label: "Cancel" },
+      ],
+      onPick: (v) => {
+        if (v !== "ok") return;
+        act(
+          () => {
+            const d2 = S.dice.pool[i];
+            if (d2?.st === "avail") Q.spendDie(S, d2, "marked by you");
+          },
+          { a: "spendDie", index: i, face: d.face },
+        );
+      },
+    });
+  }
   function afterWalk() {
     const w = S.walk;
-    if (!w || !w.done) return;
+    if (!w?.done) return;
     const r = w.result || "";
     if (w.entry.page === "BA") {
       S.battleOpen = r === "battleNext";

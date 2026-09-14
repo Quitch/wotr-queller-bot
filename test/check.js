@@ -1,6 +1,6 @@
 // Static consistency checks between walk.js / engine.js and the flowchart + card data. Exit 1 on any failure.
-const fs = require("fs"),
-  path = require("path");
+const fs = require("node:fs"),
+  path = require("node:path");
 const W = require("./load.js")();
 const F = W.QB_FLOW,
   Q = W.QB;
@@ -39,7 +39,7 @@ const cardLists = [
 ];
 for (const k of cardLists) {
   const [p, id] = k.split(".");
-  const node = F[p] && F[p].nodes[id];
+  const node = F[p]?.nodes[id];
   if (!node) {
     fail("card list " + k + " missing");
     continue;
@@ -71,7 +71,7 @@ for (const c of W.QB_CARDS) {
   }
   if (c.cpre) {
     try {
-      Q.combatPre(c, Object.assign({}, S, { battle: { figures: {} } }));
+      Q.combatPre(c, { ...S, battle: { figures: {} } });
     } catch (e) {
       fail(c.id + ' cpre "' + c.cpre + '": ' + e.message);
     }
