@@ -13,5 +13,9 @@
   "[python]": {
     "editor.defaultFormatter": null,
     "editor.formatOnSave": false
+  },
+  "sonarlint.connectedMode.project": {
+    "connectionId": "quitch",
+    "projectKey": "Quitch_wotr-queller-bot"
   }
 }
