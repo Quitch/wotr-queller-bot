@@ -16,7 +16,6 @@ export default [
     // shares data through window.QB* globals, so they are classic scripts, not modules.
     files: ["src/**/*.js"],
     languageOptions: {
-      ecmaVersion: 2022,
       sourceType: "script",
       globals: { ...globals.browser },
     },
@@ -26,7 +25,6 @@ export default [
     // `global`, and the real one inside Playwright page.evaluate() callbacks in smoke.js and shot.js.
     files: ["test/**/*.js"],
     languageOptions: {
-      ecmaVersion: 2022,
       sourceType: "commonjs",
       globals: { ...globals.node, window: "readonly" },
     },
@@ -34,7 +32,6 @@ export default [
   {
     files: ["*.mjs"],
     languageOptions: {
-      ecmaVersion: 2022,
       sourceType: "module",
       globals: { ...globals.node },
     },
