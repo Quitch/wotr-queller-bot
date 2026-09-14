@@ -1,13 +1,12 @@
 // ===== Modals: glossary, flowcharts (SVG), rules, calculator, save/load, settings, jump-to =====
 (function () {
-  const Q = window.QB,
-    F = window.QB_FLOW,
-    U = window.QBUI,
-    G = window.QB_GLOSSARY,
-    DBG = window.QB_DEBUG;
-  const esc = U.escapeHTML,
-    fmt = U.formatText;
-  const $ = (s) => document.querySelector(s);
+  const engine = window.QB,
+    FLOW = window.QB_FLOW,
+    ui = window.QBUI,
+    GLOSSARY = window.QB_GLOSSARY,
+    debug = window.QB_DEBUG;
+  const esc = ui.escapeHTML,
+    fmt = ui.formatText;
   const CALC_DEFAULTS = {
     reg: 0,
     elite: 0,
@@ -22,19 +21,19 @@
 
   let opener = null,
     flowText = false;
-  U.renderModal = function () {
-    const m = U.getModal();
-    if (!m) return;
-    let old = $("#modal");
-    const reopen = !!old;
-    if (old) old.remove();
+  ui.renderModal = function () {
+    const modal = ui.getModal();
+    if (!modal) return;
+    const existing = ui.find("#modal");
+    const reopen = !!existing;
+    if (existing) existing.remove();
     else opener = document.activeElement;
     const el = document.createElement("div");
     el.className = "modal";
     el.id = "modal";
-    const [title, body, narrow] = content(m);
-    const hb =
-      m.name === "calc"
+    const [title, body, narrow] = modalContent(modal);
+    const headerButtons =
+      modal.name === "calc"
         ? '<button type="button" class="btn" id="calcClear">Clear</button>'
         : "";
     el.innerHTML =
@@ -43,75 +42,77 @@
       '" role="dialog" aria-modal="true" aria-labelledby="mtitle"><header><h2 id="mtitle" tabindex="-1">' +
       esc(title) +
       '</h2><span class="hb">' +
-      hb +
+      headerButtons +
       '<button class="btn x" id="mclose">Close</button></span></header>' +
       body +
       "</div>";
     document.body.appendChild(el);
-    const app = $("#app");
+    const app = ui.find("#app");
     if (app) app.setAttribute("inert", "");
-    $("#mclose").onclick = U.closeModal;
-    el.addEventListener("click", (e) => {
-      if (e.target === el) U.closeModal();
+    ui.find("#mclose").onclick = ui.closeModal;
+    el.addEventListener("click", (event) => {
+      if (event.target === el) ui.closeModal();
     });
-    el.addEventListener("keydown", (e) => {
-      if (e.key !== "Tab") return;
-      const f = [
+    el.addEventListener("keydown", (event) => {
+      if (event.key !== "Tab") return;
+      const focusable = [
         ...el.querySelectorAll(
           'button,[href],input,select,textarea,[tabindex]:not([tabindex="-1"])',
         ),
-      ].filter((x) => !x.disabled && x.offsetParent !== null);
-      if (!f.length) return;
-      const first = f[0],
-        last = f.at(-1);
-      if (e.shiftKey && document.activeElement === first) {
+      ].filter(
+        (candidate) => !candidate.disabled && candidate.offsetParent !== null,
+      );
+      if (!focusable.length) return;
+      const first = focusable[0],
+        last = focusable.at(-1);
+      if (event.shiftKey && document.activeElement === first) {
         last.focus();
-        e.preventDefault();
-      } else if (!e.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+      } else if (!event.shiftKey && document.activeElement === last) {
         first.focus();
-        e.preventDefault();
+        event.preventDefault();
       }
     });
-    el.querySelectorAll(".body").forEach((b) => {
-      b.setAttribute("tabindex", "0");
-      b.setAttribute("role", "region");
-      b.setAttribute("aria-label", title + " content");
+    el.querySelectorAll(".body").forEach((region) => {
+      region.setAttribute("tabindex", "0");
+      region.setAttribute("role", "region");
+      region.setAttribute("aria-label", title + " content");
     });
-    wireModal(m);
-    if (m.name === "glossary" && m.arg) {
-      const t = el.querySelector('[data-gl="' + m.arg + '"]');
-      if (t) {
-        t.scrollIntoView({ block: "start" });
-        t.focus();
+    wireModal(modal);
+    if (modal.name === "glossary" && modal.arg) {
+      const term = el.querySelector('[data-gl="' + modal.arg + '"]');
+      if (term) {
+        term.scrollIntoView({ block: "start" });
+        term.focus();
       }
-    } else if (!reopen) $("#mtitle").focus();
+    } else if (!reopen) ui.find("#mtitle").focus();
   };
-  U.closeModal = function () {
-    U.setModal(null);
-    const m = $("#modal");
-    if (m) m.remove();
-    const app = $("#app");
+  ui.closeModal = function () {
+    ui.setModal(null);
+    const element = ui.find("#modal");
+    if (element) element.remove();
+    const app = ui.find("#app");
     if (app) app.removeAttribute("inert");
     if (opener?.isConnected) {
       opener.focus();
     }
     opener = null;
   };
-  function content(m) {
-    switch (m.name) {
+  function modalContent(modal) {
+    switch (modal.name) {
       case "glossary":
         return [
           "Glossary of terms",
           '<div class="body"><p class="notice">Words in italics on the flowcharts are defined here. Hover a term anywhere in the app for its definition; click it to open this list.</p><dl class="gl">' +
-            Object.keys(G)
+            Object.keys(GLOSSARY)
               .map(
-                (k) =>
+                (term) =>
                   '<dt data-gl="' +
-                  k +
+                  term +
                   '" tabindex="-1">' +
-                  esc(k) +
+                  esc(term) +
                   "</dt><dd>" +
-                  fmt(G[k]) +
+                  fmt(GLOSSARY[term]) +
                   "</dd>",
               )
               .join("") +
@@ -121,23 +122,23 @@
       case "rules":
         return ["General rules", rulesHTML(), true];
       case "flow":
-        if (m.arg?.current) {
+        if (modal.arg?.current) {
           flowPage = currentPage();
-          m.arg = null;
+          modal.arg = null;
         }
         return [
           "Flowcharts",
           '<div class="tabs">' +
-            Object.keys(F)
+            Object.keys(FLOW)
               .map(
-                (k) =>
+                (pageKey) =>
                   '<button class="btn small' +
-                  (k === flowPage ? " on" : "") +
+                  (pageKey === flowPage ? " on" : "") +
                   '" data-fp="' +
-                  k +
+                  pageKey +
                   '">' +
                   esc(
-                    F[k].name
+                    FLOW[pageKey].name
                       .replace("Strategy ", "")
                       .replace("Move/Recruit/Play/Draw ", ""),
                   ) +
@@ -168,42 +169,43 @@
       case "debug":
         return ["Debug log", debugHTML(), true];
       case "ask": {
-        const a = m.arg;
-        let inp = "";
-        if (a.input === "select")
-          inp =
+        const spec = modal.arg;
+        let input = "";
+        if (spec.input === "select")
+          input =
             '<p><label for="askInput">' +
-            esc(a.inputLabel) +
+            esc(spec.inputLabel) +
             '</label><br><select id="askInput" class="askctl">' +
-            a.options
+            spec.options
               .map(
-                (o, i) => '<option value="' + i + '">' + esc(o) + "</option>",
+                (option, i) =>
+                  '<option value="' + i + '">' + esc(option) + "</option>",
               )
               .join("") +
             "</select></p>";
-        else if (a.input === "number")
-          inp =
+        else if (spec.input === "number")
+          input =
             '<p><label for="askInput">' +
-            esc(a.inputLabel) +
+            esc(spec.inputLabel) +
             '</label><br><input id="askInput" class="askctl" type="number" min="0" max="20" value="' +
-            (a.value || 1) +
+            (spec.value || 1) +
             '"></p>';
         return [
-          a.title,
+          spec.title,
           '<div class="body"><p class="notice" style="font-size:.95rem;color:var(--ink)">' +
-            esc(a.text) +
+            esc(spec.text) +
             "</p>" +
-            inp +
+            input +
             '<div class="answers" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">' +
-            a.buttons
+            spec.buttons
               .map(
-                (b) =>
+                (button) =>
                   '<button class="btn' +
-                  (b.primary ? " primary" : "") +
+                  (button.primary ? " primary" : "") +
                   '" data-ask="' +
-                  b.v +
+                  button.v +
                   '">' +
-                  esc(b.label) +
+                  esc(button.label) +
                   "</button>",
               )
               .join("") +
@@ -215,11 +217,14 @@
     return ["", ""];
   }
   function currentPage() {
-    const S = U.state;
-    if (!S) return "C14";
-    if (S.walk && !S.walk.done && F[S.walk.page]) return S.walk.page;
-    const c = S.strategy === "military" ? "M" : "C";
-    return S.phase === "p5" || S.phase === "p6" ? c + "5" : c + "14";
+    const state = ui.state;
+    if (!state) return "C14";
+    if (state.walk && !state.walk.done && FLOW[state.walk.page])
+      return state.walk.page;
+    const strategyPrefix = state.strategy === "military" ? "M" : "C";
+    return state.phase === "p5" || state.phase === "p6"
+      ? strategyPrefix + "5"
+      : strategyPrefix + "14";
   }
   function helpHTML() {
     return (
@@ -234,51 +239,51 @@
     );
   }
   function rulesHTML() {
-    let h =
+    let html =
       '<div class="body rules"><p class="notice">The flowcharts, the rulings and the Learning Guide refer to these numbers.</p>';
-    for (const [sec, rs] of window.QB_RULES) {
-      h +=
+    for (const [section, rules] of window.QB_RULES) {
+      html +=
         "<h4>" +
-        esc(sec) +
+        esc(section) +
         "</h4><ol>" +
-        rs
+        rules
           .map(
-            ([n, t]) =>
+            ([number, text]) =>
               '<li><span class="n">' +
-              n +
+              number +
               "</span><span>" +
-              fmt(t) +
+              fmt(text) +
               "</span></li>",
           )
           .join("") +
         "</ol>";
     }
-    h +=
+    html +=
       "<h4>Turn sequence</h4><ol>" +
       window.QB_TURN.map(
-        ([p, t]) =>
+        ([phase, text]) =>
           '<li><span class="n"></span><span><b>' +
-          esc(p) +
+          esc(phase) +
           ".</b> " +
-          fmt(t) +
+          fmt(text) +
           "</span></li>",
       ).join("") +
       "</ol>";
-    h +=
+    html +=
       "<h4>Rulings</h4>" +
       window.QB_RULINGS.map(
-        ([q, a]) =>
+        ([question, answer]) =>
           '<p style="max-width:75ch"><b>' +
-          esc(q) +
+          esc(question) +
           "</b><br>" +
-          fmt(a) +
+          fmt(answer) +
           "</p>",
       ).join("");
-    h +=
+    html +=
       '<h4>Key for the flowcharts</h4><p class="notice" style="max-width:75ch">A green ellipse is a start point. A red ellipse is an action: if Queller can do it legally, do it and stop; otherwise apply rule 29. A yellow or blue rounded rectangle is a yes/no decision about the board now. A grey striped box is a jump to the start point with that name; a die in brackets means use that die. A purple box is a priority list (rules 30 and 31). An orange box is a step: do it, then continue. Bold text with the ring mark ' +
-      U.ringIcon() +
+      ui.ringIcon() +
       " is an Elven Ring condition (rule 36): if it is true and Queller lacks the die the next step needs, it uses a ring. “Phase 5 – continue from where you came” means return to the grey box that sent you here and follow its arrow out.</p></div>";
-    return h;
+    return html;
   }
   // ---------- flowchart SVG ----------
   const NODE_STYLE = {
@@ -291,92 +296,102 @@
     T: ["#ffe6cc", "#d79b00"],
     N: [null, null],
   };
-  function svgPage(pk) {
-    const P = F[pk];
-    const S = U.state;
-    const w = S?.walk;
-    const curNode = w && !w.done && w.page === pk ? w.node : null;
+  function svgPage(pageKey) {
+    const page = FLOW[pageKey];
+    const state = ui.state;
+    const walk = state?.walk;
+    const curNode =
+      walk && !walk.done && walk.page === pageKey ? walk.node : null;
     const visited = new Set();
-    if (w?.page === pk || w?.trail.some((t) => t.page === pk))
-      w.trail.forEach((t) => {
-        if (t.page === pk && t.node) visited.add(t.node);
+    if (
+      walk?.page === pageKey ||
+      walk?.trail.some((entry) => entry.page === pageKey)
+    )
+      walk.trail.forEach((entry) => {
+        if (entry.page === pageKey && entry.node) visited.add(entry.node);
       });
     let maxX = 0,
       maxY = 0;
-    for (const id in P.nodes) {
-      const n = P.nodes[id];
-      maxX = Math.max(maxX, n[1] + n[3]);
-      maxY = Math.max(maxY, n[2] + n[4]);
+    for (const id in page.nodes) {
+      const node = page.nodes[id];
+      maxX = Math.max(maxX, node[1] + node[3]);
+      maxY = Math.max(maxY, node[2] + node[4]);
     }
-    for (const e of P.edges) {
-      for (const w of e[3] || []) {
-        maxX = Math.max(maxX, w[0]);
-        maxY = Math.max(maxY, w[1]);
+    for (const edge of page.edges) {
+      for (const waypoint of edge[3] || []) {
+        maxX = Math.max(maxX, waypoint[0]);
+        maxY = Math.max(maxY, waypoint[1]);
       }
     }
-    let s =
+    let svg =
       '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Flowchart: ' +
-      esc(P.name) +
+      esc(page.name) +
       '. Use Show as text for a readable version." viewBox="0 0 ' +
       (maxX + 20) +
       " " +
       (maxY + 20) +
       '" width="100%" style="font-family:Helvetica,Arial,sans-serif;font-size:11px"><defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#999" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="#fff"/>';
-    // edges first
+    // edges first, so the boxes are drawn over them
     let labels = "";
-    for (const e of P.edges) {
-      const a = P.nodes[e[0]],
-        b = P.nodes[e[1]];
-      if (!a || !b) continue;
-      const pts = route(a, b, e[3], e[4], e[5] === "elbow");
-      s +=
+    for (const edge of page.edges) {
+      const fromBox = page.nodes[edge[0]],
+        toBox = page.nodes[edge[1]];
+      if (!fromBox || !toBox) continue;
+      const points = route(
+        fromBox,
+        toBox,
+        edge[3],
+        edge[4],
+        edge[5] === "elbow",
+      );
+      svg +=
         '<polyline points="' +
-        pts.map((p) => p.join(",")).join(" ") +
+        points.map((point) => point.join(",")).join(" ") +
         '" fill="none" stroke="#333" stroke-width="1.2" marker-end="url(#arr)"/>';
-      if (e[2] && !e[6]) {
-        const [lx, ly] = midpoint(pts);
-        const w = e[2].length * 5.6 + 8;
+      if (edge[2] && !edge[6]) {
+        const [labelX, labelY] = midpoint(points);
+        const labelWidth = edge[2].length * 5.6 + 8;
         labels +=
           '<rect x="' +
-          (lx - w / 2) +
+          (labelX - labelWidth / 2) +
           '" y="' +
-          (ly - 7) +
+          (labelY - 7) +
           '" width="' +
-          w +
+          labelWidth +
           '" height="13" rx="2" fill="#fff"/><text x="' +
-          lx +
+          labelX +
           '" y="' +
-          (ly + 3) +
+          (labelY + 3) +
           '" text-anchor="middle" font-size="10" fill="#333">' +
-          esc(e[2]) +
+          esc(edge[2]) +
           "</text>";
       }
     }
-    for (const id in P.nodes) {
-      const n = P.nodes[id];
-      const [k, x, y, wd, ht, t, ex] = n;
-      const st = NODE_STYLE[k];
-      const isCur = id === curNode,
-        vis = visited.has(id);
+    for (const id in page.nodes) {
+      const node = page.nodes[id];
+      const [kind, x, y, width, height, text, nodeExtra] = node;
+      const style = NODE_STYLE[kind];
+      const isCurrent = id === curNode,
+        wasVisited = visited.has(id);
       let shape = "";
-      const fill = st[0] || "none",
-        stroke = st[1] || "none";
-      if (k === "S" || k === "A")
+      const fill = style[0] || "none",
+        stroke = style[1] || "none";
+      if (kind === "S" || kind === "A")
         shape =
           '<ellipse cx="' +
-          (x + wd / 2) +
+          (x + width / 2) +
           '" cy="' +
-          (y + ht / 2) +
+          (y + height / 2) +
           '" rx="' +
-          wd / 2 +
+          width / 2 +
           '" ry="' +
-          ht / 2 +
+          height / 2 +
           '" fill="' +
           fill +
           '" stroke="' +
           stroke +
           '"/>';
-      else if (k === "N") {
+      else if (kind === "N") {
         if (id === "grp")
           shape =
             '<rect x="' +
@@ -384,20 +399,20 @@
             '" y="' +
             y +
             '" width="' +
-            wd +
+            width +
             '" height="' +
-            ht +
+            height +
             '" rx="8" fill="none" stroke="#999" stroke-dasharray="4 3"/>';
-      } else if (k === "J")
+      } else if (kind === "J")
         shape =
           '<rect x="' +
           x +
           '" y="' +
           y +
           '" width="' +
-          wd +
+          width +
           '" height="' +
-          ht +
+          height +
           '" fill="' +
           fill +
           '" stroke="' +
@@ -407,15 +422,15 @@
           '" y="' +
           y +
           '" width="8" height="' +
-          ht +
+          height +
           '" fill="url(#hatch)" stroke="' +
           stroke +
           '"/><rect x="' +
-          (x + wd - 8) +
+          (x + width - 8) +
           '" y="' +
           y +
           '" width="8" height="' +
-          ht +
+          height +
           '" fill="url(#hatch)" stroke="' +
           stroke +
           '"/>';
@@ -426,85 +441,85 @@
           '" y="' +
           y +
           '" width="' +
-          wd +
+          width +
           '" height="' +
-          ht +
+          height +
           '" rx="' +
-          (k === "T" ? 0 : 8) +
+          (kind === "T" ? 0 : 8) +
           '" fill="' +
           fill +
           '" stroke="' +
           stroke +
           '"/>';
-      if (vis && !isCur && k !== "N") {
-        const sh = 'fill="#3a332c" fill-opacity=".22" stroke="none"';
-        const rx = k === "T" || k === "J" ? 0 : 8;
+      if (wasVisited && !isCurrent && kind !== "N") {
+        const shade = 'fill="#3a332c" fill-opacity=".22" stroke="none"';
+        const rx = kind === "T" || kind === "J" ? 0 : 8;
         shape +=
-          k === "S" || k === "A"
+          kind === "S" || kind === "A"
             ? '<ellipse cx="' +
-              (x + wd / 2) +
+              (x + width / 2) +
               '" cy="' +
-              (y + ht / 2) +
+              (y + height / 2) +
               '" rx="' +
-              wd / 2 +
+              width / 2 +
               '" ry="' +
-              ht / 2 +
+              height / 2 +
               '" ' +
-              sh +
+              shade +
               "/>"
             : '<rect x="' +
               x +
               '" y="' +
               y +
               '" width="' +
-              wd +
+              width +
               '" height="' +
-              ht +
+              height +
               '" rx="' +
               rx +
               '" ' +
-              sh +
+              shade +
               "/>";
       }
-      if (isCur)
+      if (isCurrent)
         shape +=
           '<rect x="' +
           (x - 5) +
           '" y="' +
           (y - 5) +
           '" width="' +
-          (wd + 10) +
+          (width + 10) +
           '" height="' +
-          (ht + 10) +
+          (height + 10) +
           '" rx="12" fill="none" stroke="#8A2A22" stroke-width="3"/>';
       let inner;
-      const bold = ex?.bold;
-      const pad = k === "N" ? 0 : 4;
-      const txt = nodeLabel(k, id, t, n);
-      const extra = id === "ringNote" ? 14 : 0;
+      const bold = nodeExtra?.bold;
+      const pad = kind === "N" ? 0 : 4;
+      const label = nodeLabel(kind, id, text, node);
+      const extraHeight = id === "ringNote" ? 14 : 0;
       inner =
         '<foreignObject x="' +
         (x + pad) +
         '" y="' +
         (y + pad) +
         '" width="' +
-        (wd - 2 * pad) +
+        (width - 2 * pad) +
         '" height="' +
-        (ht - 2 * pad + extra) +
+        (height - 2 * pad + extraHeight) +
         '"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;display:flex;align-items:' +
-        (ex?.items || id === "grp" ? "flex-start" : "center") +
+        (nodeExtra?.items || id === "grp" ? "flex-start" : "center") +
         ";justify-content:center;text-align:center;color:#1d1a17;line-height:1.15;font-size:11px;overflow:hidden;" +
         (bold ? "font-weight:700;" : "") +
         '"><div style="width:100%">' +
-        txt +
+        label +
         "</div></div></foreignObject>";
       let mark = bold
         ? '<g transform="translate(' +
-          (x + wd - 18) +
+          (x + width - 18) +
           "," +
           (y - 8) +
           ') scale(0.75)" style="color:#7E2419"><title>Elven Ring condition (rule 36)</title><circle cx="12" cy="13.5" r="9.5" fill="#fff"/>' +
-          U.RING_PATH +
+          ui.RING_PATH +
           "</g>"
         : "";
       if (id === "ringNote")
@@ -514,17 +529,18 @@
           "," +
           (y + 8) +
           ') scale(0.85)" style="color:#7E2419"><title>Elven Ring condition (rule 36)</title>' +
-          U.RING_PATH +
+          ui.RING_PATH +
           "</g>";
-      s += '<g data-node="' + id + '">' + shape + inner + mark + "</g>";
+      svg += '<g data-node="' + id + '">' + shape + inner + mark + "</g>";
     }
-    return s + labels + "</svg>";
+    return svg + labels + "</svg>";
   }
-  function textPage(pk) {
-    const P = F[pk];
-    const S = U.state,
-      w = S?.walk;
-    const curNode = w && !w.done && w.page === pk ? w.node : null;
+  function textPage(pageKey) {
+    const page = FLOW[pageKey];
+    const state = ui.state,
+      walk = state?.walk;
+    const curNode =
+      walk && !walk.done && walk.page === pageKey ? walk.node : null;
     const KIND = {
       S: "Start point",
       A: "Action",
@@ -535,46 +551,49 @@
       T: "Step",
       N: "Note",
     };
-    const name = (id) => {
-      const n = P.nodes[id];
-      return n ? Q.normalizeText(n[5]).replaceAll("*", "") : id;
+    const nodeName = (id) => {
+      const node = page.nodes[id];
+      return node ? engine.normalizeText(node[5]).replaceAll("*", "") : id;
     };
-    let h =
+    let html =
       '<div class="flowtext"><p class="notice">Text version of ' +
-      esc(P.name) +
+      esc(page.name) +
       ". Each box lists where its arrows lead.</p><ol>";
-    for (const id in P.nodes) {
-      const n = P.nodes[id];
-      if (n[0] === "N" && !/grp/.test(id)) continue;
+    for (const id in page.nodes) {
+      const node = page.nodes[id];
+      if (node[0] === "N" && !/grp/.test(id)) continue;
       if (id === "grp") continue;
-      const ex = n[6] || {};
-      const outs = P.edges.filter((e) => e[0] === id);
-      let t = "<b>" + esc(KIND[n[0]]) + ":</b> " + fmt(n[5]);
-      if (ex.t2) t += " " + U.ringIcon() + " (ring part) — or " + fmt(ex.t2);
-      if (ex.bold && !ex.t2) t += " " + U.ringIcon() + " (ring condition)";
-      if (ex.wome) t += " (WoME only)";
-      if (ex.items)
-        t +=
-          (ex.any ? " any of: " : " ") +
+      const nodeExtra = node[6] || {};
+      const outEdges = page.edges.filter((edge) => edge[0] === id);
+      let text = "<b>" + esc(KIND[node[0]]) + ":</b> " + fmt(node[5]);
+      if (nodeExtra.t2)
+        text += " " + ui.ringIcon() + " (ring part) — or " + fmt(nodeExtra.t2);
+      if (nodeExtra.bold && !nodeExtra.t2)
+        text += " " + ui.ringIcon() + " (ring condition)";
+      if (nodeExtra.wome) text += " (WoME only)";
+      if (nodeExtra.items)
+        text +=
+          (nodeExtra.any ? " any of: " : " ") +
           "<ol>" +
-          ex.items.map((i) => "<li>" + fmt(i) + "</li>").join("") +
+          nodeExtra.items.map((item) => "<li>" + fmt(item) + "</li>").join("") +
           "</ol>";
-      if (outs.length)
-        t +=
+      if (outEdges.length)
+        text +=
           '<div class="notice">' +
-          outs
+          outEdges
             .map(
-              (e) =>
-                (e[2] ? esc(e[2]) + ": " : "then: ") +
+              (edge) =>
+                (edge[2] ? esc(edge[2]) + ": " : "then: ") +
                 "go to “" +
-                esc(name(e[1])) +
+                esc(nodeName(edge[1])) +
                 "”",
             )
             .join("; ") +
           "</div>";
-      else if (n[0] === "A")
-        t += '<div class="notice">then: stop (if not possible, rule 29)</div>';
-      h +=
+      else if (node[0] === "A")
+        text +=
+          '<div class="notice">then: stop (if not possible, rule 29)</div>';
+      html +=
         '<li id="tx-' +
         id +
         '"' +
@@ -582,306 +601,416 @@
           ? ' style="outline:2px solid var(--accent);padding:4px"'
           : "") +
         ">" +
-        t +
+        text +
         (id === curNode ? " <b>(current step)</b>" : "") +
         "</li>";
     }
-    return h + "</ol></div>";
+    return html + "</ol></div>";
   }
   // The HTML inside a node box: page titles, the ring note and group labels have their own styling; everything else is the node text.
-  function nodeLabel(k, id, t, n) {
-    if (k === "N" && id !== "grp" && /title/.test(id))
+  function nodeLabel(kind, id, text, node) {
+    if (kind === "N" && id !== "grp" && /title/.test(id))
       return (
         '<div style="font-size:16px;font-weight:700;text-align:right">' +
-        esc(t) +
+        esc(text) +
         "</div>"
       );
     if (id === "ringNote")
       return (
         '<div style="font-weight:700;text-align:left;line-height:1.1;padding-left:22px">' +
-        esc(t) +
+        esc(text) +
         "</div>"
       );
     if (id === "grp")
       return (
         '<div style="text-align:left;padding:5px 8px;color:#555">' +
-        esc(t) +
+        esc(text) +
         "</div>"
       );
-    return nodeInner(n);
+    return nodeInner(node);
   }
-  function nodeInner(n) {
-    const [, , , , , t, ex] = n;
-    let s = esc(t)
+  function nodeInner(node) {
+    const [, , , , , text, nodeExtra] = node;
+    let html = esc(text)
       .replace(/\*([^*]+)\*/g, "<i>$1</i>")
       .replaceAll("\n", "<br>");
-    if (ex?.t2)
-      s =
+    if (nodeExtra?.t2)
+      html =
         "<b>" +
-        s +
+        html +
         "</b> or " +
-        esc(ex.t2).replace(/\*([^*]+)\*/g, "<i>$1</i>");
-    if (ex?.items)
-      s =
+        esc(nodeExtra.t2).replace(/\*([^*]+)\*/g, "<i>$1</i>");
+    if (nodeExtra?.items)
+      html =
         '<div style="text-align:left;width:100%"><b style="display:block;text-align:center">' +
-        s +
+        html +
         "</b><" +
-        (ex.any ? "ul" : "ol") +
+        (nodeExtra.any ? "ul" : "ol") +
         ' style="margin:2px 0 0;padding-left:18px">' +
-        ex.items
+        nodeExtra.items
           .map(
-            (i) =>
-              "<li>" + esc(i).replace(/\*([^*]+)\*/g, "<i>$1</i>") + "</li>",
+            (item) =>
+              "<li>" + esc(item).replace(/\*([^*]+)\*/g, "<i>$1</i>") + "</li>",
           )
           .join("") +
         "</" +
-        (ex.any ? "ul" : "ol") +
+        (nodeExtra.any ? "ul" : "ol") +
         "></div>";
-    return s;
+    return html;
   }
-  function midpoint(pts) {
-    let L = 0;
-    const segs = [];
-    for (let i = 1; i < pts.length; i++) {
-      const d = Math.hypot(
-        pts[i][0] - pts[i - 1][0],
-        pts[i][1] - pts[i - 1][1],
+  // The point halfway along a polyline, for its label.
+  function midpoint(points) {
+    let total = 0;
+    const segmentLengths = [];
+    for (let i = 1; i < points.length; i++) {
+      const length = Math.hypot(
+        points[i][0] - points[i - 1][0],
+        points[i][1] - points[i - 1][1],
       );
-      segs.push(d);
-      L += d;
+      segmentLengths.push(length);
+      total += length;
     }
-    let t = L / 2;
-    for (let i = 1; i < pts.length; i++) {
-      if (t <= segs[i - 1]) {
-        const f = segs[i - 1] ? t / segs[i - 1] : 0;
+    let remaining = total / 2;
+    for (let i = 1; i < points.length; i++) {
+      if (remaining <= segmentLengths[i - 1]) {
+        const fraction = segmentLengths[i - 1]
+          ? remaining / segmentLengths[i - 1]
+          : 0;
         return [
-          pts[i - 1][0] + (pts[i][0] - pts[i - 1][0]) * f,
-          pts[i - 1][1] + (pts[i][1] - pts[i - 1][1]) * f,
+          points[i - 1][0] + (points[i][0] - points[i - 1][0]) * fraction,
+          points[i - 1][1] + (points[i][1] - points[i - 1][1]) * fraction,
         ];
       }
-      t -= segs[i - 1];
+      remaining -= segmentLengths[i - 1];
     }
-    return pts[pts.length - 1];
+    return points[points.length - 1];
   }
-  function anchor(n, px, py) {
-    const [, x, y, w, h] = n;
-    const cx = x + w / 2,
-      cy = y + h / 2;
-    const dx = px - cx,
-      dy = py - cy;
-    if (Math.abs(dy) * w > Math.abs(dx) * h) {
+  // The point on a box's edge nearest to (px, py): on the top or bottom edge when the point is more above/below than beside it.
+  function anchor(box, px, py) {
+    const [, x, y, width, height] = box;
+    const centreX = x + width / 2,
+      centreY = y + height / 2;
+    const dx = px - centreX,
+      dy = py - centreY;
+    if (Math.abs(dy) * width > Math.abs(dx) * height) {
       return dy > 0
-        ? [clamp(px, x + 8, x + w - 8), y + h]
-        : [clamp(px, x + 8, x + w - 8), y];
+        ? [clamp(px, x + 8, x + width - 8), y + height]
+        : [clamp(px, x + 8, x + width - 8), y];
     }
     return dx > 0
-      ? [x + w, clamp(py, y + 6, y + h - 6)]
-      : [x, clamp(py, y + 6, y + h - 6)];
+      ? [x + width, clamp(py, y + 6, y + height - 6)]
+      : [x, clamp(py, y + 6, y + height - 6)];
   }
   // anchor towards a draw.io waypoint: leave from the side the point lies beyond (horizontal when it is outside the box's x-range), like draw.io's orthogonal router
-  function wpAnchor(n, px, py) {
-    const [, x, y, w, h] = n;
-    const outX = px < x || px > x + w,
-      outY = py < y || py > y + h;
+  function waypointAnchor(box, px, py) {
+    const [, x, y, width, height] = box;
+    const outX = px < x || px > x + width,
+      outY = py < y || py > y + height;
     if (outX)
       return [
-        px < x ? x : x + w,
-        py >= y + 6 && py <= y + h - 6 ? py : y + h / 2,
+        px < x ? x : x + width,
+        py >= y + 6 && py <= y + height - 6 ? py : y + height / 2,
       ];
     if (outY)
       return [
-        px >= x + 8 && px <= x + w - 8 ? px : x + w / 2,
-        py < y ? y : y + h,
+        px >= x + 8 && px <= x + width - 8 ? px : x + width / 2,
+        py < y ? y : y + height,
       ];
-    return anchor(n, px, py);
+    return anchor(box, px, py);
   }
-  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const JOG = 20; // how far an arrow steps out of a box before turning
-  const onTopOrBottomEdge = (n, p) =>
-    Math.abs(p[1] - n[2]) < 0.5 || Math.abs(p[1] - n[2] - n[4]) < 0.5; // an anchor there means a vertical exit/entry
+  const onTopOrBottomEdge = (box, point) =>
+    Math.abs(point[1] - box[2]) < 0.5 ||
+    Math.abs(point[1] - box[2] - box[4]) < 0.5; // an anchor there means a vertical exit/entry
   // A point on a box from a draw.io anchor (fractions of the width and height).
-  const anchorAt = (box, frac) => [
-    box[1] + box[3] * frac[0],
-    box[2] + box[4] * frac[1],
+  const anchorAt = (box, anchorFraction) => [
+    box[1] + box[3] * anchorFraction[0],
+    box[2] + box[4] * anchorFraction[1],
   ];
   // The point the edge heads for at one end: the first/last waypoint, else the other box's explicit anchor, else its centre.
-  function towards(wp, frac, box, centre) {
-    if (wp) return wp;
-    return frac ? anchorAt(box, frac) : centre;
+  function towards(waypoint, anchorFraction, box, centre) {
+    if (waypoint) return waypoint;
+    return anchorFraction ? anchorAt(box, anchorFraction) : centre;
   }
-  // Where the edge meets a box: its explicit anchor when draw.io gives one, else the nearest point facing pt (a waypoint or the other end).
-  function edgeEnd(box, frac, hasWp, pt) {
-    if (frac) return anchorAt(box, frac);
-    return hasWp ? wpAnchor(box, pt[0], pt[1]) : anchor(box, pt[0], pt[1]);
+  // Where the edge meets a box: its explicit anchor when draw.io gives one, else the nearest point facing towardPoint (a waypoint or the other end).
+  function edgeEnd(box, anchorFraction, hasWaypoints, towardPoint) {
+    if (anchorFraction) return anchorAt(box, anchorFraction);
+    return hasWaypoints
+      ? waypointAnchor(box, towardPoint[0], towardPoint[1])
+      : anchor(box, towardPoint[0], towardPoint[1]);
   }
   // Which way an edge leaves a box: -1 from the top (vertical) or left edge, +1 from the bottom or right.
-  function edgeDir(box, p, vertical) {
+  function exitDirection(box, point, vertical) {
     const nearStart = vertical
-      ? Math.abs(p[1] - box[2]) < 0.5
-      : Math.abs(p[0] - box[1]) < 0.5;
+      ? Math.abs(point[1] - box[2]) < 0.5
+      : Math.abs(point[0] - box[1]) < 0.5;
     return nearStart ? -1 : 1;
   }
-  // A lane for a detour between two boxes along one axis (i, s = the box tuple's position and size indexes for that axis): midway through
-  // the gap between them when there is one, otherwise just outside both boxes on the side the edge is heading (towardsStart = towards 0).
-  function lane(a, b, i, s, towardsStart, J) {
+  // The node tuple's position and size slots for each axis.
+  const AXIS_SLOTS = {
+    x: { position: 1, size: 3 },
+    y: { position: 2, size: 4 },
+  };
+  // A lane for a detour between two boxes along one axis: midway through the gap between them when there is one,
+  // otherwise just outside both boxes on the side the edge is heading (towardsStart = towards 0).
+  function lane(fromBox, toBox, axis, towardsStart, jog) {
+    const { position, size } = AXIS_SLOTS[axis];
     if (towardsStart) {
-      if (b[i] + b[s] <= a[i]) return (b[i] + b[s] + a[i]) / 2;
-      return Math.min(a[i], b[i]) - J;
+      if (toBox[position] + toBox[size] <= fromBox[position])
+        return (toBox[position] + toBox[size] + fromBox[position]) / 2;
+      return Math.min(fromBox[position], toBox[position]) - jog;
     }
-    if (a[i] + a[s] <= b[i]) return (a[i] + a[s] + b[i]) / 2;
-    return Math.max(a[i] + a[s], b[i] + b[s]) + J;
+    if (fromBox[position] + fromBox[size] <= toBox[position])
+      return (fromBox[position] + fromBox[size] + toBox[position]) / 2;
+    return (
+      Math.max(
+        fromBox[position] + fromBox[size],
+        toBox[position] + toBox[size],
+      ) + jog
+    );
   }
-  function route(a, b, wp, an, elbow) {
-    const ac = [a[1] + a[3] / 2, a[2] + a[4] / 2],
-      bc = [b[1] + b[3] / 2, b[2] + b[4] / 2];
-    if (elbow && wp?.length && an?.ex && an.en) {
+  function boxCentre(box) {
+    return [box[1] + box[3] / 2, box[2] + box[4] / 2];
+  }
+  function route(fromBox, toBox, waypoints, anchors, elbow) {
+    const fromCentre = boxCentre(fromBox),
+      toCentre = boxCentre(toBox);
+    if (elbow && waypoints?.length && anchors?.ex && anchors.en) {
       // draw.io elbowEdgeStyle: one elbow positioned by the first waypoint
-      const p0 = anchorAt(a, an.ex),
-        pn = anchorAt(b, an.en);
-      const exV = an.ex[1] === 0 || an.ex[1] === 1;
-      return exV
-        ? [p0, [p0[0], wp[0][1]], [pn[0], wp[0][1]], pn]
-        : [p0, [wp[0][0], p0[1]], [wp[0][0], pn[1]], pn];
+      const start = anchorAt(fromBox, anchors.ex),
+        end = anchorAt(toBox, anchors.en);
+      const exitVertical = anchors.ex[1] === 0 || anchors.ex[1] === 1;
+      return exitVertical
+        ? [start, [start[0], waypoints[0][1]], [end[0], waypoints[0][1]], end]
+        : [start, [waypoints[0][0], start[1]], [waypoints[0][0], end[1]], end];
     }
-    if (an && (an.ex || an.en)) {
+    if (anchors && (anchors.ex || anchors.en)) {
       // explicit draw.io exit/entry anchors (fractions of the box); a missing side falls back to the nearest-point heuristic
-      const first = towards(wp?.[0], an.en, b, bc),
-        last = towards(wp?.at(-1), an.ex, a, ac);
-      const p0 = edgeEnd(a, an.ex, wp?.length, first);
-      const pn = edgeEnd(b, an.en, wp?.length, last);
-      const exV = onTopOrBottomEdge(a, p0),
-        enV = onTopOrBottomEdge(b, pn);
-      const pts = [p0];
-      let prev = p0;
-      if (wp?.length) {
-        for (const p of wp) {
-          if (Math.abs(p[0] - prev[0]) > 1 && Math.abs(p[1] - prev[1]) > 1)
-            pts.push(exV ? [prev[0], p[1]] : [p[0], prev[1]]);
-          pts.push(p);
-          prev = p;
+      const first = towards(waypoints?.[0], anchors.en, toBox, toCentre),
+        last = towards(waypoints?.at(-1), anchors.ex, fromBox, fromCentre);
+      const start = edgeEnd(fromBox, anchors.ex, waypoints?.length, first);
+      const end = edgeEnd(toBox, anchors.en, waypoints?.length, last);
+      const exitVertical = onTopOrBottomEdge(fromBox, start),
+        entryVertical = onTopOrBottomEdge(toBox, end);
+      const points = [start];
+      let previous = start;
+      if (waypoints?.length) {
+        for (const waypoint of waypoints) {
+          if (
+            Math.abs(waypoint[0] - previous[0]) > 1 &&
+            Math.abs(waypoint[1] - previous[1]) > 1
+          )
+            points.push(
+              exitVertical
+                ? [previous[0], waypoint[1]]
+                : [waypoint[0], previous[1]],
+            );
+          points.push(waypoint);
+          previous = waypoint;
         }
       }
-      if (Math.abs(pn[0] - prev[0]) > 1 && Math.abs(pn[1] - prev[1]) > 1) {
-        const J = JOG;
-        const exDir = edgeDir(a, p0, exV),
-          enDir = edgeDir(b, pn, enV);
-        if (!wp?.length && !exV && !enV && exDir === enDir) {
-          const ox =
-            exDir > 0
-              ? Math.max(prev[0], pn[0]) + J
-              : Math.min(prev[0], pn[0]) - J;
-          pts.push([ox, prev[1]], [ox, pn[1]]);
-        } else if (
-          !wp?.length &&
-          !exV &&
-          !enV &&
-          (pn[0] - prev[0]) * exDir < 0
+      if (
+        Math.abs(end[0] - previous[0]) > 1 &&
+        Math.abs(end[1] - previous[1]) > 1
+      ) {
+        const jog = JOG;
+        const exitDir = exitDirection(fromBox, start, exitVertical),
+          entryDir = exitDirection(toBox, end, entryVertical);
+        if (
+          !waypoints?.length &&
+          !exitVertical &&
+          !entryVertical &&
+          exitDir === entryDir
         ) {
-          const ox = prev[0] + J * exDir,
-            ix = pn[0] - J * exDir;
-          const ya = lane(a, b, 2, 4, pn[1] < prev[1], J);
-          pts.push([ox, prev[1]], [ox, ya], [ix, ya], [ix, pn[1]]);
-        } else if (!wp?.length && exV && enV && exDir === enDir) {
-          const oy =
-            exDir > 0
-              ? Math.max(prev[1], pn[1]) + J
-              : Math.min(prev[1], pn[1]) - J;
-          pts.push([prev[0], oy], [pn[0], oy]);
-        } else if (!wp?.length && exV && enV && (pn[1] - prev[1]) * exDir < 0) {
-          const oy = prev[1] + J * exDir,
-            iy = pn[1] - J * exDir;
-          const xa = lane(a, b, 1, 3, pn[0] < prev[0], J);
-          pts.push([prev[0], oy], [xa, oy], [xa, iy], [pn[0], iy]);
-        } else if (exV && enV) {
-          const my = (prev[1] + pn[1]) / 2;
-          pts.push([prev[0], my], [pn[0], my]);
-        } else if (!exV && !enV) {
-          const mx = (prev[0] + pn[0]) / 2;
-          pts.push([mx, prev[1]], [mx, pn[1]]);
-        } else if (exV) pts.push([prev[0], pn[1]]);
-        else pts.push([pn[0], prev[1]]);
+          const outX =
+            exitDir > 0
+              ? Math.max(previous[0], end[0]) + jog
+              : Math.min(previous[0], end[0]) - jog;
+          points.push([outX, previous[1]], [outX, end[1]]);
+        } else if (
+          !waypoints?.length &&
+          !exitVertical &&
+          !entryVertical &&
+          (end[0] - previous[0]) * exitDir < 0
+        ) {
+          const outX = previous[0] + jog * exitDir,
+            inX = end[0] - jog * exitDir;
+          const laneY = lane(fromBox, toBox, "y", end[1] < previous[1], jog);
+          points.push(
+            [outX, previous[1]],
+            [outX, laneY],
+            [inX, laneY],
+            [inX, end[1]],
+          );
+        } else if (
+          !waypoints?.length &&
+          exitVertical &&
+          entryVertical &&
+          exitDir === entryDir
+        ) {
+          const outY =
+            exitDir > 0
+              ? Math.max(previous[1], end[1]) + jog
+              : Math.min(previous[1], end[1]) - jog;
+          points.push([previous[0], outY], [end[0], outY]);
+        } else if (
+          !waypoints?.length &&
+          exitVertical &&
+          entryVertical &&
+          (end[1] - previous[1]) * exitDir < 0
+        ) {
+          const outY = previous[1] + jog * exitDir,
+            inY = end[1] - jog * exitDir;
+          const laneX = lane(fromBox, toBox, "x", end[0] < previous[0], jog);
+          points.push(
+            [previous[0], outY],
+            [laneX, outY],
+            [laneX, inY],
+            [end[0], inY],
+          );
+        } else if (exitVertical && entryVertical) {
+          const midY = (previous[1] + end[1]) / 2;
+          points.push([previous[0], midY], [end[0], midY]);
+        } else if (!exitVertical && !entryVertical) {
+          const midX = (previous[0] + end[0]) / 2;
+          points.push([midX, previous[1]], [midX, end[1]]);
+        } else if (exitVertical) points.push([previous[0], end[1]]);
+        else points.push([end[0], previous[1]]);
       }
-      pts.push(pn);
-      return pts;
+      points.push(end);
+      return points;
     }
-    if (wp?.length) {
-      const p0 = wpAnchor(a, wp[0][0], wp[0][1]);
-      const pn = wpAnchor(b, wp[wp.length - 1][0], wp[wp.length - 1][1]);
-      const pts = [p0];
-      let prev = p0;
-      for (const p of wp) {
-        if (Math.abs(p[0] - prev[0]) > 1 && Math.abs(p[1] - prev[1]) > 1)
-          pts.push([p[0], prev[1]]);
-        pts.push(p);
-        prev = p;
+    if (waypoints?.length) {
+      const start = waypointAnchor(fromBox, waypoints[0][0], waypoints[0][1]);
+      const end = waypointAnchor(
+        toBox,
+        waypoints[waypoints.length - 1][0],
+        waypoints[waypoints.length - 1][1],
+      );
+      const points = [start];
+      let previous = start;
+      for (const waypoint of waypoints) {
+        if (
+          Math.abs(waypoint[0] - previous[0]) > 1 &&
+          Math.abs(waypoint[1] - previous[1]) > 1
+        )
+          points.push([waypoint[0], previous[1]]);
+        points.push(waypoint);
+        previous = waypoint;
       }
-      if (Math.abs(pn[0] - prev[0]) > 1 && Math.abs(pn[1] - prev[1]) > 1)
-        pts.push([prev[0], pn[1]]);
-      pts.push(pn);
-      return pts;
+      if (
+        Math.abs(end[0] - previous[0]) > 1 &&
+        Math.abs(end[1] - previous[1]) > 1
+      )
+        points.push([previous[0], end[1]]);
+      points.push(end);
+      return points;
     }
-    const below = bc[1] > a[2] + a[4],
-      above = bc[1] + b[4] / 2 < a[2],
-      right = bc[0] > a[1] + a[3],
-      left = bc[0] + b[3] / 2 < a[1];
+    const below = toCentre[1] > fromBox[2] + fromBox[4],
+      above = toCentre[1] + toBox[4] / 2 < fromBox[2],
+      right = toCentre[0] > fromBox[1] + fromBox[3],
+      left = toCentre[0] + toBox[3] / 2 < fromBox[1];
     if (
       (below && !(right || left)) ||
-      (below && Math.abs(bc[0] - ac[0]) < Math.abs(bc[1] - ac[1]))
+      (below &&
+        Math.abs(toCentre[0] - fromCentre[0]) <
+          Math.abs(toCentre[1] - fromCentre[1]))
     ) {
-      const p0 = [clamp(bc[0], a[1] + 8, a[1] + a[3] - 8), a[2] + a[4]],
-        p1 = [clamp(ac[0], b[1] + 8, b[1] + b[3] - 8), b[2]];
-      const my = (p0[1] + p1[1]) / 2;
-      return Math.abs(p0[0] - p1[0]) < 1
-        ? [p0, p1]
-        : [p0, [p0[0], my], [p1[0], my], p1];
+      const start = [
+          clamp(toCentre[0], fromBox[1] + 8, fromBox[1] + fromBox[3] - 8),
+          fromBox[2] + fromBox[4],
+        ],
+        finish = [
+          clamp(fromCentre[0], toBox[1] + 8, toBox[1] + toBox[3] - 8),
+          toBox[2],
+        ];
+      const midY = (start[1] + finish[1]) / 2;
+      return Math.abs(start[0] - finish[0]) < 1
+        ? [start, finish]
+        : [start, [start[0], midY], [finish[0], midY], finish];
     }
-    if (above && Math.abs(bc[0] - ac[0]) < Math.abs(bc[1] - ac[1])) {
-      const p0 = [clamp(bc[0], a[1] + 8, a[1] + a[3] - 8), a[2]],
-        p1 = [clamp(ac[0], b[1] + 8, b[1] + b[3] - 8), b[2] + b[4]];
-      const my = (p0[1] + p1[1]) / 2;
-      return Math.abs(p0[0] - p1[0]) < 1
-        ? [p0, p1]
-        : [p0, [p0[0], my], [p1[0], my], p1];
+    if (
+      above &&
+      Math.abs(toCentre[0] - fromCentre[0]) <
+        Math.abs(toCentre[1] - fromCentre[1])
+    ) {
+      const start = [
+          clamp(toCentre[0], fromBox[1] + 8, fromBox[1] + fromBox[3] - 8),
+          fromBox[2],
+        ],
+        finish = [
+          clamp(fromCentre[0], toBox[1] + 8, toBox[1] + toBox[3] - 8),
+          toBox[2] + toBox[4],
+        ];
+      const midY = (start[1] + finish[1]) / 2;
+      return Math.abs(start[0] - finish[0]) < 1
+        ? [start, finish]
+        : [start, [start[0], midY], [finish[0], midY], finish];
     }
     if (right) {
-      const p0 = [a[1] + a[3], clamp(bc[1], a[2] + 6, a[2] + a[4] - 6)],
-        p1 = [b[1], clamp(ac[1], b[2] + 6, b[2] + b[4] - 6)];
-      const mx = (p0[0] + p1[0]) / 2;
-      return Math.abs(p0[1] - p1[1]) < 1
-        ? [p0, p1]
-        : [p0, [mx, p0[1]], [mx, p1[1]], p1];
+      const start = [
+          fromBox[1] + fromBox[3],
+          clamp(toCentre[1], fromBox[2] + 6, fromBox[2] + fromBox[4] - 6),
+        ],
+        finish = [
+          toBox[1],
+          clamp(fromCentre[1], toBox[2] + 6, toBox[2] + toBox[4] - 6),
+        ];
+      const midX = (start[0] + finish[0]) / 2;
+      return Math.abs(start[1] - finish[1]) < 1
+        ? [start, finish]
+        : [start, [midX, start[1]], [midX, finish[1]], finish];
     }
-    const p0 = [a[1], clamp(bc[1], a[2] + 6, a[2] + a[4] - 6)],
-      p1 = [b[1] + b[3], clamp(ac[1], b[2] + 6, b[2] + b[4] - 6)];
-    const mx = (p0[0] + p1[0]) / 2;
-    return Math.abs(p0[1] - p1[1]) < 1
-      ? [p0, p1]
-      : [p0, [mx, p0[1]], [mx, p1[1]], p1];
+    const start = [
+        fromBox[1],
+        clamp(toCentre[1], fromBox[2] + 6, fromBox[2] + fromBox[4] - 6),
+      ],
+      finish = [
+        toBox[1] + toBox[3],
+        clamp(fromCentre[1], toBox[2] + 6, toBox[2] + toBox[4] - 6),
+      ];
+    const midX = (start[0] + finish[0]) / 2;
+    return Math.abs(start[1] - finish[1]) < 1
+      ? [start, finish]
+      : [start, [midX, start[1]], [midX, finish[1]], finish];
   }
   // ---------- calculator ----------
   const CALC_MAX = { reg: 10, elite: 10, lead: 10, cotw: 5 };
   function calcHTML() {
-    const c = calc;
-    const num = (k, l) =>
-      U.numberRowHTML("c-" + k, fmt(l), c[k], 'data-cs="' + k + '"');
-    const chk = (k, l) =>
-      U.checkboxRowHTML("c-" + k, fmt(l), c[k], 'data-c="' + k + '"');
+    const number = (key, label) =>
+      ui.numberRowHTML(
+        "c-" + key,
+        fmt(label),
+        calc[key],
+        'data-cs="' + key + '"',
+      );
+    const checkbox = (key, label) =>
+      ui.checkboxRowHTML(
+        "c-" + key,
+        fmt(label),
+        calc[key],
+        'data-c="' + key + '"',
+      );
     return (
       '<div class="body"><p class="notice">' +
       fmt(
         "The *value* of an army per the glossary. Hits: 1 per Regular, 2 per Elite. Combat dice: one per Army unit, maximum 5. Leadership: maximum 5 and not more than the number of Army units.",
       ) +
       '</p><div class="calc tracker">' +
-      num("reg", "Regular units") +
-      num("elite", "Elite units") +
-      num("lead", "Leadership (Nazgûl, leaders, minions, Companions)\u00b9") +
-      num("cotw", "Captains of the West (Free Peoples only)") +
-      chk("fort", "Defends in a Fortification or City region") +
-      chk(
+      number("reg", "Regular units") +
+      number("elite", "Elite units") +
+      number(
+        "lead",
+        "Leadership (Nazgûl, leaders, minions, Companions)\u00b9",
+      ) +
+      number("cotw", "Captains of the West (Free Peoples only)") +
+      checkbox("fort", "Defends in a Fortification or City region") +
+      checkbox(
         "strong",
         "Defends in a Stronghold (×1.5, five strongest units’ hits)",
       ) +
-      chk("sortie", "Sortie (×0.5)") +
+      checkbox("sortie", "Sortie (×0.5)") +
       '<div class="out">' +
       calcOut() +
       '</div><p class="notice" style="margin-top:10px">' +
@@ -892,102 +1021,103 @@
     );
   }
   function calcOut() {
-    const c = calc;
-    const units = c.reg + c.elite;
+    const units = calc.reg + calc.elite;
     const lines = [];
-    let hits = c.reg + 2 * c.elite;
-    if (c.strong) {
+    let hits = calc.reg + 2 * calc.elite;
+    if (calc.strong) {
       const top = Math.min(5, units);
-      const e = Math.min(top, c.elite);
-      hits = e * 2 + (top - e);
+      const eliteCounted = Math.min(top, calc.elite);
+      hits = eliteCounted * 2 + (top - eliteCounted);
       lines.push("Hits (five strongest units): " + hits);
     } else lines.push("Hits: " + hits);
-    const dice = Math.min(5, units + c.cotw);
+    const dice = Math.min(5, units + calc.cotw);
     lines.push("Combat dice: " + dice);
-    const lead = Math.min(5, Math.min(c.lead, units));
+    const lead = Math.min(5, Math.min(calc.lead, units));
     lines.push("Leadership: " + lead);
-    let v = hits + dice + lead + c.cotw;
-    if (c.cotw) lines.push("Captains of the West: +" + c.cotw);
-    if (c.fort) {
-      v += 1;
+    let value = hits + dice + lead + calc.cotw;
+    if (calc.cotw) lines.push("Captains of the West: +" + calc.cotw);
+    if (calc.fort) {
+      value += 1;
       lines.push("Fortification/City: +1");
     }
-    if (c.strong) {
-      v = Math.floor(v * 1.5);
+    if (calc.strong) {
+      value = Math.floor(value * 1.5);
       lines.push("Stronghold: ×1.5 rounded down");
     }
-    if (c.sortie) {
-      v = Math.floor(v * 0.5);
+    if (calc.sortie) {
+      value = Math.floor(value * 0.5);
       lines.push("Sortie: ×0.5 rounded down");
     }
     return (
       '<div class="n">' +
-      v +
+      value +
       "</div><div>" +
       fmt("Army *value*") +
       "</div><ul>" +
-      lines.map((l) => "<li>" + esc(l) + "</li>").join("") +
+      lines.map((line) => "<li>" + esc(line) + "</li>").join("") +
       "</ul>"
     );
   }
   // ---------- transfer helpers (save file, debug log) ----------
   // The artifact host offers a downloads capability; a plain <a download> may be inert for viewers, so the copy button (and the text box) is the fallback.
-  async function downloadText(name, data, note, alt) {
+  async function downloadText({ fileName, data, noteEl, fallbackLabel }) {
     try {
-      const d = window.claude?.use
+      const downloads = window.claude?.use
         ? await window.claude.use("downloads")
         : null;
-      if (d) {
-        await d.save({ filename: name, data });
-        note.textContent = "Saved " + name + ".";
+      if (downloads) {
+        await downloads.save({ filename: fileName, data });
+        noteEl.textContent = "Saved " + fileName + ".";
         return;
       }
-    } catch (e) {
-      note.textContent =
-        "Download not completed: " + (e.message || e.code || "cancelled");
+    } catch (error) {
+      noteEl.textContent =
+        "Download not completed: " +
+        (error.message || error.code || "cancelled");
       return;
     }
     try {
-      const a = document.createElement("a");
-      a.href =
+      const link = document.createElement("a");
+      link.href =
         "data:application/json;charset=utf-8," + encodeURIComponent(data);
-      a.download = name;
-      a.click();
-      note.textContent = "If nothing downloaded, use " + alt + ".";
-    } catch (e) {
+      link.download = fileName;
+      link.click();
+      noteEl.textContent = "If nothing downloaded, use " + fallbackLabel + ".";
+    } catch {
       // The browser blocked the download; the note points the user at the alternative.
-      note.textContent = "Downloads are not available here — use " + alt + ".";
+      noteEl.textContent =
+        "Downloads are not available here — use " + fallbackLabel + ".";
     }
   }
-  async function copyText(data, note, what, ta) {
+  async function copyText({ data, noteEl, label, textarea }) {
     try {
       await navigator.clipboard.writeText(data);
-      note.textContent = what + " copied to the clipboard.";
-    } catch (e) {
+      noteEl.textContent = label + " copied to the clipboard.";
+    } catch {
       // Clipboard access was refused; select the text so the user can copy it by hand.
-      if (ta) {
-        ta.value = data;
-        ta.focus();
-        ta.select();
+      if (textarea) {
+        textarea.value = data;
+        textarea.focus();
+        textarea.select();
       }
-      note.textContent = "Copy the text from the box below.";
+      noteEl.textContent = "Copy the text from the box below.";
     }
   }
   // ---------- debug log ----------
   function environment() {
-    const mq = (q) => {
+    const mediaMatches = (query) => {
       try {
-        return window.matchMedia(q).matches;
-      } catch (e) {
+        return window.matchMedia(query).matches;
+      } catch {
         return null;
       }
     };
     let storage = "ok";
     try {
-      localStorage.setItem(U.STORAGE_KEY.PROBE, "1");
-      localStorage.removeItem(U.STORAGE_KEY.PROBE);
-    } catch (e) {
-      storage = "unavailable: " + (e.message || e);
+      localStorage.setItem(ui.STORAGE_KEY.PROBE, "1");
+      localStorage.removeItem(ui.STORAGE_KEY.PROBE);
+    } catch (error) {
+      storage = "unavailable: " + (error.message || error);
     }
     return {
       built: window.QB_BUILT || null,
@@ -1000,9 +1130,9 @@
       screen: [screen.width, screen.height],
       dpr: window.devicePixelRatio,
       theme: document.documentElement.dataset.theme || "system",
-      prefersDark: mq("(prefers-color-scheme: dark)"),
-      coarsePointer: mq("(pointer: coarse)"),
-      reducedMotion: mq("(prefers-reduced-motion: reduce)"),
+      prefersDark: mediaMatches("(prefers-color-scheme: dark)"),
+      coarsePointer: mediaMatches("(pointer: coarse)"),
+      reducedMotion: mediaMatches("(prefers-reduced-motion: reduce)"),
       online: navigator.onLine,
       storage,
       timeZone: Intl.DateTimeFormat().resolvedOptions()?.timeZone,
@@ -1013,38 +1143,45 @@
     };
   }
   function storageOverview() {
-    const o = {};
-    for (const k of Object.values(U.STORAGE_KEY)) {
-      const v = U.storageGet(k);
-      o[k] = v == null ? null : v.length;
+    const overview = {};
+    for (const key of Object.values(ui.STORAGE_KEY)) {
+      const value = ui.storageGet(key);
+      overview[key] = value == null ? null : value.length;
     }
-    return o;
+    return overview;
   }
   function domSnapshot() {
-    const t = (sel) => {
-      const e = document.querySelector(sel);
-      return e ? e.textContent.replace(/\s+/g, " ").trim().slice(0, 600) : null;
+    const textOf = (selector) => {
+      const el = document.querySelector(selector);
+      return el
+        ? el.textContent.replace(/\s+/g, " ").trim().slice(0, 600)
+        : null;
     };
-    const m = U.getModal();
-    let modal = null;
-    if (m)
-      modal = m.name + (m.name === "ask" && m.arg ? ": " + m.arg.title : "");
-    const ae = document.activeElement;
+    const modal = ui.getModal();
+    let modalName = null;
+    if (modal)
+      modalName =
+        modal.name +
+        (modal.name === "ask" && modal.arg ? ": " + modal.arg.title : "");
+    const activeEl = document.activeElement;
     let active = null;
-    if (ae && ae !== document.body) {
-      const label = ae.textContent
-        ? " “" + ae.textContent.trim().slice(0, 40) + "”"
+    if (activeEl && activeEl !== document.body) {
+      const label = activeEl.textContent
+        ? " “" + activeEl.textContent.trim().slice(0, 40) + "”"
         : "";
-      active = ae.tagName.toLowerCase() + (ae.id ? "#" + ae.id : "") + label;
+      active =
+        activeEl.tagName.toLowerCase() +
+        (activeEl.id ? "#" + activeEl.id : "") +
+        label;
     }
     return {
       rendered: !!document.getElementById("app")?.children.length,
-      prompt: t(".prompt"),
-      result: t(".result"),
+      prompt: textOf(".prompt"),
+      result: textOf(".result"),
       phaseButtons: [...document.querySelectorAll("[data-phase]")].map(
-        (b) => b.dataset.phase,
+        (button) => button.dataset.phase,
       ),
-      modal,
+      modal: modalName,
       errorBar: !!document.getElementById("errbar"),
       activeElement: active,
     };
@@ -1052,23 +1189,23 @@
   function debugText() {
     let opts = null;
     try {
-      opts = JSON.parse(U.storageGet(U.STORAGE_KEY.OPTIONS) || "null");
-    } catch (e) {}
-    return DBG.text({
-      state: U.state,
-      history: U.history,
-      report: $("#dbgReport")?.value || "",
+      opts = JSON.parse(ui.storageGet(ui.STORAGE_KEY.OPTIONS) || "null");
+    } catch {}
+    return debug.text({
+      state: ui.state,
+      history: ui.history,
+      report: ui.find("#dbgReport")?.value || "",
       env: environment(),
       dom: domSnapshot(),
       storage: storageOverview(),
-      brokenAutosave: U.storageGet(U.STORAGE_KEY.BROKEN_AUTOSAVE) || null,
+      brokenAutosave: ui.storageGet(ui.STORAGE_KEY.BROKEN_AUTOSAVE) || null,
       opts,
     });
   }
   function debugHTML() {
     return (
       '<div class="body"><p class="notice" style="color:var(--ink)">The debug log describes this browser, the game as it stands, the last ' +
-      DBG.LIMITS.actions +
+      debug.LIMITS.actions +
       " actions, the trails of recent walks and any errors the app recorded, so that a problem can be traced from a report. It contains no personal details, but it does show Queller’s hidden cards — only read it if you do not mind seeing them.</p>" +
       '<p style="margin-top:12px"><label for="dbgReport"><b>What went wrong?</b> <span class="notice" style="display:inline">(optional — saved into the log: what you did, what you expected, what happened)</span></label><textarea id="dbgReport" style="min-height:80px" placeholder="For example: after answering Yes to “Witch King in play” the walk jumped to the Army page instead of Character 2."></textarea></p>' +
       '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn primary" id="dbgDl">Download debug log</button><button type="button" class="btn" id="dbgCopy">Copy debug log</button></div><div id="dbgNote" class="notice" role="status" aria-live="polite" style="margin-top:6px"></div>' +
@@ -1076,350 +1213,371 @@
     );
   }
   function wireDebug(el) {
-    const ta = el.querySelector("#dbgTxt");
-    if (!ta) return;
+    const textarea = el.querySelector("#dbgTxt");
+    if (!textarea) return;
     const refresh = () => {
       try {
-        ta.value = debugText();
-      } catch (e) {
-        ta.value =
-          "The debug log could not be built: " + (e.stack || e.message || e);
-        DBG.error(e, { a: "debugBuild" }, U.state);
+        textarea.value = debugText();
+      } catch (error) {
+        textarea.value =
+          "The debug log could not be built: " +
+          (error.stack || error.message || error);
+        debug.error(error, { a: "debugBuild" }, ui.state);
       }
-      return ta.value;
+      return textarea.value;
     };
     refresh();
     el.querySelector("#dbgReport").onchange = refresh;
     el.querySelector("#dbgDl").onclick = () => {
       const data = refresh();
-      DBG.action(
+      debug.action(
         { a: "debugExport", how: "download", bytes: data.length },
-        U.state,
+        ui.state,
       );
-      downloadText(
-        DBG.fileName(U.state),
+      downloadText({
+        fileName: debug.fileName(ui.state),
         data,
-        el.querySelector("#dbgNote"),
-        "Copy debug log",
-      );
+        noteEl: el.querySelector("#dbgNote"),
+        fallbackLabel: "Copy debug log",
+      });
     };
     el.querySelector("#dbgCopy").onclick = () => {
       const data = refresh();
-      DBG.action(
+      debug.action(
         { a: "debugExport", how: "copy", bytes: data.length },
-        U.state,
+        ui.state,
       );
-      copyText(data, el.querySelector("#dbgNote"), "Debug log", ta);
+      copyText({
+        data,
+        noteEl: el.querySelector("#dbgNote"),
+        label: "Debug log",
+        textarea,
+      });
     };
   }
   // ---------- save / load ----------
   function slots() {
     try {
-      return JSON.parse(U.storageGet(U.STORAGE_KEY.SLOTS) || "[]");
-    } catch (e) {
+      return JSON.parse(ui.storageGet(ui.STORAGE_KEY.SLOTS) || "[]");
+    } catch {
       return [];
     }
   }
   function saveHTML() {
-    const sl = slots();
-    let h =
+    const slotList = slots();
+    let html =
       '<div class="body"><p class="notice">The game is saved automatically in this browser after every action. Named saves are also kept in this browser. To move a game to another device, download it or copy the code.</p>';
-    h +=
+    html +=
       "<h4>Named saves</h4>" +
       [0, 1, 2]
         .map((i) => {
-          const s = sl[i];
+          const slot = slotList[i];
           return (
             '<div class="slot"><span class="t">Slot ' +
             (i + 1) +
-            (s ? ": turn " + s.turn + ", " + esc(s.when) : ": empty") +
+            (slot ? ": turn " + slot.turn + ", " + esc(slot.when) : ": empty") +
             '</span><button class="btn small" data-save="' +
             i +
             '">Save here</button>' +
-            (s
+            (slot
               ? '<button class="btn small" data-load="' + i + '">Load</button>'
               : "") +
             "</div>"
           );
         })
         .join("");
-    h +=
+    html +=
       '<h4>Transfer</h4><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="dlBtn">Download save file</button><button class="btn" id="copyBtn">Copy save code</button></div><div id="dlNote" class="notice"></div>';
-    h += "<h4>Load</h4>" + U.loadHTML() + "</div>";
-    return h;
+    html += "<h4>Load</h4>" + ui.loadHTML() + "</div>";
+    return html;
   }
-  U.loadHTML = function () {
+  ui.loadHTML = function () {
     return '<p class="notice" style="margin:0 0 6px">Paste a save code, or choose a save file.</p><label for="loadTxt" class="notice">Save code</label><textarea id="loadTxt" placeholder="Paste the save code here"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="loadTxtBtn">Load from code</button><label class="notice">Save file <input type="file" id="loadFile" accept=".json,application/json"></label></div><div id="loadErr" class="notice" role="alert" style="color:var(--bad)"></div>';
   };
   // Replace the game with a parsed save, confirming first when a game is in progress.
-  function loadGame(o, title) {
-    const go = () => {
-      DBG.begin(
-        { a: "load", title, turn: o.turn, version: o.appVersion },
-        U.state,
+  function loadGame(save, title) {
+    const replace = () => {
+      debug.begin(
+        { a: "load", title, turn: save.turn, version: save.appVersion },
+        ui.state,
       );
-      U.history = [];
-      U.state = o;
-      DBG.finishAction(o);
-      U.closeModal();
-      U.commit();
+      ui.history = [];
+      ui.state = save;
+      debug.finishAction(save);
+      ui.closeModal();
+      ui.commit();
     };
-    if (!U.state) return go();
-    U.ask({
+    if (!ui.state) return replace();
+    ui.ask({
       title,
       text: "The game in progress will be replaced.",
       buttons: [
         { v: "ok", label: "Load", primary: true },
         { v: "no", label: "Cancel" },
       ],
-      onPick: (v) => {
-        if (v === "ok") go();
-        else U.openModal("save");
+      onPick: (choice) => {
+        if (choice === "ok") replace();
+        else ui.openModal("save");
       },
     });
   }
-  U.wireLoad = function (root) {
-    const doLoad = (txt) => {
+  ui.wireLoad = function (root) {
+    const doLoad = (text) => {
       try {
-        loadGame(U.loadJSON(txt), "Load this save?");
-      } catch (e) {
-        const er = root.querySelector("#loadErr");
-        if (er) er.textContent = "That is not a Queller save: " + e.message;
+        loadGame(ui.loadJSON(text), "Load this save?");
+      } catch (error) {
+        const errorEl = root.querySelector("#loadErr");
+        if (errorEl)
+          errorEl.textContent = "That is not a Queller save: " + error.message;
       }
     };
-    const b = root.querySelector("#loadTxtBtn");
-    if (b)
-      b.onclick = () => doLoad(root.querySelector("#loadTxt").value.trim());
-    const f = root.querySelector("#loadFile");
-    if (f)
-      f.onchange = () => {
-        const file = f.files[0];
+    const loadBtn = root.querySelector("#loadTxtBtn");
+    if (loadBtn)
+      loadBtn.onclick = () =>
+        doLoad(root.querySelector("#loadTxt").value.trim());
+    const fileInput = root.querySelector("#loadFile");
+    if (fileInput)
+      fileInput.onchange = () => {
+        const file = fileInput.files[0];
         if (!file) return;
         file.text().then(doLoad);
       };
   };
   function settingsHTML() {
-    const s = U.state.settings;
-    const chk = (k, l, d, dis) =>
+    const settings = ui.state.settings;
+    const checkbox = (key, label, description, disabled) =>
       '<label class="opt' +
-      (dis ? " dis" : "") +
+      (disabled ? " dis" : "") +
       '"><input type="checkbox" data-set="' +
-      k +
+      key +
       '" ' +
-      (s[k] ? "checked" : "") +
-      (dis ? ' disabled aria-disabled="true"' : "") +
+      (settings[key] ? "checked" : "") +
+      (disabled ? ' disabled aria-disabled="true"' : "") +
       "><div><b>" +
-      l +
+      label +
       "</b>" +
-      (d ? "<span>" + d + "</span>" : "") +
+      (description ? "<span>" + description + "</span>" : "") +
       "</div></label>";
     return (
       '<div class="body setup" style="margin:0"><p class="notice">Changes apply from the next walk.</p>' +
-      chk("dice", "Roll and track Queller’s dice", "") +
-      chk(
+      checkbox("dice", "Roll and track Queller’s dice", "") +
+      checkbox(
         "cards",
         "Draw and hold Queller’s cards",
         "Chosen when the game is set up; it cannot be changed mid-game.",
         true,
       ) +
-      chk("tracker", "Track board state in the app", "") +
-      chk(
+      checkbox("tracker", "Track board state in the app", "") +
+      checkbox(
         "wome",
         "Warriors of Middle-earth",
         "Chosen when the game is set up; it cannot be changed mid-game.",
         true,
       ) +
       '<h4 style="margin-top:18px">Report a problem</h4><p class="notice">If the app does something wrong, export a debug log and send it with a description of what happened. The log records the game, the last actions and any errors.</p><p style="margin-top:8px"><button type="button" class="btn" id="dbgOpen">Export debug log</button></p><h4 style="margin-top:18px">About</h4><p class="notice">Queller Bot Runner version ' +
-      Q.VERSION +
+      engine.VERSION +
       ".</p>" +
-      U.LEGAL +
+      ui.LEGAL +
       "</div>"
     );
   }
   function jumpHTML() {
-    let h =
+    let html =
       '<div class="body"><p class="notice">Walk a page from any green start point — for example when a card tells Queller to make a choice (rule 12), to place Nazgûl, or to choose a discard. The walk uses no die unless you pick one.</p><div style="display:grid;gap:8px;grid-template-columns:1fr auto;align-items:center"><select id="jumpSel" aria-label="Start point">';
-    for (const k in F) {
-      for (const id in F[k].nodes) {
-        const n = F[k].nodes[id];
-        if (n[0] === "S")
-          h +=
+    for (const pageKey in FLOW) {
+      for (const id in FLOW[pageKey].nodes) {
+        const node = FLOW[pageKey].nodes[id];
+        if (node[0] === "S")
+          html +=
             '<option value="' +
-            k +
+            pageKey +
             "|" +
             id +
             '">' +
-            esc(F[k].name) +
+            esc(FLOW[pageKey].name) +
             " — " +
-            esc(Q.normalizeText(n[5])) +
+            esc(engine.normalizeText(node[5])) +
             "</option>";
       }
     }
-    h +=
+    html +=
       '</select><select id="jumpDie" aria-label="Die to use"><option value="">No die</option>' +
-      Object.keys(Q.DIE_REQUIREMENT_NAME)
+      Object.keys(engine.DIE_REQUIREMENT_NAME)
         .map(
-          (k) =>
+          (requirement) =>
             '<option value="' +
-            k +
+            requirement +
             '">' +
-            esc(Q.DIE_REQUIREMENT_NAME[k]) +
+            esc(engine.DIE_REQUIREMENT_NAME[requirement]) +
             " die</option>",
         )
         .join("") +
       '</select></div><div style="margin-top:12px"><button class="btn primary" id="jumpGo">Walk</button></div></div>';
-    return h;
+    return html;
   }
-  function wireModal(m) {
-    const el = $("#modal");
+  function wireModal(modal) {
+    const el = ui.find("#modal");
     el.querySelectorAll("[data-fp]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          flowPage = b.dataset.fp;
-          U.renderModal();
+      (button) =>
+        (button.onclick = () => {
+          flowPage = button.dataset.fp;
+          ui.renderModal();
         }),
     );
-    const ft = $("#flowToggle");
-    if (ft)
-      ft.onclick = () => {
+    const flowToggleBtn = ui.find("#flowToggle");
+    if (flowToggleBtn)
+      flowToggleBtn.onclick = () => {
         flowText = !flowText;
-        U.renderModal();
-        $("#flowToggle").focus();
+        ui.renderModal();
+        ui.find("#flowToggle").focus();
       };
     el.querySelectorAll("[data-c]").forEach(
-      (i) =>
-        (i.oninput = () => {
-          const k = i.dataset.c;
-          calc[k] =
-            i.type === "checkbox" ? i.checked : Math.max(0, +i.value || 0);
+      (input) =>
+        (input.oninput = () => {
+          const key = input.dataset.c;
+          calc[key] =
+            input.type === "checkbox"
+              ? input.checked
+              : Math.max(0, +input.value || 0);
           el.querySelector(".out").innerHTML = calcOut();
         }),
     );
     el.querySelectorAll("[data-cs]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          const k = b.dataset.cs;
-          calc[k] = Math.max(0, Math.min(CALC_MAX[k], calc[k] + +b.dataset.d));
-          el.querySelector("#c-" + k + "-n").textContent = calc[k];
+      (button) =>
+        (button.onclick = () => {
+          const key = button.dataset.cs;
+          calc[key] = Math.max(
+            0,
+            Math.min(CALC_MAX[key], calc[key] + +button.dataset.d),
+          );
+          el.querySelector("#c-" + key + "-n").textContent = calc[key];
           el.querySelector(".out").innerHTML = calcOut();
         }),
     );
-    const cc = $("#calcClear");
-    if (cc)
-      cc.onclick = () => {
+    const calcClearBtn = ui.find("#calcClear");
+    if (calcClearBtn)
+      calcClearBtn.onclick = () => {
         Object.assign(calc, CALC_DEFAULTS);
-        for (const k in CALC_MAX) {
-          const n = el.querySelector("#c-" + k + "-n");
-          if (n) n.textContent = calc[k];
+        for (const key in CALC_MAX) {
+          const counter = el.querySelector("#c-" + key + "-n");
+          if (counter) counter.textContent = calc[key];
         }
-        el.querySelectorAll("[data-c]").forEach((i) => {
-          if (i.type === "checkbox") i.checked = !!calc[i.dataset.c];
-          else i.value = calc[i.dataset.c];
+        el.querySelectorAll("[data-c]").forEach((input) => {
+          if (input.type === "checkbox")
+            input.checked = !!calc[input.dataset.c];
+          else input.value = calc[input.dataset.c];
         });
         el.querySelector(".out").innerHTML = calcOut();
       };
     el.querySelectorAll("[data-save]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          DBG.action({ a: "saveSlot", slot: +b.dataset.save }, U.state);
-          const sl = slots();
-          sl[+b.dataset.save] = {
-            turn: U.state.turn,
+      (button) =>
+        (button.onclick = () => {
+          debug.action({ a: "saveSlot", slot: +button.dataset.save }, ui.state);
+          const slotList = slots();
+          slotList[+button.dataset.save] = {
+            turn: ui.state.turn,
             when: new Date().toLocaleString(),
-            data: JSON.stringify(U.state),
+            data: JSON.stringify(ui.state),
           };
-          U.storageSet(U.STORAGE_KEY.SLOTS, JSON.stringify(sl));
-          U.renderModal();
+          ui.storageSet(ui.STORAGE_KEY.SLOTS, JSON.stringify(slotList));
+          ui.renderModal();
         }),
     );
     el.querySelectorAll("[data-load]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          const s = slots()[+b.dataset.load];
-          if (s)
+      (button) =>
+        (button.onclick = () => {
+          const slot = slots()[+button.dataset.load];
+          if (slot)
             loadGame(
-              U.loadJSON(s.data),
-              "Load slot " + (+b.dataset.load + 1) + "?",
+              ui.loadJSON(slot.data),
+              "Load slot " + (+button.dataset.load + 1) + "?",
             );
         }),
     );
-    const dl = $("#dlBtn");
-    if (dl)
-      dl.onclick = () =>
-        downloadText(
-          "queller-turn" + U.state.turn + ".json",
-          JSON.stringify(U.state),
-          $("#dlNote"),
-          "Copy save code",
-        );
-    const cp = $("#copyBtn");
-    if (cp)
-      cp.onclick = () =>
-        copyText(
-          JSON.stringify(U.state),
-          $("#dlNote"),
-          "Save code",
-          $("#loadTxt"),
-        );
-    const dbo = $("#dbgOpen");
-    if (dbo) dbo.onclick = () => U.openModal("debug");
+    const downloadBtn = ui.find("#dlBtn");
+    if (downloadBtn)
+      downloadBtn.onclick = () =>
+        downloadText({
+          fileName: "queller-turn" + ui.state.turn + ".json",
+          data: JSON.stringify(ui.state),
+          noteEl: ui.find("#dlNote"),
+          fallbackLabel: "Copy save code",
+        });
+    const copyBtn = ui.find("#copyBtn");
+    if (copyBtn)
+      copyBtn.onclick = () =>
+        copyText({
+          data: JSON.stringify(ui.state),
+          noteEl: ui.find("#dlNote"),
+          label: "Save code",
+          textarea: ui.find("#loadTxt"),
+        });
+    const debugOpenBtn = ui.find("#dbgOpen");
+    if (debugOpenBtn) debugOpenBtn.onclick = () => ui.openModal("debug");
     wireDebug(el);
-    U.wireLoad(el);
+    ui.wireLoad(el);
     el.querySelectorAll("[data-set]").forEach(
-      (i) =>
-        (i.onchange = () =>
-          U.act(
+      (input) =>
+        (input.onchange = () =>
+          ui.act(
             () => {
-              const k = i.dataset.set;
-              U.state.settings[k] = i.checked;
+              const key = input.dataset.set;
+              ui.state.settings[key] = input.checked;
               if (
-                k === "wome" ||
-                (k === "cards" &&
-                  i.checked &&
-                  !U.state.cards.decks.C.length &&
-                  !U.state.cards.hand.length)
+                key === "wome" ||
+                (key === "cards" &&
+                  input.checked &&
+                  !ui.state.cards.decks.C.length &&
+                  !ui.state.cards.hand.length)
               ) {
-                Q.buildDecks(U.state);
-                Q.log(U.state, "Decks rebuilt.");
+                engine.buildDecks(ui.state);
+                engine.log(ui.state, "Decks rebuilt.");
               }
-              if (k === "wome" && !i.checked) {
-                U.state.dice.factionDie = false;
+              if (key === "wome" && !input.checked) {
+                ui.state.dice.factionDie = false;
               }
-              U.renderModal();
+              ui.renderModal();
             },
-            { a: "setting", key: i.dataset.set, value: i.checked },
+            { a: "setting", key: input.dataset.set, value: input.checked },
           )),
     );
     el.querySelectorAll("[data-ask]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          const a = m.arg;
-          const inp = $("#askInput");
-          const val = inp ? inp.value : undefined;
-          DBG.action(
-            { a: "ask", title: a.title, pick: b.dataset.ask, input: val },
-            U.state,
+      (button) =>
+        (button.onclick = () => {
+          const spec = modal.arg;
+          const input = ui.find("#askInput");
+          const inputValue = input ? input.value : undefined;
+          debug.action(
+            {
+              a: "ask",
+              title: spec.title,
+              pick: button.dataset.ask,
+              input: inputValue,
+            },
+            ui.state,
           );
-          U.closeModal();
-          if (a.onPick) a.onPick(b.dataset.ask, val);
+          ui.closeModal();
+          if (spec.onPick) spec.onPick(button.dataset.ask, inputValue);
         }),
     );
 
-    const jg = $("#jumpGo");
-    if (jg)
-      jg.onclick = () => {
-        const [pk, id] = $("#jumpSel").value.split("|");
-        const die = $("#jumpDie").value || null;
-        U.act(
+    const jumpGoBtn = ui.find("#jumpGo");
+    if (jumpGoBtn)
+      jumpGoBtn.onclick = () => {
+        const [pageKey, id] = ui.find("#jumpSel").value.split("|");
+        const die = ui.find("#jumpDie").value || null;
+        ui.act(
           () => {
-            U.state.walk = null;
-            Q.startWalk(U.state, pk, F[pk].nodes[id][5], { die });
-            U.closeModal();
+            ui.state.walk = null;
+            engine.startWalk(ui.state, pageKey, FLOW[pageKey].nodes[id][5], {
+              die,
+            });
+            ui.closeModal();
           },
-          { a: "jump", page: pk, start: id, die },
+          { a: "jump", page: pageKey, start: id, die },
         );
       };
   }
   window.QBUI.svgPage = svgPage;
-  document.addEventListener("DOMContentLoaded", U.boot);
+  document.addEventListener("DOMContentLoaded", ui.boot);
 })();
