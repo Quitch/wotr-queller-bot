@@ -16,19 +16,21 @@ function defaultAnswer(p) {
     return false;
   return p.type === "battleForm" ? { nazLead: 0, figures: {} } : "done";
 }
+// The scenario's answer to a prompt: the first rule whose pattern matches the prompt's text, type or card (a value, or a function of the prompt).
+function ruleAnswer(p, rules) {
+  for (const [re, v] of rules) {
+    if (re.test((p.text || "") + " " + p.type + " " + (p.card || "")))
+      return typeof v === "function" ? v(p) : v;
+  }
+  return undefined;
+}
 function drive(S, rules, max) {
   let g = 0;
   const seen = [];
   while (S.walk && !S.walk.done && g++ < (max || 80)) {
     const p = S.walk.prompt;
     seen.push(p);
-    let a;
-    for (const [re, v] of rules) {
-      if (re.test((p.text || "") + " " + p.type + " " + (p.card || ""))) {
-        a = typeof v === "function" ? v(p) : v;
-        break;
-      }
-    }
+    let a = ruleAnswer(p, rules);
     if (a === undefined) a = defaultAnswer(p);
     Q.answer(S, a);
   }

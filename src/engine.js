@@ -149,17 +149,19 @@
       });
     return out;
   }
+  // Older saves kept the Shadow nations as booleans (true = at war); now they are steps above At War.
+  function migrateNations(n) {
+    for (const k of ["sauron", "isengard", "se"]) {
+      if (typeof n[k] === "boolean") n[k] = n[k] ? 0 : SN_START[k];
+      else if (typeof n[k] !== "number") n[k] = SN_START[k];
+    }
+  }
   function migrate(o) {
     if (o.settings && o.settings.tracker === undefined) {
       o.settings.tracker = o.settings.walk !== false;
       delete o.settings.walk;
     }
-    const n = o.board?.nations;
-    if (n)
-      for (const k of ["sauron", "isengard", "se"]) {
-        if (typeof n[k] === "boolean") n[k] = n[k] ? 0 : SN_START[k];
-        else if (typeof n[k] !== "number") n[k] = SN_START[k];
-      }
+    if (o.board?.nations) migrateNations(o.board.nations);
     if (o.board && o.board.rings === undefined) o.board.rings = 0;
     delete o.shownCard;
     delete o.lastAction;
@@ -324,25 +326,25 @@
     buildDecks(S);
     return S;
   }
+  // Whether a card goes into this game's decks: Call to Battle cards never do, WoME cards only with the expansion, and the two cards
+  // that have a base-game and a WoME version (sa028/sa038 and their b2 twins) contribute whichever version applies.
+  function inDecks(c, wome) {
+    if (c.deck === "B") return false;
+    if (c.set === "WoME" && !wome) return false;
+    if (c.id === "sa028b2" || c.id === "sa038b2") return !wome;
+    if (c.id === "sa028" || c.id === "sa038") return wome;
+    return true;
+  }
   function buildDecks(S) {
     const w = S.settings.wome;
-    const C = [],
-      Sd = [],
-      Fd = [];
-    for (const c of CARDS) {
-      if (c.deck === "B") continue;
-      if (c.set === "WoME" && !w) continue;
-      if (c.id === "sa028b2" || c.id === "sa038b2") {
-        if (w) continue;
-      }
-      if (c.id === "sa028" || c.id === "sa038") {
-        if (!w) continue;
-      }
-      if (c.deck === "C") C.push(c.id);
-      else if (c.deck === "S") Sd.push(c.id);
-      else if (c.deck === "F") Fd.push(c.id);
-    }
-    S.cards.decks = { C: shuffle(C), S: shuffle(Sd), F: shuffle(Fd) };
+    const decks = { C: [], S: [], F: [] };
+    for (const c of CARDS)
+      if (inDecks(c, w) && decks[c.deck]) decks[c.deck].push(c.id);
+    S.cards.decks = {
+      C: shuffle(decks.C),
+      S: shuffle(decks.S),
+      F: shuffle(decks.F),
+    };
   }
 
   // ---------- dice ----------
@@ -807,6 +809,20 @@
     return asks;
   }
   // priority-list filtering (rules 30, 31)
+  // The cards a criterion keeps: those its predicate accepts, or for a rank spec the best-ranked of the cards `only` selects
+  // (the cards it does not select are kept alongside the best).
+  function narrow(opts, test) {
+    if (!test.rank) return opts.filter((id) => test(byId[id]));
+    const ranked = opts.filter((id) => !test.only || test.only(byId[id]));
+    let best = null;
+    for (const id of ranked) {
+      const v = test.rank(byId[id]);
+      if (best === null || (test.max ? v > best : v < best)) best = v;
+    }
+    return opts.filter(
+      (id) => !ranked.includes(id) || test.rank(byId[id]) === best,
+    );
+  }
   function applyPriority(S, ids, criteria, ctx) {
     let opts = ids.slice();
     const steps = [];
@@ -819,19 +835,7 @@
         steps.push(crit + " → not a card criterion, skipped");
         continue;
       }
-      let kept;
-      if (test.rank) {
-        // rank only the cards `only` selects; the others are kept alongside the best
-        const ranked = opts.filter((id) => !test.only || test.only(byId[id]));
-        let best = null;
-        for (const id of ranked) {
-          const v = test.rank(byId[id]);
-          if (best === null || (test.max ? v > best : v < best)) best = v;
-        }
-        kept = opts.filter(
-          (id) => !ranked.includes(id) || test.rank(byId[id]) === best,
-        );
-      } else kept = opts.filter((id) => test(byId[id]));
+      const kept = narrow(opts, test);
       if (kept.length > 0 && kept.length < opts.length) {
         steps.push(crit + " → " + kept.length + " left");
         opts = kept;
@@ -847,51 +851,77 @@
     return { chosen, steps };
   }
   const notCtB = (c) => c.deck !== "B"; // rule 19: Call to Battle cards ignore initiative
-  function critFn(crit, S, ctx, H) {
-    const fl = (c) => cardFlags(c, S);
-    const t = crit.replaceAll("*", "").toLowerCase();
-    if (t.startsWith("doesn't use the term")) return (c) => !fl(c).revealed;
-    if (t.startsWith("doesn't place a tile or add corruption"))
-      return (c) => !fl(c).tile && !fl(c).corruption;
-    if (t.startsWith("doesn't place a tile")) return (c) => !fl(c).tile;
-    if (t === "strategy card") return (c) => c.deck === "S";
-    if (t === "character card") return (c) => c.deck === "C";
-    if (t.startsWith("descending order"))
-      return { rank: (c) => fl(c).init, max: true, only: notCtB };
-    if (t.startsWith("ascending order of initiative on character"))
-      return {
+  // The card criteria of the priority lists, matched in order (a longer phrase before the prefix it shares). Each entry builds a predicate
+  // on a card, or a rank spec {rank, max, only} that applyPriority resolves; fl(c) is the card's flags for this game, H the hand-limit facts.
+  const eq = (s) => (t) => t === s,
+    prefix = (s) => (t) => t.startsWith(s);
+  const fullHand = (c, H) => (c.deck === "F" ? H.fullFac : H.fullEvent);
+  const CRITERIA = [
+    [prefix("doesn't use the term"), (fl) => (c) => !fl(c).revealed],
+    [
+      prefix("doesn't place a tile or add corruption"),
+      (fl) => (c) => !fl(c).tile && !fl(c).corruption,
+    ],
+    [prefix("doesn't place a tile"), (fl) => (c) => !fl(c).tile],
+    [eq("strategy card"), () => (c) => c.deck === "S"],
+    [eq("character card"), () => (c) => c.deck === "C"],
+    [
+      prefix("descending order"),
+      (fl) => ({ rank: (c) => fl(c).init, max: true, only: notCtB }),
+    ],
+    [
+      prefix("ascending order of initiative on character"),
+      (fl) => ({
         rank: (c) => fl(c).init,
         max: false,
         only: (c) => c.deck === "C",
-      };
-    if (t.startsWith("ascending order"))
-      return { rank: (c) => fl(c).init, max: false, only: notCtB };
-    if (t === "no faction picture") return (c) => !c.faction;
-    if (t === "faction not in play")
-      return (c) => !!c.faction && !fl(c).factionInPlay;
-    if (t === "faction in play") return (c) => fl(c).factionInPlay;
-    if (t === "not preferred card") return (c) => !fl(c).preferred;
-    if (t === "preferred card") return (c) => fl(c).preferred;
-    if (t === "preferred event card")
-      return (c) => fl(c).preferred && c.deck !== "F";
-    if (t === "preferred faction event card")
-      return (c) => fl(c).preferred && c.deck === "F";
-    if (t === "full hand with preferred card")
-      return (c) =>
-        fl(c).preferred && (c.deck === "F" ? H.fullFac : H.fullEvent);
-    if (t === "full hand")
-      return (c) => (c.deck === "F" ? H.fullFac : H.fullEvent);
-    if (t === "event card") return (c) => c.deck === "C" || c.deck === "S";
-    if (t === "faction event card") return (c) => c.deck === "F";
-    if (t.startsWith("strategy card which cancels"))
-      return (c) => c.deck === "S" && c.ct === "Swarm of Bats";
-    if (t === "durin's bane") return (c) => c.ct === "Durin's Bane";
-    if (t === "call to battle card") return (c) => c.deck === "B";
-    if (t === "mobile army attacks target")
-      return (c) => FACTION_CAT[c.id] === "attack";
-    if (t === "moves mobile army") return (c) => FACTION_CAT[c.id] === "move";
-    if (t === "muster") return (c) => FACTION_CAT[c.id] === "muster";
-    return null;
+      }),
+    ],
+    [
+      prefix("ascending order"),
+      (fl) => ({ rank: (c) => fl(c).init, max: false, only: notCtB }),
+    ],
+    [eq("no faction picture"), () => (c) => !c.faction],
+    [
+      eq("faction not in play"),
+      (fl) => (c) => !!c.faction && !fl(c).factionInPlay,
+    ],
+    [eq("faction in play"), (fl) => (c) => fl(c).factionInPlay],
+    [eq("not preferred card"), (fl) => (c) => !fl(c).preferred],
+    [eq("preferred card"), (fl) => (c) => fl(c).preferred],
+    [
+      eq("preferred event card"),
+      (fl) => (c) => fl(c).preferred && c.deck !== "F",
+    ],
+    [
+      eq("preferred faction event card"),
+      (fl) => (c) => fl(c).preferred && c.deck === "F",
+    ],
+    [
+      eq("full hand with preferred card"),
+      (fl, H) => (c) => fl(c).preferred && fullHand(c, H),
+    ],
+    [eq("full hand"), (fl, H) => (c) => fullHand(c, H)],
+    [eq("event card"), () => (c) => c.deck === "C" || c.deck === "S"],
+    [eq("faction event card"), () => (c) => c.deck === "F"],
+    [
+      prefix("strategy card which cancels"),
+      () => (c) => c.deck === "S" && c.ct === "Swarm of Bats",
+    ],
+    [eq("durin's bane"), () => (c) => c.ct === "Durin's Bane"],
+    [eq("call to battle card"), () => (c) => c.deck === "B"],
+    [
+      eq("mobile army attacks target"),
+      () => (c) => FACTION_CAT[c.id] === "attack",
+    ],
+    [eq("moves mobile army"), () => (c) => FACTION_CAT[c.id] === "move"],
+    [eq("muster"), () => (c) => FACTION_CAT[c.id] === "muster"],
+  ];
+  function critFn(crit, S, ctx, H) {
+    const fl = (c) => cardFlags(c, S);
+    const t = crit.replaceAll("*", "").toLowerCase();
+    const hit = CRITERIA.find(([match]) => match(t));
+    return hit ? hit[1](fl, H) : null;
   }
   function autoDiscard(S, criteria, deck) {
     // discard down to the limit using a priority list (discard = the card that best fits)

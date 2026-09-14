@@ -214,6 +214,24 @@
 
   // --- main loop ---
   const RUN_GUARD = 300;
+  // A start box: the walk's own start point is passed through; any other start point reached is where the walk ends (the next phase).
+  function atStart(S, w, n) {
+    const first = w.trail[0];
+    if (first.page === w.page && first.node === w.node) follow(S, null);
+    else
+      endWalk(S, "phase:" + norm(text(n)), "Reached “" + norm(text(n)) + "”.");
+  }
+  // The handler for each box kind (see flow.js); notes are passed through.
+  const STEP = {
+    S: atStart,
+    N: (S) => follow(S, null),
+    D: (S, w, n) => handleDecision(S, n),
+    d: (S, w, n) => handleDecision(S, n),
+    J: (S, w, n) => handleJump(S, n),
+    A: (S, w, n) => handleAction(S, n),
+    T: (S, w, n) => handleStep(S, n),
+    P: (S, w, n) => handlePriority(S, n),
+  };
   function run(S) {
     let guard = 0;
     while (S.walk && !S.walk.done && !S.walk.prompt) {
@@ -230,45 +248,11 @@
       const w = S.walk,
         n = cur(S),
         k = kind(n);
-      if (k === "S") {
-        const first = w.trail[0];
-        if (!(first.page === w.page && first.node === w.node)) {
-          endWalk(
-            S,
-            "phase:" + norm(text(n)),
-            "Reached “" + norm(text(n)) + "”.",
-          );
-          break;
-        }
-        follow(S, null);
-        continue;
+      if (!STEP[k]) {
+        endWalk(S, "noaction", "Unknown box kind “" + k + "”.");
+        break;
       }
-      if (k === "N") {
-        follow(S, null);
-        continue;
-      }
-      if (k === "D" || k === "d") {
-        handleDecision(S, n);
-        continue;
-      }
-      if (k === "J") {
-        handleJump(S, n);
-        continue;
-      }
-      if (k === "A") {
-        handleAction(S, n);
-        continue;
-      }
-      if (k === "T") {
-        handleStep(S, n);
-        continue;
-      }
-      if (k === "P") {
-        handlePriority(S, n);
-        continue;
-      }
-      endWalk(S, "noaction", "Unknown box kind “" + k + "”.");
-      break;
+      STEP[k](S, w, n);
     }
   }
   // Board consequences of a decision the player answered (the tracker keeps up with what the flowchart just established).
@@ -797,87 +781,90 @@
       exitJump(S);
       return;
     }
-    if (spec.kind === "return") {
+    const handler = JUMP_KIND[spec.kind];
+    if (handler) handler(S, w, spec, label);
+    else jumpWithDie(S, spec, label);
+  }
+  // "Switch to military/Corruption": change strategy and either end the walk or restart it on the other strategy's page (rule 40).
+  function switchStrategy(S, w, spec, label) {
+    S.strategy = spec.strategy;
+    Q.log(S, "Strategy changed to " + spec.strategy + " (rule 40).");
+    trail(S, { kind: "jump", text: label });
+    if (spec.endWalk) {
+      endWalk(S, "phase:" + spec.endWalk, spec.text);
+      return;
+    }
+    goto(S, spec.page, findStart(spec.page, spec.start));
+    w.trail[0] = {
+      kind: "start",
+      text: spec.start,
+      page: spec.page,
+      node: w.node,
+    };
+    follow(S, null);
+  }
+  // "Save muster die for minion": set the die aside and return to the calling page.
+  function reserveDie(S, w, spec, label) {
+    // A die already set aside and brought back by "Use Muster die set aside for minion" must be used now (Rulings), not set aside again.
+    if (w.fromReserve) {
+      trail(S, {
+        kind: "skip",
+        text: label,
+        why: "this die was already set aside — it must be used now",
+      });
+      exitJump(S);
+      return;
+    }
+    S.minionReserved = true;
+    if (w.dieObj != null && S.settings.dice) {
+      S.dice.pool[w.dieObj].st = Q.DIE_STATE.RESERVED;
+    }
+    delete w.dieAns.Muster;
+    delete w.dieAns.CharOrMuster; // the die the player said Queller had is no longer available
+    Q.log(S, "Muster die set aside for a minion (Rulings).");
+    trail(S, { kind: "note", text: "Muster die set aside for a minion" });
+    w.dieObj = null;
+    w.die = null;
+    doReturn(S);
+  }
+  // "Phase 5 (use a ring)": restart the walk looking for a ring use (rule 37) when a ring and a die to change are available.
+  function ringAnyJump(S, w, spec, label) {
+    const can =
+      w.mode !== "ringAny" &&
+      Q.ringAvailable(S) &&
+      (!S.settings.dice || Q.availDice(S).some((d) => d.k === "A"));
+    if (can) {
+      trail(S, { kind: "jump", text: label });
+      const entry = w.entry;
+      w.done = true;
+      S.walk = null;
+      startWalk(S, entry.page, entry.start, { mode: "ringAny" });
+      return;
+    }
+    let why = "no die to change";
+    if (S.ringUsedThisTurn) why = "a ring was already used this turn";
+    else if (Q.ringsKnown(S) && !S.board.rings) why = "no Elven Ring";
+    trail(S, { kind: "skip", text: label, why });
+    exitJump(S);
+  }
+  // Grey boxes that do not name a page, by the `kind` of their JUMPS entry; a page name goes through jumpWithDie instead.
+  const JUMP_KIND = {
+    return: (S, w, spec, label) => {
       trail(S, { kind: "ret", text: label });
       doReturn(S);
-      return;
-    }
-    if (spec.kind === "endPhase4") {
-      endWalk(S, "phase:Phase 5", "Phase 5 begins — you act first.");
-      return;
-    }
-    if (spec.kind === "battleNext") {
+    },
+    endPhase4: (S) =>
+      endWalk(S, "phase:Phase 5", "Phase 5 begins — you act first."),
+    battleNext: (S) =>
       endWalk(
         S,
         "battleNext",
         "Another combat round: walk again from “Battle (next round)”.",
-      );
-      return;
-    }
-    if (spec.kind === "switch") {
-      S.strategy = spec.strategy;
-      Q.log(S, "Strategy changed to " + spec.strategy + " (rule 40).");
-      trail(S, { kind: "jump", text: label });
-      if (spec.endWalk) {
-        endWalk(S, "phase:" + spec.endWalk, spec.text);
-        return;
-      }
-      goto(S, spec.page, findStart(spec.page, spec.start));
-      w.trail[0] = {
-        kind: "start",
-        text: spec.start,
-        page: spec.page,
-        node: w.node,
-      };
-      follow(S, null);
-      return;
-    }
-    if (spec.kind === "reserve") {
-      // A die already set aside and brought back by "Use Muster die set aside for minion" must be used now (Rulings), not set aside again.
-      if (w.fromReserve) {
-        trail(S, {
-          kind: "skip",
-          text: label,
-          why: "this die was already set aside — it must be used now",
-        });
-        exitJump(S);
-        return;
-      }
-      S.minionReserved = true;
-      if (w.dieObj != null && S.settings.dice) {
-        S.dice.pool[w.dieObj].st = Q.DIE_STATE.RESERVED;
-      }
-      delete w.dieAns.Muster;
-      delete w.dieAns.CharOrMuster; // the die the player said Queller had is no longer available
-      Q.log(S, "Muster die set aside for a minion (Rulings).");
-      trail(S, { kind: "note", text: "Muster die set aside for a minion" });
-      w.dieObj = null;
-      w.die = null;
-      doReturn(S);
-      return;
-    }
-    if (spec.kind === "ringAny") {
-      const can =
-        w.mode !== "ringAny" &&
-        Q.ringAvailable(S) &&
-        (!S.settings.dice || Q.availDice(S).some((d) => d.k === "A"));
-      if (can) {
-        trail(S, { kind: "jump", text: label });
-        const entry = w.entry;
-        w.done = true;
-        S.walk = null;
-        startWalk(S, entry.page, entry.start, { mode: "ringAny" });
-        return;
-      }
-      let why = "no die to change";
-      if (S.ringUsedThisTurn) why = "a ring was already used this turn";
-      else if (Q.ringsKnown(S) && !S.board.rings) why = "no Elven Ring";
-      trail(S, { kind: "skip", text: label, why });
-      exitJump(S);
-      return;
-    }
-    jumpWithDie(S, spec, label);
-  }
+      ),
+    switch: switchStrategy,
+    reserve: reserveDie,
+    ringAny: ringAnyJump,
+  };
   // Grey box naming a page: enter it with the die it needs (or the die already held), or skip it.
   function jumpWithDie(S, spec, label) {
     const w = S.walk;
@@ -905,28 +892,34 @@
         });
       return !!ok;
     }
-    if (S.settings.dice) {
-      let d = Q.findDie(S, req);
-      if (!d && ringPossible(S)) {
-        d = Q.ringChange(S, req);
-        if (d)
-          trail(S, {
-            kind: "ring",
-            text: "Elven Ring: die changed to " + d.face,
-          });
-      }
-      w.ringArmed = false;
-      if (!d) {
+    if (S.settings.dice) return ensureDieFromPool(S, w, req, label);
+    return askForDie(S, w, req, label);
+  }
+  // With dice rolled by the app: take a matching die from the pool, changing one with an Elven Ring when that is armed.
+  function ensureDieFromPool(S, w, req, label) {
+    let d = Q.findDie(S, req);
+    if (!d && ringPossible(S)) {
+      d = Q.ringChange(S, req);
+      if (d)
         trail(S, {
-          kind: "skip",
-          text: label,
-          why: "no " + DIE_NAME[req] + " die available",
+          kind: "ring",
+          text: "Elven Ring: die changed to " + d.face,
         });
-        return false;
-      }
-      w.dieObj = S.dice.pool.indexOf(d);
-      return true;
     }
+    w.ringArmed = false;
+    if (!d) {
+      trail(S, {
+        kind: "skip",
+        text: label,
+        why: "no " + DIE_NAME[req] + " die available",
+      });
+      return false;
+    }
+    w.dieObj = S.dice.pool.indexOf(d);
+    return true;
+  }
+  // Without dice: ask the player whether Queller has the die (once per type per walk), then offer an Elven Ring before giving up.
+  function askForDie(S, w, req, label) {
     if (w.dieAns[req] === undefined) {
       setPrompt(S, {
         type: "diecheck",
