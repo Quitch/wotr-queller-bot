@@ -36,10 +36,10 @@
               "</button>"
           : "<i>" + w + "</i>";
       })
-      .replace(/\n/g, "<br>");
+      .replaceAll("\n", "<br>");
   }
   function plain(t) {
-    return String(t || "").replace(/\*/g, "");
+    return String(t || "").replaceAll("*", "");
   }
 
   // ---------- persistence ----------
@@ -1339,7 +1339,7 @@
   }
   // ---------- tracker ----------
   function trackerHTML() {
-    const idOf = (k) => "t-" + k.replace(/\./g, "-");
+    const idOf = (k) => "t-" + k.replaceAll(".", "-");
     const chk = (k, l) => rowChk(idOf(k), l, getT(k), 'data-t="' + k + '"');
     const num = (k, l) => rowNum(idOf(k), l, getT(k), 'data-step="' + k + '"');
     const sel = (k, l) =>

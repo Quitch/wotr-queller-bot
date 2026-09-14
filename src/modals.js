@@ -549,7 +549,7 @@
     };
     const name = (id) => {
       const n = P.nodes[id];
-      return n ? Q.norm(n[5]).replace(/\*/g, "") : id;
+      return n ? Q.norm(n[5]).replaceAll("*", "") : id;
     };
     let h =
       '<div class="flowtext"><p class="notice">Text version of ' +
@@ -604,7 +604,7 @@
     const [, , , , , t, ex] = n;
     let s = esc(t)
       .replace(/\*([^*]+)\*/g, "<i>$1</i>")
-      .replace(/\n/g, "<br>");
+      .replaceAll("\n", "<br>");
     if (ex && ex.t2)
       s =
         "<b>" +

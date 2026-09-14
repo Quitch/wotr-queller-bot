@@ -845,7 +845,7 @@
   const notCtB = (c) => c.deck !== "B"; // rule 19: Call to Battle cards ignore initiative
   function critFn(crit, S, ctx, H) {
     const fl = (c) => cardFlags(c, S);
-    const t = crit.replace(/\*/g, "").toLowerCase();
+    const t = crit.replaceAll("*", "").toLowerCase();
     if (t.startsWith("doesn't use the term")) return (c) => !fl(c).revealed;
     if (t.startsWith("doesn't place a tile or add corruption"))
       return (c) => !fl(c).tile && !fl(c).corruption;

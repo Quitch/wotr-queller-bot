@@ -106,7 +106,7 @@
     return (/^[AEIOU]/.test(n) ? "an " : "a ") + n;
   }
   function norm(t) {
-    return t.replace(/\n/g, " ").replace(/\s+/g, " ").trim();
+    return t.replaceAll("\n", " ").replaceAll(/\s+/g, " ").trim();
   }
   function jumpSpec(t) {
     t = norm(t);
