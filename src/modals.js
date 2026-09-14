@@ -683,7 +683,7 @@
     const [, x, y, w, h] = n;
     const outX = px < x || px > x + w,
       outY = py < y || py > y + h;
-    if (outX && (!outY || Math.abs(px - (px < x ? x : x + w)) >= 0))
+    if (outX)
       return [
         px < x ? x : x + w,
         py >= y + 6 && py <= y + h - 6 ? py : y + h / 2,

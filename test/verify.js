@@ -383,9 +383,10 @@ function base(st, strategy) {
     ["Ascending order of initiative on Character cards"],
   );
   ok(
-    (r.chosen && r.steps.some((s) => /random/.test(s)) === false) || true,
-    '6.7 "on Character cards" ranks Character cards only (Strategy card kept alongside): ' +
-      r.steps.join("; "),
+    ["sa017", "sa002"].includes(r.chosen) &&
+      r.steps.length === 1 &&
+      /Tie between 2 cards/.test(r.steps[0]),
+    '6.7 "on Character cards" ranks Character cards only; the Strategy card is kept alongside so the pick is a rule-3 tie',
   );
 }
 // 7.4 battleOpen reset each turn; 7.3 guard ends the walk

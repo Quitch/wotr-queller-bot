@@ -204,3 +204,4 @@ for (let i = 0; i < 16; i++) {
 console.log("games:", g);
 for (const k in problems)
   console.log(problems[k].n + "x", k, "\n   e.g.", problems[k].ex);
+process.exit(Object.keys(problems).length ? 1 : 0);

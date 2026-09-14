@@ -490,7 +490,7 @@
   function walkHTML(extra) {
     let h =
       '<section class="panel" aria-labelledby="h-walk"><h2 class="ph" id="h-walk">Walkthrough</h2>';
-    h += phaseButtonsHTML(false);
+    h += phaseButtonsHTML();
     const w = S.walk;
     if (w && !w.done) {
       h += promptHTML(w);
@@ -567,7 +567,7 @@
     },
     p6: () => [phaseBtn("next", "Phase 1 (turn " + (S.turn + 1) + ")", true)],
   };
-  function phaseButtonsHTML(minimal) {
+  function phaseButtonsHTML() {
     const b = [];
     const P = S.phase;
     const busy = S.walk && !S.walk.done;

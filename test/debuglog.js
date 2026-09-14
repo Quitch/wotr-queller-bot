@@ -35,17 +35,18 @@ function drive(S) {
   let g = 0;
   while (S.walk && !S.walk.done && g++ < 80) {
     const p = S.walk.prompt;
+    const value = defaultAnswer(p);
     DBG.begin(
       {
         a: "answer",
         prompt: p.type,
         page: S.walk.page,
         node: S.walk.node,
-        value: false,
+        value,
       },
       S,
     );
-    Q.answer(S, defaultAnswer(p));
+    Q.answer(S, value);
     DBG.end(S);
   }
 }
