@@ -145,7 +145,7 @@
     D.inflight = null;
     if (S) {
       e.after = safeDigest(S);
-      const w = S && S.walk;
+      const w = S.walk;
       if (
         D.preWalk &&
         D.preWalk !== w &&
