@@ -279,7 +279,10 @@ for (let t = 0; t < 8; t++) {
   }
   Q.nextTurn(S3);
 }
-const big = DBG.text({ S: S3, history: Array(60).fill(JSON.stringify(S3)) });
+const big = DBG.text({
+  S: S3,
+  history: new Array(60).fill(JSON.stringify(S3)),
+});
 ok(
   big.length < 600000,
   "an 8-turn game with a full undo history exports under 600 KB (" +
