@@ -139,10 +139,10 @@ function randomBoard(state) {
   board.fs.atStart = rnd() < 0.2;
   board.fs.companions = Math.floor(rnd() * 8);
   for (const key in board.chars) board.chars[key] = rnd() < 0.4;
-  for (const key of ["sauron", "isengard", "se"])
+  for (const key of engine.SHADOW_NATIONS)
     board.nations[key] = Math.floor(rnd() * 4);
-  for (const key of ["gondor", "rohan", "north", "dwarves", "elves"])
-    board.nations[key] = ["passive", "active", "war"][Math.floor(rnd() * 3)];
+  for (const key of engine.FP_NATIONS)
+    board.nations[key] = Object.values(engine.FP_STANCE)[Math.floor(rnd() * 3)];
   for (const key in board.factions) board.factions[key] = rnd() < 0.4;
   board.nazgul = Math.floor(rnd() * 9);
   board.shadowVP = Math.floor(rnd() * 10);
@@ -152,12 +152,17 @@ function randomBoard(state) {
 function game(settings, gameNumber) {
   const state = engine.newState(settings);
   const gameTag = JSON.stringify(settings) + " g" + gameNumber;
-  engine.startPhase(state, "setup");
+  engine.startPhase(state, engine.PHASE.SETUP);
   if (!finish(state, gameTag + " setup")) return state;
   for (let turn = 0; turn < 4; turn++) {
     const tag = gameTag + " T" + state.turn;
     if (rnd() < 0.7) randomBoard(state);
-    for (const phase of ["p1", "p2", "p3", "p4"]) {
+    for (const phase of [
+      engine.PHASE.P1,
+      engine.PHASE.P2,
+      engine.PHASE.P3,
+      engine.PHASE.P4,
+    ]) {
       engine.startPhase(state, phase);
       if (state.walk && !finish(state, tag + " " + phase)) return state;
     }
@@ -187,7 +192,7 @@ function game(settings, gameNumber) {
         );
         break;
       }
-      engine.startPhase(state, "p5");
+      engine.startPhase(state, engine.PHASE.P5);
       if (!finish(state, tag + " p5#" + walks)) return state;
       walks++;
       if (rnd() < 0.25) {

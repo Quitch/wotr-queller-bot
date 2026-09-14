@@ -108,12 +108,7 @@ for (const card of fakeWindow.QB_CARDS) {
   }
   if (card.deck === "B" && !card.faction)
     fail(card.id + " Call to Battle card without a faction");
-  if (
-    card.effect &&
-    !["servants", "hisWill", "lidlessEye", "recruitFaction"].includes(
-      card.effect,
-    )
-  )
+  if (card.effect && !Object.values(engine.CARD_EFFECT).includes(card.effect))
     fail(card.id + " unknown effect " + card.effect);
   if (card.effect === "recruitFaction" && !card.faction)
     fail(card.id + " recruitFaction without a faction");

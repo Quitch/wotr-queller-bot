@@ -68,7 +68,7 @@
         ? pool
             .map(
               (die) =>
-                (die.k === "F" ? "F:" : "") +
+                (die.k === engine.DIE_KIND.FACTION ? "F:" : "") +
                 (die.face || "-").replace("/", "+") +
                 "/" +
                 die.st[0],

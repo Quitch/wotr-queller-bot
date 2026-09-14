@@ -4,6 +4,7 @@
     FLOW = window.QB_FLOW,
     NODE = window.QB_NODE,
     NODE_KIND = window.QB_NODE_KIND,
+    { DECK, DIE_KIND, STRATEGY, PHASE, CARD, FP_STANCE } = window.QB,
     cardById = engine.cardById,
     GLOSSARY = window.QB_GLOSSARY,
     debug = window.QB_DEBUG;
@@ -545,23 +546,31 @@
     html += "</section>" + (extra || "") + logHTML();
     return html;
   }
+  // The data-phase values of the walkthrough's buttons: a phase to start, or one of these.
+  const PHASE_ACTION = {
+    ABANDON: "abandon",
+    NEXT_TURN: "next",
+    JUMP_TO: "jumpto",
+    BATTLE_1: "battle1",
+    BATTLE_2: "battle2",
+  };
   function idleText() {
     switch (state.phase) {
-      case "setup":
+      case PHASE.SETUP:
         return "Roll a die to choose Queller’s starting strategy (Start of game box).";
-      case "p1":
+      case PHASE.P1:
         return "Phase 1: recover Queller’s dice, draw cards and check the hand limit.";
-      case "p2":
-        return state.strategy === "corruption"
+      case PHASE.P2:
+        return state.strategy === STRATEGY.CORRUPTION
           ? "Phase 2: declare or hide your Fellowship, then check whether Queller changes strategy."
           : "Phase 2: declare or hide your Fellowship. The military strategy has nothing to do here.";
-      case "p3":
+      case PHASE.P3:
         return "Phase 3: Queller allocates dice to the Hunt box.";
-      case "p4":
+      case PHASE.P4:
         return "Phase 4: roll Queller’s remaining dice (Eyes go to the Hunt box). Roll your own dice too.";
-      case "p5":
+      case PHASE.P5:
         return "Phase 5: you act first. Each time Queller is eligible to act, walk from “Phase 5”. Walk the Battle page for each combat round.";
-      case "p6":
+      case PHASE.P6:
         return "Phase 6: victory check.";
     }
     return "";
@@ -576,29 +585,33 @@
     "</button>";
   // The start-point buttons offered in each phase (the military strategy has no Phase 2).
   const PHASE_BUTTONS = {
-    setup: () => [phaseBtn("setup", "Start of game", true)],
-    p1: () => [phaseBtn("p1", "Phase 1", true)],
-    p2: () => [
-      state.strategy === "corruption"
-        ? phaseBtn("p2", "Phase 2", true)
-        : phaseBtn("p3", "Phase 3", true),
+    [PHASE.SETUP]: () => [phaseBtn(PHASE.SETUP, "Start of game", true)],
+    [PHASE.P1]: () => [phaseBtn(PHASE.P1, "Phase 1", true)],
+    [PHASE.P2]: () => [
+      state.strategy === STRATEGY.CORRUPTION
+        ? phaseBtn(PHASE.P2, "Phase 2", true)
+        : phaseBtn(PHASE.P3, "Phase 3", true),
     ],
-    p3: () => [phaseBtn("p3", "Phase 3", true)],
-    p4: () => [phaseBtn("p4", "Phase 4", true)],
-    p5: () => {
+    [PHASE.P3]: () => [phaseBtn(PHASE.P3, "Phase 3", true)],
+    [PHASE.P4]: () => [phaseBtn(PHASE.P4, "Phase 4", true)],
+    [PHASE.P5]: () => {
       const buttons = [
         dicePoolSpent()
-          ? phaseBtn("p6", "Phase 6", true)
-          : phaseBtn("p5", "Phase 5", true),
+          ? phaseBtn(PHASE.P6, "Phase 6", true)
+          : phaseBtn(PHASE.P5, "Phase 5", true),
         state.battleOpen
-          ? phaseBtn("battle2", "Battle (next round)")
-          : phaseBtn("battle1", "Battle"),
+          ? phaseBtn(PHASE_ACTION.BATTLE_2, "Battle (next round)")
+          : phaseBtn(PHASE_ACTION.BATTLE_1, "Battle"),
       ];
-      if (!state.settings.dice) buttons.push(phaseBtn("p6", "Phase 6"));
+      if (!state.settings.dice) buttons.push(phaseBtn(PHASE.P6, "Phase 6"));
       return buttons;
     },
-    p6: () => [
-      phaseBtn("next", "Phase 1 (turn " + (state.turn + 1) + ")", true),
+    [PHASE.P6]: () => [
+      phaseBtn(
+        PHASE_ACTION.NEXT_TURN,
+        "Phase 1 (turn " + (state.turn + 1) + ")",
+        true,
+      ),
     ],
   };
   function phaseButtonsHTML() {
@@ -607,12 +620,16 @@
     const busy = state.walk && !state.walk.done;
     if (busy) {
       buttons.push(
-        '<button class="btn small ghost" data-phase="abandon">Abandon this walk</button>',
+        '<button class="btn small ghost" data-phase="' +
+          PHASE_ACTION.ABANDON +
+          '">Abandon this walk</button>',
       );
     } else if (PHASE_BUTTONS[phase]) buttons.push(...PHASE_BUTTONS[phase]());
-    if (!busy && phase !== "setup")
+    if (!busy && phase !== PHASE.SETUP)
       buttons.push(
-        '<button class="btn small ghost" data-phase="jumpto">Other start point…</button>',
+        '<button class="btn small ghost" data-phase="' +
+          PHASE_ACTION.JUMP_TO +
+          '">Other start point…</button>',
       );
     return (
       '<div class="phasebar"><span class="lbl">' +
@@ -1242,7 +1259,7 @@
         ? faceIcon(die.face)
         : '<span class="blank" aria-hidden="true"></span>') +
       '<span class="sr">' +
-      (die.k === "F" ? "Faction die" : "Action die") +
+      (die.k === DIE_KIND.FACTION ? "Faction die" : "Action die") +
       (die.face ? " showing " + escapeHTML(die.face) : "") +
       ", " +
       dieStatus +
@@ -1312,14 +1329,14 @@
         : "") +
       "</div>";
     const huntCards = state.cards.table.filter(
-      (id) => id === engine.BALROG || id === "sa009",
+      (id) => id === CARD.BALROG || id === CARD.FLOCKS_OF_CREBAIN,
     );
     if (huntCards.length)
       html +=
         '<div class="notice" style="margin-top:8px">At a Hunt roll: ' +
         huntCards
           .map((id) =>
-            id === "sa009"
+            id === CARD.FLOCKS_OF_CREBAIN
               ? "Flocks of Crebain on the table — discard it before the roll for +1 to every Hunt die"
               : "Balrog of Moria on the table — discard it for an extra Hunt tile when the Fellowship moves into, out of or through Moria while declared or revealed",
           )
@@ -1349,13 +1366,13 @@
         .map(
           (id) =>
             '<li class="back' +
-            (cardById[id].deck === "S" ? " s" : "") +
+            (cardById[id].deck === DECK.STRATEGY ? " s" : "") +
             '" title="' +
-            (cardById[id].deck === "C" ? "Character" : "Strategy") +
+            (cardById[id].deck === DECK.CHARACTER ? "Character" : "Strategy") +
             ' card"><span aria-hidden="true">' +
-            (cardById[id].deck === "C" ? "C" : "S") +
+            (cardById[id].deck === DECK.CHARACTER ? "C" : "S") +
             '</span><span class="sr">' +
-            (cardById[id].deck === "C" ? "Character" : "Strategy") +
+            (cardById[id].deck === DECK.CHARACTER ? "Character" : "Strategy") +
             " card</span></li>",
         )
         .join("") +
@@ -1447,13 +1464,24 @@
     trackerId(path) +
     '" data-t="' +
     path +
-    '"><option value="passive"' +
-    (boardValue(path) === "passive" ? " selected" : "") +
-    '>Passive</option><option value="active"' +
-    (boardValue(path) === "active" ? " selected" : "") +
-    '>Active</option><option value="war"' +
-    (boardValue(path) === "war" ? " selected" : "") +
-    ">At war</option></select></div>";
+    '">' +
+    [
+      [FP_STANCE.PASSIVE, "Passive"],
+      [FP_STANCE.ACTIVE, "Active"],
+      [FP_STANCE.WAR, "At war"],
+    ]
+      .map(
+        ([stance, label]) =>
+          '<option value="' +
+          stance +
+          '"' +
+          (boardValue(path) === stance ? " selected" : "") +
+          ">" +
+          label +
+          "</option>",
+      )
+      .join("") +
+    "</select></div>";
   // The situational card checks answered this turn, with a button to forget them (and the playability cache).
   function situBlockHTML() {
     const answeredKeys = Object.keys(state.situ);
@@ -1796,7 +1824,7 @@
       text:
         "The " +
         die.face +
-        (die.k === "F" ? " Faction" : "") +
+        (die.k === DIE_KIND.FACTION ? " Faction" : "") +
         " die will be marked as used for the rest of this turn. Undo reverses it.",
       buttons: [
         { v: "ok", label: "Mark as used", primary: true },
@@ -1825,14 +1853,14 @@
       state.battleOpen = false;
     }
     if (result === "strategy") {
-      state.phase = "p1";
+      state.phase = PHASE.P1;
     } else if (result.startsWith("phase:")) {
       const name = result.slice(6);
       const map = {
-        "Phase 2": "p2",
-        "Phase 3": "p3",
-        "Phase 4": "p4",
-        "Phase 5": "p5",
+        "Phase 2": PHASE.P2,
+        "Phase 3": PHASE.P3,
+        "Phase 4": PHASE.P4,
+        "Phase 5": PHASE.P5,
       };
       if (map[name]) state.phase = map[name];
     }
@@ -1840,17 +1868,17 @@
   function onPhase(id) {
     act(
       () => {
-        if (id === "abandon") {
+        if (id === PHASE_ACTION.ABANDON) {
           state.walk = null;
           engine.log(state, "Walk abandoned.");
           return;
         }
-        if (id === "next") {
+        if (id === PHASE_ACTION.NEXT_TURN) {
           engine.nextTurn(state);
           return;
         }
-        if (id === "p6") {
-          state.phase = "p6";
+        if (id === PHASE.P6) {
+          state.phase = PHASE.P6;
           state.walk = null;
           engine.log(
             state,
@@ -1858,22 +1886,22 @@
           );
           return;
         }
-        if (id === "battle1") {
+        if (id === PHASE_ACTION.BATTLE_1) {
           engine.startBattle(state, 1);
           afterWalk();
           return;
         }
-        if (id === "battle2") {
+        if (id === PHASE_ACTION.BATTLE_2) {
           engine.startBattle(state, 2);
           afterWalk();
           return;
         }
-        if (id === "jumpto") {
+        if (id === PHASE_ACTION.JUMP_TO) {
           openModal("jump");
           return;
         }
-        if (id === "setup") {
-          engine.startPhase(state, "setup");
+        if (id === PHASE.SETUP) {
+          engine.startPhase(state, PHASE.SETUP);
           afterWalk();
           return;
         }

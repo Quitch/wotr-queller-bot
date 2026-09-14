@@ -6,6 +6,8 @@
     NODE_KIND = window.QB_NODE_KIND,
     EDGE = window.QB_EDGE,
     cardById = engine.cardById;
+  const { DECK, HAND, DIE_KIND, STRATEGY, PHASE, CARD, DIE_REQUIREMENT } =
+    engine;
   const SHADOW_NATION_NAME = {
       sauron: "Sauron",
       isengard: "Isengard",
@@ -19,51 +21,79 @@
   const PENDING = null; // returned by a step that has set a prompt and is waiting for the player
 
   const JUMPS = [
-    [/^Army$/, { page: "AR", start: "Army", die: "Army" }],
-    [/^Army 2$/, { page: "AR", start: "Army 2", die: "Army" }],
-    [/^Army 3$/, { page: "AR", start: "Army 3", die: "Army" }],
-    [/^Army 4$/, { page: "AR", start: "Army 4", die: "Army" }],
+    [/^Army$/, { page: "AR", start: "Army", die: DIE_REQUIREMENT.ARMY }],
+    [/^Army 2$/, { page: "AR", start: "Army 2", die: DIE_REQUIREMENT.ARMY }],
+    [/^Army 3$/, { page: "AR", start: "Army 3", die: DIE_REQUIREMENT.ARMY }],
+    [/^Army 4$/, { page: "AR", start: "Army 4", die: DIE_REQUIREMENT.ARMY }],
     [
       /^Army 4 \((use )?character die\)$/,
-      { page: "AR", start: "Army 4", die: "Character" },
+      { page: "AR", start: "Army 4", die: DIE_REQUIREMENT.CHARACTER },
     ],
-    [/^Muster$/, { page: "MU", start: "Muster", die: "Muster" }],
-    [/^Muster 2$/, { page: "MU", start: "Muster 2", die: "Muster" }],
+    [/^Muster$/, { page: "MU", start: "Muster", die: DIE_REQUIREMENT.MUSTER }],
+    [
+      /^Muster 2$/,
+      { page: "MU", start: "Muster 2", die: DIE_REQUIREMENT.MUSTER },
+    ],
     [
       /^Muster 3 \/ Muster Event card$/,
-      { page: "MU", start: "Muster 3/Muster Event card", die: "Muster" },
+      {
+        page: "MU",
+        start: "Muster 3/Muster Event card",
+        die: DIE_REQUIREMENT.MUSTER,
+      },
     ],
-    [/^Character$/, { page: "CH", start: "Character", die: "Character" }],
-    [/^Character 2$/, { page: "CH", start: "Character 2", die: "Character" }],
+    [
+      /^Character$/,
+      { page: "CH", start: "Character", die: DIE_REQUIREMENT.CHARACTER },
+    ],
+    [
+      /^Character 2$/,
+      { page: "CH", start: "Character 2", die: DIE_REQUIREMENT.CHARACTER },
+    ],
     [
       /^Character 3 \/ Muster Witch King$/,
       {
         page: "CH",
         start: "Character 3 / Muster Witch King",
-        die: "CharOrMuster",
+        die: DIE_REQUIREMENT.CHAR_OR_MUSTER,
       },
     ],
-    [/^Event$/, { page: "EV", start: "Event", die: "Event" }],
+    [/^Event$/, { page: "EV", start: "Event", die: DIE_REQUIREMENT.EVENT }],
     [
       /^Event \(use character die\)$/,
-      { page: "EV", start: "Event", die: "Character" },
+      { page: "EV", start: "Event", die: DIE_REQUIREMENT.CHARACTER },
     ],
-    [/^Event 2$/, { page: "EV", start: "Event 2", die: "Event" }],
+    [/^Event 2$/, { page: "EV", start: "Event 2", die: DIE_REQUIREMENT.EVENT }],
     [
       /^Event 2 \(use character die\)$/,
-      { page: "EV", start: "Event 2", die: "Character" },
+      { page: "EV", start: "Event 2", die: DIE_REQUIREMENT.CHARACTER },
     ],
     [
       /^Recruit Faction$/,
-      { page: "FA", start: "Recruit Faction", die: "FRecruit", wome: true },
+      {
+        page: "FA",
+        start: "Recruit Faction",
+        die: DIE_REQUIREMENT.FACTION_RECRUIT,
+        wome: true,
+      },
     ],
     [
       /^Play Faction Event$/,
-      { page: "FA", start: "Play Faction Event", die: "FPlay", wome: true },
+      {
+        page: "FA",
+        start: "Play Faction Event",
+        die: DIE_REQUIREMENT.FACTION_PLAY,
+        wome: true,
+      },
     ],
     [
       /^Draw Faction Event$/,
-      { page: "FA", start: "Draw Faction Event", die: "FDraw", wome: true },
+      {
+        page: "FA",
+        start: "Draw Faction Event",
+        die: DIE_REQUIREMENT.FACTION_DRAW,
+        wome: true,
+      },
     ],
     [/^Phase 5 - continue/, { kind: "return" }],
     [/^Phase 5 \(use a ring/, { kind: "ringAny" }],
@@ -72,7 +102,7 @@
       /^Switch to military/,
       {
         kind: "switch",
-        strategy: "military",
+        strategy: STRATEGY.MILITARY,
         endWalk: "Phase 3",
         text: "Queller switches to the military strategy. Continue at “Phase 3” on the Military flowchart.",
       },
@@ -81,7 +111,7 @@
       /^Switch to Corruption/,
       {
         kind: "switch",
-        strategy: "corruption",
+        strategy: STRATEGY.CORRUPTION,
         page: "C14",
         start: "From Military Strategy",
       },
@@ -90,14 +120,14 @@
     [/^Battle \(next round\)$/, { kind: "battleNext" }],
   ];
   const DIE_REQUIREMENT_NAME = {
-    Army: "Army",
-    Muster: "Muster",
-    Character: "Character",
-    Event: "Event",
-    CharOrMuster: "Character or Muster",
-    FRecruit: "Faction (Recruit)",
-    FPlay: "Faction (Play)",
-    FDraw: "Faction (Draw)",
+    [DIE_REQUIREMENT.ARMY]: "Army",
+    [DIE_REQUIREMENT.MUSTER]: "Muster",
+    [DIE_REQUIREMENT.CHARACTER]: "Character",
+    [DIE_REQUIREMENT.EVENT]: "Event",
+    [DIE_REQUIREMENT.CHAR_OR_MUSTER]: "Character or Muster",
+    [DIE_REQUIREMENT.FACTION_RECRUIT]: "Faction (Recruit)",
+    [DIE_REQUIREMENT.FACTION_PLAY]: "Faction (Play)",
+    [DIE_REQUIREMENT.FACTION_DRAW]: "Faction (Draw)",
   };
   function dieWithArticle(requirement) {
     const name = DIE_REQUIREMENT_NAME[requirement] || requirement;
@@ -366,8 +396,8 @@
     const answerFromTracker = (value, why) =>
       trackerOn ? answerAuto(value, why) : ask(state, node);
     const handCount = engine.handCounts(state);
-    const characterHand = () => engine.handCardsOfDeck(state, "C"),
-      strategyHand = () => engine.handCardsOfDeck(state, "S");
+    const characterHand = () => engine.handCardsOfDeck(state, DECK.CHARACTER),
+      strategyHand = () => engine.handCardsOfDeck(state, DECK.STRATEGY);
     // Evaluate which of `ids` are playable (asking the player as needed), keep them as this walk's candidates and answer "any playable?"
     const playableCount = (ids, ctx, noun) => {
       const playable = evalPlayable(state, ids, ctx);
@@ -430,8 +460,11 @@
           "Progress " + board.fs.progress,
         );
       case "C14.winOr7":
-        if (dice && engine.diceCount(state) === 7)
-          return answerAuto(true, "Shadow has 7 dice");
+        if (dice && engine.diceCount(state) === engine.BASE_ACTION_DICE)
+          return answerAuto(
+            true,
+            "Shadow has " + engine.BASE_ACTION_DICE + " dice",
+          );
         return ask(
           state,
           node,
@@ -664,7 +697,7 @@
       case "EV.eventDie":
         if (walk.die)
           return answerAuto(
-            walk.die === "Event",
+            walk.die === DIE_REQUIREMENT.EVENT,
             "using a " + DIE_REQUIREMENT_NAME[walk.die] + " die",
           );
         return ask(state, node);
@@ -733,7 +766,7 @@
       case "FA.blackSails":
         if (cards)
           return answerAuto(
-            state.cards.factionTable.includes("sa_Faction03") &&
+            state.cards.factionTable.includes(CARD.BLACK_SAILS) &&
               board.factions.corsairs,
             "table",
           );
@@ -741,7 +774,7 @@
       case "FA.playDie":
         if (walk.die)
           return answerAuto(
-            walk.die === "FPlay",
+            walk.die === DIE_REQUIREMENT.FACTION_PLAY,
             "using " + DIE_REQUIREMENT_NAME[walk.die],
           );
         return ask(state, node);
@@ -813,7 +846,7 @@
       case "BA.round1":
         return answerAuto(walk.battleRound === 1, "round " + walk.battleRound);
       case "BA.fieldOrMil":
-        if (state.strategy === "military")
+        if (state.strategy === STRATEGY.MILITARY)
           return answerAuto(true, "military strategy");
         if (trackerOn && board.fs.mordor)
           return answerAuto(true, "Fellowship on the Mordor track");
@@ -926,8 +959,8 @@
     if (walk.dieObj != null && state.settings.dice) {
       state.dice.pool[walk.dieObj].st = engine.DIE_STATE.RESERVED;
     }
-    delete walk.dieAns.Muster;
-    delete walk.dieAns.CharOrMuster; // the die the player said Queller had is no longer available
+    delete walk.dieAns[DIE_REQUIREMENT.MUSTER];
+    delete walk.dieAns[DIE_REQUIREMENT.CHAR_OR_MUSTER]; // the die the player said Queller had is no longer available
     engine.log(state, "Muster die set aside for a minion (Rulings).");
     trail(state, { kind: "note", text: "Muster die set aside for a minion" });
     walk.dieObj = null;
@@ -940,7 +973,7 @@
       walk.mode !== "ringAny" &&
       engine.ringAvailable(state) &&
       (!state.settings.dice ||
-        engine.availableDice(state).some((die) => die.k === "A"));
+        engine.availableDice(state).some((die) => die.k === DIE_KIND.ACTION));
     if (canUseRing) {
       trail(state, { kind: "jump", text: label });
       const entry = walk.entry;
@@ -1038,7 +1071,7 @@
           "Does Queller have " +
           dieWithArticle(req) +
           " die available" +
-          (req === "Army" || req === "Muster"
+          (req === DIE_REQUIREMENT.ARMY || req === DIE_REQUIREMENT.MUSTER
             ? " (an Army/Muster die counts)"
             : "") +
           "?",
@@ -1151,9 +1184,11 @@
   // Draw steps and actions on the Event/Faction pages: the deck depends on the box; with cards off the player draws.
   // The deck a draw node draws from: Character or Faction Event where the node says so, otherwise the strategy's preferred deck.
   function drawDeck(state, key) {
-    if (key === "EV.drawChar") return "C";
-    if (key === "EV.drawFac" || key === "FA.drawT") return "F";
-    return state.strategy === "corruption" ? "C" : "S";
+    if (key === "EV.drawChar") return DECK.CHARACTER;
+    if (key === "EV.drawFac" || key === "FA.drawT") return DECK.FACTION;
+    return state.strategy === STRATEGY.CORRUPTION
+      ? DECK.CHARACTER
+      : DECK.STRATEGY;
   }
   function drawStep(state, node, key) {
     const walk = state.walk,
@@ -1214,13 +1249,13 @@
     switch (key) {
       case "C14.sogCorr":
       case "M14.sogCorr":
-        state.strategy = "corruption";
+        state.strategy = STRATEGY.CORRUPTION;
         engine.log(state, "Queller uses the corruption strategy.");
         endWalk(state, "strategy", "Queller uses the corruption strategy.");
         return;
       case "C14.sogMil":
       case "M14.sogMil":
-        state.strategy = "military";
+        state.strategy = STRATEGY.MILITARY;
         engine.log(state, "Queller uses the military strategy.");
         endWalk(state, "strategy", "Queller uses the military strategy.");
         return;
@@ -1296,7 +1331,7 @@
           dieObj: null,
           dieUsed: false,
         });
-        walk.die = "Muster";
+        walk.die = DIE_REQUIREMENT.MUSTER;
         walk.dieObj = reservedIndex;
         goto(state, "MU", findStart("MU", "Muster 2"));
         follow(state, null);
@@ -1387,7 +1422,7 @@
               "Move " + walk.nationChoice + " down one on the Political Track.",
             node: walk.node,
           });
-        const now = state.board.nations[nationKey] | 0,
+        const now = state.board.nations[nationKey] ?? 0,
           next = Math.max(0, now - 1);
         return setPrompt(state, {
           type: "action",
@@ -1515,9 +1550,9 @@
       case "C14.draw":
       case "M14.draw":
         if (cards) {
-          engine.drawCard(state, "C");
-          engine.drawCard(state, "S");
-          if (state.settings.wome) engine.drawCard(state, "F");
+          engine.drawCard(state, DECK.CHARACTER);
+          engine.drawCard(state, DECK.STRATEGY);
+          if (state.settings.wome) engine.drawCard(state, DECK.FACTION);
           return continueWith(
             "hand: " +
               engine.handCounts(state).total +
@@ -1538,7 +1573,11 @@
       case "C14.disc18":
       case "M14.disc":
         if (cards) {
-          const discarded = engine.autoDiscard(state, nodeExtra.items, "E");
+          const discarded = engine.autoDiscard(
+            state,
+            nodeExtra.items,
+            HAND.EVENT,
+          );
           return continueWith(
             "discarded " +
               discarded.map((i) => "“" + cardById[i].title + "”").join(", "),
@@ -1553,7 +1592,11 @@
       case "C14.discF":
       case "M14.discF":
         if (cards) {
-          const discarded = engine.autoDiscard(state, nodeExtra.items, "F");
+          const discarded = engine.autoDiscard(
+            state,
+            nodeExtra.items,
+            HAND.FACTION,
+          );
           return continueWith(
             "discarded " +
               discarded.map((i) => "“" + cardById[i].title + "”").join(", "),
@@ -1590,7 +1633,7 @@
           return continueWith(
             placed +
               " dice (Companions: " +
-              (state.board.fs.companions | 0) +
+              (state.board.fs.companions ?? 0) +
               ")",
           );
         }
@@ -1617,7 +1660,7 @@
               ? "capped at " +
                   placed +
                   " (rule 34: " +
-                  (state.board.fs.companions | 0) +
+                  (state.board.fs.companions ?? 0) +
                   " Companions)"
               : undefined,
           );
@@ -1759,17 +1802,21 @@
       if (key === "EV.discPri" || key === "FA.discPri") {
         const discarded = [];
         if (key === "EV.discPri") {
-          discarded.push(...engine.autoDiscard(state, nodeExtra.items, "E"));
+          discarded.push(
+            ...engine.autoDiscard(state, nodeExtra.items, HAND.EVENT),
+          );
           if (state.settings.wome)
             discarded.push(
               ...engine.autoDiscard(
                 state,
                 NODE.extra(FLOW.FA.nodes.discPri).items,
-                "F",
+                HAND.FACTION,
               ),
             );
         } else
-          discarded.push(...engine.autoDiscard(state, nodeExtra.items, "F"));
+          discarded.push(
+            ...engine.autoDiscard(state, nodeExtra.items, HAND.FACTION),
+          );
         walk.discards = discarded;
         trail(state, {
           kind: "pri",
@@ -1916,7 +1963,7 @@
           (nationKey) =>
             SHADOW_NATION_NAME[nationKey] +
             ": " +
-            engine.politicalTrackLabel(nations[nationKey] | 0),
+            engine.politicalTrackLabel(nations[nationKey] ?? 0),
         )
         .join(", ");
       trail(state, {
@@ -2128,7 +2175,7 @@
             );
           }
           if (prompt.nation) {
-            const now = state.board.nations[prompt.nation] | 0;
+            const now = state.board.nations[prompt.nation] ?? 0;
             state.board.nations[prompt.nation] = Math.max(0, now - 1);
             state.playable = {};
             engine.log(
@@ -2162,7 +2209,7 @@
         break;
       }
       case "playcard": {
-        const palantirBefore = state.cards.table.includes(engine.PALANTIR),
+        const palantirBefore = state.cards.table.includes(CARD.PALANTIR),
           die = walk.die;
         const card = engine.playCard(state, prompt.card, {
           combat: prompt.combat,
@@ -2231,40 +2278,41 @@
 
   // ----- phase driver helpers -----
   function phasePage(state) {
-    return state.strategy === "military" ? "M14" : "C14";
+    return state.strategy === STRATEGY.MILITARY ? "M14" : "C14";
   }
   function phase5Page(state) {
-    return state.strategy === "military" ? "M5" : "C5";
+    return state.strategy === STRATEGY.MILITARY ? "M5" : "C5";
   }
   function startPhase(state, phase) {
     const page = phasePage(state);
-    if (phase === "setup") {
+    if (phase === PHASE.SETUP) {
       state.walk = null;
       startWalk(state, "C14", "Start of game");
       return;
     }
-    if (phase === "p1") {
-      state.phase = "p1";
+    if (phase === PHASE.P1) {
+      state.phase = PHASE.P1;
       startWalk(state, page, "Phase 1");
       return;
     }
-    if (phase === "p2") {
-      state.phase = "p2";
-      if (state.strategy === "corruption") startWalk(state, "C14", "Phase 2");
+    if (phase === PHASE.P2) {
+      state.phase = PHASE.P2;
+      if (state.strategy === STRATEGY.CORRUPTION)
+        startWalk(state, "C14", "Phase 2");
       return;
     }
-    if (phase === "p3") {
-      state.phase = "p3";
+    if (phase === PHASE.P3) {
+      state.phase = PHASE.P3;
       startWalk(state, page, "Phase 3");
       return;
     }
-    if (phase === "p4") {
-      state.phase = "p4";
+    if (phase === PHASE.P4) {
+      state.phase = PHASE.P4;
       startWalk(state, page, "Phase 4");
       return;
     }
-    if (phase === "p5") {
-      state.phase = "p5";
+    if (phase === PHASE.P5) {
+      state.phase = PHASE.P5;
       startWalk(state, phase5Page(state), "Phase 5");
     }
   }
@@ -2283,7 +2331,7 @@
   }
   function nextTurn(state) {
     state.turn++;
-    state.phase = "p1";
+    state.phase = PHASE.P1;
     state.walk = null;
     state.situ = {};
     state.playable = {};

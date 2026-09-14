@@ -22,9 +22,30 @@
     return items;
   };
   const VERSION = 59; // app version (shown in the debug log and stamped on saves)
-  const PALANTIR = "sa045",
-    BALROG = "sa001b2";
-  const SHADOW_FACTIONS = ["corsairs", "dunlendings", "spiders"];
+
+  // ---------- enumerations ----------
+  // The values are what saved games and cards.js hold, so they must not change without a migrate() step.
+  const STRATEGY = { CORRUPTION: "corruption", MILITARY: "military" };
+  const PHASE = {
+    SETUP: "setup",
+    P1: "p1",
+    P2: "p2",
+    P3: "p3",
+    P4: "p4",
+    P5: "p5",
+    P6: "p6",
+  };
+  // Card decks (the `deck` field of a card and the keys of cards.decks / cards.discards).
+  const DECK = {
+    CHARACTER: "C",
+    STRATEGY: "S",
+    FACTION: "F",
+    CALL_TO_BATTLE: "B",
+  };
+  // Queller's two hands: the Event hand (Character and Strategy cards) and the Faction Event hand.
+  const HAND = { EVENT: "E", FACTION: "F" };
+  const HAND_LIMIT = { [HAND.EVENT]: 6, [HAND.FACTION]: 4 };
+  const DIE_KIND = { ACTION: "A", FACTION: "F" };
   const DIE_STATE = {
     POOL: "pool",
     HUNT: "hunt",
@@ -32,13 +53,76 @@
     USED: "used",
     RESERVED: "reserved",
   };
+  const FACE = {
+    MUSTER: "Muster",
+    ARMY_MUSTER: "Army/Muster",
+    ARMY: "Army",
+    CHARACTER: "Character",
+    EVENT: "Event",
+    EYE: "Eye",
+    RECRUIT: "Recruit",
+    PLAY_DRAW: "Play/Draw",
+    RECRUIT_PLAY: "Recruit/Play",
+    RECRUIT_DRAW: "Recruit/Draw",
+    WILD: "Wild",
+  };
+  // What a flowchart step needs a die to show (the `die` of a jump or action box).
+  const DIE_REQUIREMENT = {
+    ARMY: "Army",
+    MUSTER: "Muster",
+    CHARACTER: "Character",
+    EVENT: "Event",
+    CHAR_OR_MUSTER: "CharOrMuster",
+    FACTION_RECRUIT: "FRecruit",
+    FACTION_PLAY: "FPlay",
+    FACTION_DRAW: "FDraw",
+  };
+  const FACTION_REQUIREMENTS = [
+    DIE_REQUIREMENT.FACTION_RECRUIT,
+    DIE_REQUIREMENT.FACTION_PLAY,
+    DIE_REQUIREMENT.FACTION_DRAW,
+  ];
+  const isFactionRequirement = (req) => FACTION_REQUIREMENTS.includes(req);
+  // Free Peoples nations on the Political Track.
+  const FP_STANCE = { PASSIVE: "passive", ACTIVE: "active", WAR: "war" };
+  const FP_STANCE_RANK = {
+    [FP_STANCE.PASSIVE]: 0,
+    [FP_STANCE.ACTIVE]: 1,
+    [FP_STANCE.WAR]: 2,
+  };
+  const SHADOW_NATIONS = ["sauron", "isengard", "se"];
+  const FP_NATIONS = ["gondor", "rohan", "north", "dwarves", "elves"];
+  const SHADOW_FACTIONS = ["corsairs", "dunlendings", "spiders"];
+  // Cards the engine or the UI single out by id.
+  const CARD = {
+    PALANTIR: "sa045",
+    BALROG: "sa001b2",
+    WORMTONGUE: "sa051",
+    THREATS_AND_PROMISES: "sa050",
+    FLOCKS_OF_CREBAIN: "sa009",
+    WORN_WITH_SORROW: "sa052",
+    BLACK_SAILS: "sa_Faction03",
+  };
+  // The `effect` flag of a card: an effect the engine resolves itself when the card is played.
+  const CARD_EFFECT = {
+    SERVANTS: "servants",
+    HIS_WILL: "hisWill",
+    LIDLESS_EYE: "lidlessEye",
+    RECRUIT_FACTION: "recruitFaction",
+  };
+  const BASE_ACTION_DICE = 7; // the Shadow's dice before any minion joins
+  const STARTING_COMPANIONS = 7;
+  const LOG_CAP = 400; // log entries kept in the game state
+  const SERVANTS_DRAW = 3; // Faction Event cards Servants of Sauron looks at
+  const LIDLESS_EYE_DICE = 3; // dice The Lidless Eye turns to Eyes
+  const DISCARD_GUARD = 10; // at most this many discards in one hand-limit check
 
   // ---------- card flags ----------
   // Static flags come from cards.js; only `preferred` and `factionInPlay` depend on the game state.
   // The strategy's preferred card type: Character cards under corruption, any other type under military.
   function preferred(card, strategy) {
     if (!card.type) return false;
-    return strategy === "corruption"
+    return strategy === STRATEGY.CORRUPTION
       ? card.type === "Character"
       : card.type !== "Character";
   }
@@ -95,28 +179,25 @@
   const callToBattleCards = (state) =>
     CARDS.filter(
       (card) =>
-        card.deck === "B" && state.board.factions[card.faction.toLowerCase()],
+        card.deck === DECK.CALL_TO_BATTLE &&
+        state.board.factions[card.faction.toLowerCase()],
     ).map((card) => card.id);
 
   // ---------- board helpers ----------
-  // Shadow nations on the Political Track: nations.sauron/isengard/se = steps above "At War" (0 = At War, 1-3 = Active +N). Start: Sauron 1, Isengard 1, state&E 2.
+  // Shadow nations on the Political Track: nations.sauron/isengard/se = steps above "At War" (0 = At War, 1-3 = Active +N). Start: Sauron 1, Isengard 1, S&E 2.
   const SHADOW_NATION_START = { sauron: 1, isengard: 1, se: 2 };
   function shadowNationAtWar(state, nation) {
-    return (state.board.nations[nation] | 0) === 0;
+    return (state.board.nations[nation] ?? 0) === 0;
   }
   function allShadowNationsAtWar(state) {
-    return (
-      shadowNationAtWar(state, "sauron") &&
-      shadowNationAtWar(state, "isengard") &&
-      shadowNationAtWar(state, "se")
-    );
+    return SHADOW_NATIONS.every((nation) => shadowNationAtWar(state, nation));
   }
   function politicalTrackLabel(steps) {
     return steps === 0 ? "At War" : "Active +" + steps;
   }
   function fpNationAtWar(state) {
-    return ["gondor", "rohan", "north", "dwarves", "elves"].some(
-      (nation) => state.board.nations[nation] === "war",
+    return FP_NATIONS.some(
+      (nation) => state.board.nations[nation] === FP_STANCE.WAR,
     );
   }
   function shadowFactionInPlay(state) {
@@ -141,7 +222,7 @@
   }
   // Hunt box maximum (rulebook: the number of Companions, but always at least one) — rule 34 caps the flowchart allocations at it.
   function huntCap(state) {
-    return Math.max(1, state.board.fs.companions | 0);
+    return Math.max(1, state.board.fs.companions ?? 0);
   }
   // Minions Queller could muster now, in priority order (Muster page); the first is the one it musters.
   function minionsAvailable(state) {
@@ -169,7 +250,7 @@
   }
   // Older saves kept the Shadow nations as booleans (true = at war); now they are steps above At War.
   function migrateNations(nations) {
-    for (const nation of ["sauron", "isengard", "se"]) {
+    for (const nation of SHADOW_NATIONS) {
       if (typeof nations[nation] === "boolean")
         nations[nation] = nations[nation] ? 0 : SHADOW_NATION_START[nation];
       else if (typeof nations[nation] !== "number")
@@ -243,7 +324,7 @@
       !state.settings.dice ||
       availableDice(state).some(
         (die) =>
-          die.k === "A" &&
+          die.k === DIE_KIND.ACTION &&
           !(state.walk && state.dice.pool.indexOf(die) === state.walk.dieObj),
       ),
   };
@@ -253,9 +334,9 @@
   }
   // combat-card precondition from the battle form
   const COMBAT_PRECONDITIONS = {
-    nazLead1: (state, battle) => (battle.nazLead | 0) >= 1,
-    nazLead2: (state, battle) => (battle.nazLead | 0) >= 2,
-    nazInBattle: (state, battle) => (battle.nazLead | 0) > 0,
+    nazLead1: (state, battle) => (battle.nazLead ?? 0) >= 1,
+    nazLead2: (state, battle) => (battle.nazLead ?? 0) >= 2,
+    nazInBattle: (state, battle) => (battle.nazLead ?? 0) > 0,
     siegeEngine: (state) => situationalAnswer(state, "siegeEngine"),
     isengardStronghold: (state, battle) => !!battle.isengardStronghold,
     seElite: (state, battle) => !!battle.seElite,
@@ -268,7 +349,7 @@
   };
   function combatPrecondition(state, card) {
     const battle = state.battle || {};
-    if (card.deck === "B") {
+    if (card.deck === DECK.CALL_TO_BATTLE) {
       const factionKey = card.faction.toLowerCase();
       if (!state.board.factions[factionKey] || !battle.figures?.[factionKey])
         return false;
@@ -290,11 +371,19 @@
       },
       turn: 1,
       strategy: null,
-      phase: "setup",
-      dice: { pool: [], base: 7, hunt: 0, factionDie: false },
+      phase: PHASE.SETUP,
+      dice: { pool: [], base: BASE_ACTION_DICE, hunt: 0, factionDie: false },
       cards: {
-        decks: { C: [], S: [], F: [] },
-        discards: { C: [], S: [], F: [] },
+        decks: {
+          [DECK.CHARACTER]: [],
+          [DECK.STRATEGY]: [],
+          [DECK.FACTION]: [],
+        },
+        discards: {
+          [DECK.CHARACTER]: [],
+          [DECK.STRATEGY]: [],
+          [DECK.FACTION]: [],
+        },
         hand: [],
         factionHand: [],
         table: [],
@@ -309,7 +398,7 @@
           inStrongholdOrSea: true,
           atStart: true,
           guideGollum: false,
-          companions: 7,
+          companions: STARTING_COMPANIONS,
         },
         chars: {
           saruman: false,
@@ -322,11 +411,11 @@
           sauron: 1,
           isengard: 1,
           se: 2,
-          gondor: "passive",
-          rohan: "passive",
-          north: "passive",
-          dwarves: "passive",
-          elves: "active",
+          gondor: FP_STANCE.PASSIVE,
+          rohan: FP_STANCE.PASSIVE,
+          north: FP_STANCE.PASSIVE,
+          dwarves: FP_STANCE.PASSIVE,
+          elves: FP_STANCE.ACTIVE,
         },
         factions: {
           corsairs: false,
@@ -356,7 +445,7 @@
   // Whether a card goes into this game's decks: Call to Battle cards never do, WoME cards only with the expansion, and the two cards
   // that have a base-game and a WoME version (sa028/sa038 and their b2 twins) contribute whichever version applies.
   function inDecks(card, wome) {
-    if (card.deck === "B") return false;
+    if (card.deck === DECK.CALL_TO_BATTLE) return false;
     if (card.set === "WoME" && !wome) return false;
     if (card.id === "sa028b2" || card.id === "sa038b2") return !wome;
     if (card.id === "sa028" || card.id === "sa038") return wome;
@@ -364,38 +453,40 @@
   }
   function buildDecks(state) {
     const wome = state.settings.wome;
-    const decks = { C: [], S: [], F: [] };
+    const decks = {
+      [DECK.CHARACTER]: [],
+      [DECK.STRATEGY]: [],
+      [DECK.FACTION]: [],
+    };
     for (const card of CARDS)
       if (inDecks(card, wome) && decks[card.deck])
         decks[card.deck].push(card.id);
-    state.cards.decks = {
-      C: shuffle(decks.C),
-      S: shuffle(decks.S),
-      F: shuffle(decks.F),
-    };
+    state.cards.decks = Object.fromEntries(
+      Object.entries(decks).map(([deckKey, ids]) => [deckKey, shuffle(ids)]),
+    );
   }
 
   // ---------- dice ----------
   const SHADOW_FACES = [
-    "Muster",
-    "Army/Muster",
-    "Army",
-    "Character",
-    "Event",
-    "Eye",
+    FACE.MUSTER,
+    FACE.ARMY_MUSTER,
+    FACE.ARMY,
+    FACE.CHARACTER,
+    FACE.EVENT,
+    FACE.EYE,
   ];
   const FACTION_FACES = [
-    "Recruit",
-    "Play/Draw",
-    "Recruit/Play",
-    "Recruit/Draw",
-    "Eye",
-    "Wild",
+    FACE.RECRUIT,
+    FACE.PLAY_DRAW,
+    FACE.RECRUIT_PLAY,
+    FACE.RECRUIT_DRAW,
+    FACE.EYE,
+    FACE.WILD,
   ];
   function diceCount(state) {
     const chars = state.board.chars;
     return (
-      7 +
+      BASE_ACTION_DICE +
       (chars.saruman ? 1 : 0) +
       (chars.witchKing ? 1 : 0) +
       (chars.mouth ? 1 : 0)
@@ -406,11 +497,19 @@
     state.dice.pool = [];
     state.dice.hunt = 0;
     for (let i = 0; i < count; i++)
-      state.dice.pool.push({ k: "A", face: null, st: DIE_STATE.POOL });
+      state.dice.pool.push({
+        k: DIE_KIND.ACTION,
+        face: null,
+        st: DIE_STATE.POOL,
+      });
     // WoME p.8: the Faction die joins the pool at the start of the turn after the first Shadow Faction enters play, and leaves it the turn after the last one is gone.
     state.dice.factionDie = shadowFactionInPlay(state);
     if (state.dice.factionDie)
-      state.dice.pool.push({ k: "F", face: null, st: DIE_STATE.POOL });
+      state.dice.pool.push({
+        k: DIE_KIND.FACTION,
+        face: null,
+        st: DIE_STATE.POOL,
+      });
     state.minionReserved = false;
     state.ringUsedThisTurn = false;
     state.situ = {};
@@ -426,13 +525,13 @@
   }
   function assignHunt(state, requested) {
     const pool = state.dice.pool.filter(
-      (die) => die.k === "A" && die.st === DIE_STATE.POOL,
+      (die) => die.k === DIE_KIND.ACTION && die.st === DIE_STATE.POOL,
     );
     const cap = huntCap(state),
       placed = Math.min(requested, cap, pool.length);
     for (let i = 0; i < placed; i++) {
       pool[i].st = DIE_STATE.HUNT;
-      pool[i].face = "Eye";
+      pool[i].face = FACE.EYE;
     }
     state.dice.hunt += placed;
     log(
@@ -446,7 +545,7 @@
           ? " (rule 34: maximum " +
             cap +
             " for " +
-            (state.board.fs.companions | 0) +
+            (state.board.fs.companions ?? 0) +
             " Companions)"
           : "") +
         ".",
@@ -458,8 +557,9 @@
     const out = [];
     for (const die of state.dice.pool) {
       if (die.st !== DIE_STATE.POOL) continue;
-      die.face = die.k === "A" ? pick(SHADOW_FACES) : pick(FACTION_FACES);
-      if (die.face === "Eye") {
+      die.face =
+        die.k === DIE_KIND.ACTION ? pick(SHADOW_FACES) : pick(FACTION_FACES);
+      if (die.face === FACE.EYE) {
         die.st = DIE_STATE.HUNT;
         state.dice.hunt++;
         eyes++;
@@ -473,28 +573,47 @@
     return out;
   }
   function preferredFaces(state) {
-    return state.strategy === "corruption"
-      ? ["Character"]
-      : ["Army", "Muster", "Army/Muster"];
+    return state.strategy === STRATEGY.CORRUPTION
+      ? [FACE.CHARACTER]
+      : [FACE.ARMY, FACE.MUSTER, FACE.ARMY_MUSTER];
   }
   // which available dice satisfy a requirement
   const DIE_REQUIREMENT_FACES = {
-    Army: ["Army", "Army/Muster", "Wild"],
-    Muster: ["Muster", "Army/Muster", "Wild"],
-    Character: ["Character", "Wild"],
-    Event: ["Event", "Wild"],
-    CharOrMuster: ["Character", "Muster", "Army/Muster", "Wild"],
-    FRecruit: ["Recruit", "Recruit/Play", "Recruit/Draw", "Wild"],
-    FPlay: ["Play/Draw", "Recruit/Play", "Wild"],
-    FDraw: ["Play/Draw", "Recruit/Draw", "Wild"],
+    [DIE_REQUIREMENT.ARMY]: [FACE.ARMY, FACE.ARMY_MUSTER, FACE.WILD],
+    [DIE_REQUIREMENT.MUSTER]: [FACE.MUSTER, FACE.ARMY_MUSTER, FACE.WILD],
+    [DIE_REQUIREMENT.CHARACTER]: [FACE.CHARACTER, FACE.WILD],
+    [DIE_REQUIREMENT.EVENT]: [FACE.EVENT, FACE.WILD],
+    [DIE_REQUIREMENT.CHAR_OR_MUSTER]: [
+      FACE.CHARACTER,
+      FACE.MUSTER,
+      FACE.ARMY_MUSTER,
+      FACE.WILD,
+    ],
+    [DIE_REQUIREMENT.FACTION_RECRUIT]: [
+      FACE.RECRUIT,
+      FACE.RECRUIT_PLAY,
+      FACE.RECRUIT_DRAW,
+      FACE.WILD,
+    ],
+    [DIE_REQUIREMENT.FACTION_PLAY]: [
+      FACE.PLAY_DRAW,
+      FACE.RECRUIT_PLAY,
+      FACE.WILD,
+    ],
+    [DIE_REQUIREMENT.FACTION_DRAW]: [
+      FACE.PLAY_DRAW,
+      FACE.RECRUIT_DRAW,
+      FACE.WILD,
+    ],
   };
   // Does a die already held for `have` satisfy a step that needs `need`?
   function dieSatisfies(have, need) {
     return (
       !!have &&
       (have === need ||
-        (need === "CharOrMuster" &&
-          (have === "Character" || have === "Muster")))
+        (need === DIE_REQUIREMENT.CHAR_OR_MUSTER &&
+          (have === DIE_REQUIREMENT.CHARACTER ||
+            have === DIE_REQUIREMENT.MUSTER)))
     );
   }
   function availableDice(state) {
@@ -531,13 +650,15 @@
   }
   function ringChange(state, req) {
     // rule 36: change one non-preferred available die to the required result
-    const available = availableDice(state).filter((die) => die.k === "A");
+    const available = availableDice(state).filter(
+      (die) => die.k === DIE_KIND.ACTION,
+    );
     if (!available.length) return null;
     const die = nonPreferredFirst(state, available, 1)[0];
     const from = die.face;
     let face = req;
-    if (req === "CharOrMuster") face = "Character";
-    else if (req.startsWith("F")) face = "Wild";
+    if (req === DIE_REQUIREMENT.CHAR_OR_MUSTER) face = FACE.CHARACTER;
+    else if (isFactionRequirement(req)) face = FACE.WILD;
     die.face = face;
     state.board.rings = Math.max(0, state.board.rings - 1);
     state.ringUsedThisTurn = true;
@@ -571,14 +692,14 @@
       );
     }
     const id = state.cards.decks[deckKey].shift();
-    if (deckKey === "F") state.cards.factionHand.push(id);
+    if (deckKey === DECK.FACTION) state.cards.factionHand.push(id);
     else state.cards.hand.push(id);
     log(
       state,
       "Drew a " +
         deckName(deckKey) +
         " card (" +
-        (deckKey === "F"
+        (deckKey === DECK.FACTION
           ? state.cards.factionHand.length
           : state.cards.hand.length) +
         " in hand).",
@@ -586,13 +707,13 @@
     return id;
   }
   function deckName(deckKey) {
-    if (deckKey === "C") return "Character";
-    return deckKey === "S" ? "Strategy" : "Faction Event";
+    if (deckKey === DECK.CHARACTER) return "Character";
+    return deckKey === DECK.STRATEGY ? "Strategy" : "Faction Event";
   }
   function handCounts(state) {
     return {
-      character: handCardsOfDeck(state, "C").length,
-      strategy: handCardsOfDeck(state, "S").length,
+      character: handCardsOfDeck(state, DECK.CHARACTER).length,
+      strategy: handCardsOfDeck(state, DECK.STRATEGY).length,
       total: state.cards.hand.length,
       faction: state.cards.factionHand.length,
     };
@@ -630,10 +751,12 @@
     removeFromLists(state, id);
     const onTable = staysOnTable(id) && !combat;
     if (onTable) {
-      (card.deck === "F" ? state.cards.factionTable : state.cards.table).push(
-        id,
-      );
-    } else if (card.deck !== "B") state.cards.discards[card.deck].push(id);
+      (card.deck === DECK.FACTION
+        ? state.cards.factionTable
+        : state.cards.table
+      ).push(id);
+    } else if (card.deck !== DECK.CALL_TO_BATTLE)
+      state.cards.discards[card.deck].push(id);
     delete state.playable[(combat ? "B:" : "") + id];
     log(
       state,
@@ -654,19 +777,23 @@
     const out = [];
     if (play?.combat) return out;
     const cards = state.cards;
-    if (card.effect === "servants") {
-      if (cards.decks.F.length < 3 && cards.discards.F.length) {
-        cards.decks.F = cards.decks.F.concat(shuffle(cards.discards.F));
-        cards.discards.F = [];
+    if (card.effect === CARD_EFFECT.SERVANTS) {
+      const deck = cards.decks[DECK.FACTION],
+        discards = cards.discards[DECK.FACTION];
+      if (deck.length < SERVANTS_DRAW && discards.length) {
+        cards.decks[DECK.FACTION] = deck.concat(shuffle(discards));
+        cards.discards[DECK.FACTION] = [];
       }
-      const drawn = cards.decks.F.splice(0, 3);
+      const drawn = cards.decks[DECK.FACTION].splice(0, SERVANTS_DRAW);
       const picked = applyPriority(state, drawn, FACTION_PICK);
       if (picked.chosen) {
         cards.factionHand.push(picked.chosen);
       }
       const rest = drawn.filter((id) => id !== picked.chosen);
-      cards.decks.F = shuffle(cards.decks.F.concat(rest, cards.discards.F));
-      cards.discards.F = [];
+      cards.decks[DECK.FACTION] = shuffle(
+        cards.decks[DECK.FACTION].concat(rest, cards.discards[DECK.FACTION]),
+      );
+      cards.discards[DECK.FACTION] = [];
       log(
         state,
         "Servants of Sauron: drew " +
@@ -680,14 +807,15 @@
         steps: picked.steps,
         card: picked.chosen,
       });
-    } else if (card.effect === "hisWill") {
+    } else if (card.effect === CARD_EFFECT.HIS_WILL) {
+      const discards = cards.discards[DECK.FACTION];
       const picked = applyPriority(
         state,
-        cards.discards.F.filter((other) => other !== id),
+        discards.filter((other) => other !== id),
         FACTION_PICK,
       );
       if (picked.chosen) {
-        cards.discards.F.splice(cards.discards.F.indexOf(picked.chosen), 1);
+        discards.splice(discards.indexOf(picked.chosen), 1);
         cards.factionHand.push(picked.chosen);
         log(
           state,
@@ -707,15 +835,15 @@
         steps: picked.chosen ? picked.steps : ["Discard pile empty"],
         card: picked.chosen,
       });
-    } else if (card.effect === "lidlessEye" && state.settings.dice) {
+    } else if (card.effect === CARD_EFFECT.LIDLESS_EYE && state.settings.dice) {
       const chosen = nonPreferredFirst(
         state,
-        availableDice(state).filter((die) => die.k === "A"),
-        3,
+        availableDice(state).filter((die) => die.k === DIE_KIND.ACTION),
+        LIDLESS_EYE_DICE,
       );
       const from = chosen.map((die) => die.face);
       for (const die of chosen) {
-        die.face = "Eye";
+        die.face = FACE.EYE;
         die.st = DIE_STATE.HUNT;
         state.dice.hunt++;
       }
@@ -739,7 +867,7 @@
       }
       log(state, "The Lidless Eye: " + logText);
       out.push({ kind: "note", text: "The Lidless Eye: " + noteText });
-    } else if (card.effect === "recruitFaction") {
+    } else if (card.effect === CARD_EFFECT.RECRUIT_FACTION) {
       const factionKey = card.faction.toLowerCase();
       if (!state.board.factions[factionKey]) {
         state.board.factions[factionKey] = true;
@@ -757,11 +885,12 @@
     }
     // The Palantír of Orthanc: after an Event die plays an Event card, draw another card (a preferred one: Character under the corruption strategy, Strategy under military).
     if (
-      play?.die === "Event" &&
-      (card.deck === "C" || card.deck === "S") &&
+      play?.die === DIE_REQUIREMENT.EVENT &&
+      (card.deck === DECK.CHARACTER || card.deck === DECK.STRATEGY) &&
       play.palantirBefore
     ) {
-      const deckKey = state.strategy === "corruption" ? "C" : "S";
+      const deckKey =
+        state.strategy === STRATEGY.CORRUPTION ? DECK.CHARACTER : DECK.STRATEGY;
       const got = drawCard(state, deckKey);
       log(
         state,
@@ -782,37 +911,39 @@
     }
     return out;
   }
+  const FP_NATION_KEY = new RegExp(
+    "^nations\\.(" + FP_NATIONS.join("|") + ")$",
+  ); // a tracker change key for a Free Peoples nation
   // Table cards whose discard condition the board tracker can see. `check` returns true (discard now), false, or a question to ask the player.
   const TABLE_TRIGGERS = [
     {
-      id: "sa051",
+      id: CARD.WORMTONGUE,
       check: (state, change) => {
         if (change.key === "chars.saruman" && !change.to)
           return "Saruman eliminated";
         if (
           change.key === "nations.rohan" &&
-          change.from === "passive" &&
-          change.to !== "passive"
+          change.from === FP_STANCE.PASSIVE &&
+          change.to !== FP_STANCE.PASSIVE
         )
           return "Rohan activated";
         return false;
       },
     },
     {
-      id: PALANTIR,
+      id: CARD.PALANTIR,
       check: (state, change) =>
         change.key === "chars.saruman" && !change.to
           ? "Saruman eliminated"
           : false,
     },
     {
-      id: "sa050",
+      id: CARD.THREATS_AND_PROMISES,
       check: (state, change) => {
-        if (!/^nations\.(gondor|rohan|north|dwarves|elves)$/.test(change.key))
+        if (!FP_NATION_KEY.test(change.key)) return false;
+        if (FP_STANCE_RANK[change.to] <= FP_STANCE_RANK[change.from])
           return false;
-        const rank = { passive: 0, active: 1, war: 2 };
-        if (rank[change.to] <= rank[change.from]) return false;
-        if (change.from === "passive")
+        if (change.from === FP_STANCE.PASSIVE)
           return "a Free Peoples nation advanced from passive (only an attack, a Companion or a Fellowship declaration can do that while the card is in play)";
         return {
           q: "Threats and Promises: did the nation go to war because of an attack or a Companion’s special ability (not a Muster die)?",
@@ -820,7 +951,7 @@
       },
     },
     {
-      id: "sa009",
+      id: CARD.FLOCKS_OF_CREBAIN,
       check: (state, change) =>
         fsDeclaredInFP(state, change)
           ? {
@@ -829,7 +960,7 @@
           : false,
     },
     {
-      id: "sa052",
+      id: CARD.WORN_WITH_SORROW,
       check: (state, change) =>
         fsDeclaredInFP(state, change)
           ? {
@@ -877,8 +1008,9 @@
   function applyPriority(state, ids, criteria, play) {
     let opts = ids.slice();
     const steps = [];
-    const eventHandFull = state.cards.hand.length >= 6,
-      factionHandFull = state.cards.factionHand.length >= 4;
+    const eventHandFull = state.cards.hand.length >= HAND_LIMIT[HAND.EVENT],
+      factionHandFull =
+        state.cards.factionHand.length >= HAND_LIMIT[HAND.FACTION];
     for (const crit of criteria) {
       if (opts.length <= 1) break;
       const test = criterionTest(crit, state, play, {
@@ -904,13 +1036,13 @@
     } else chosen = opts[0] || null;
     return { chosen, steps };
   }
-  const notCallToBattle = (card) => card.deck !== "B"; // rule 19: Call to Battle cards ignore initiative
+  const notCallToBattle = (card) => card.deck !== DECK.CALL_TO_BATTLE; // rule 19: Call to Battle cards ignore initiative
   // The card criteria of the priority lists, matched in order (a longer phrase before the phraseStartsWith it shares). Each entry builds a predicate
   // on a card, or a rank spec {rank, max, only} that applyPriority resolves; flagsOf(card) is the card's flags for this game, handLimits the hand-limit facts.
   const phraseIs = (phrase) => (text) => text === phrase,
     phraseStartsWith = (phrase) => (text) => text.startsWith(phrase);
   const fullHand = (card, handLimits) =>
-    card.deck === "F" ? handLimits.factionFull : handLimits.eventFull;
+    card.deck === DECK.FACTION ? handLimits.factionFull : handLimits.eventFull;
   const CRITERIA = [
     [
       phraseStartsWith("doesn't use the term"),
@@ -924,8 +1056,8 @@
       phraseStartsWith("doesn't place a tile"),
       (flagsOf) => (card) => !flagsOf(card).tile,
     ],
-    [phraseIs("strategy card"), () => (card) => card.deck === "S"],
-    [phraseIs("character card"), () => (card) => card.deck === "C"],
+    [phraseIs("strategy card"), () => (card) => card.deck === DECK.STRATEGY],
+    [phraseIs("character card"), () => (card) => card.deck === DECK.CHARACTER],
     [
       phraseStartsWith("descending order"),
       (flagsOf) => ({
@@ -939,7 +1071,7 @@
       (flagsOf) => ({
         rank: (card) => flagsOf(card).init,
         max: false,
-        only: (card) => card.deck === "C",
+        only: (card) => card.deck === DECK.CHARACTER,
       }),
     ],
     [
@@ -969,11 +1101,13 @@
     ],
     [
       phraseIs("preferred event card"),
-      (flagsOf) => (card) => flagsOf(card).preferred && card.deck !== "F",
+      (flagsOf) => (card) =>
+        flagsOf(card).preferred && card.deck !== DECK.FACTION,
     ],
     [
       phraseIs("preferred faction event card"),
-      (flagsOf) => (card) => flagsOf(card).preferred && card.deck === "F",
+      (flagsOf) => (card) =>
+        flagsOf(card).preferred && card.deck === DECK.FACTION,
     ],
     [
       phraseIs("full hand with preferred card"),
@@ -986,15 +1120,23 @@
     ],
     [
       phraseIs("event card"),
-      () => (card) => card.deck === "C" || card.deck === "S",
+      () => (card) =>
+        card.deck === DECK.CHARACTER || card.deck === DECK.STRATEGY,
     ],
-    [phraseIs("faction event card"), () => (card) => card.deck === "F"],
+    [
+      phraseIs("faction event card"),
+      () => (card) => card.deck === DECK.FACTION,
+    ],
     [
       phraseStartsWith("strategy card which cancels"),
-      () => (card) => card.deck === "S" && card.ct === "Swarm of Bats",
+      () => (card) =>
+        card.deck === DECK.STRATEGY && card.ct === "Swarm of Bats",
     ],
     [phraseIs("durin's bane"), () => (card) => card.ct === "Durin's Bane"],
-    [phraseIs("call to battle card"), () => (card) => card.deck === "B"],
+    [
+      phraseIs("call to battle card"),
+      () => (card) => card.deck === DECK.CALL_TO_BATTLE,
+    ],
     [
       phraseIs("mobile army attacks target"),
       () => (card) => FACTION_CAT[card.id] === "attack",
@@ -1011,14 +1153,15 @@
     const entry = CRITERIA.find(([matches]) => matches(phrase));
     return entry ? entry[1](flagsOf, handLimits) : null;
   }
-  function autoDiscard(state, criteria, deckKey) {
-    // discard down to the limit using a priority list (discard = the card that best fits)
-    const limit = deckKey === "F" ? 4 : 6;
-    const hand = deckKey === "F" ? state.cards.factionHand : state.cards.hand;
+  // Discard one hand (HAND.EVENT or HAND.FACTION) down to its limit using a priority list (discard = the card that best fits).
+  function autoDiscard(state, criteria, hand) {
+    const limit = HAND_LIMIT[hand];
+    const cards =
+      hand === HAND.FACTION ? state.cards.factionHand : state.cards.hand;
     const done = [];
     let guard = 0;
-    while (hand.length > limit && guard++ < 10) {
-      const picked = applyPriority(state, hand.slice(), criteria);
+    while (cards.length > limit && guard++ < DISCARD_GUARD) {
+      const picked = applyPriority(state, cards.slice(), criteria);
       if (!picked.chosen) break;
       discardCard(
         state,
@@ -1032,15 +1175,29 @@
 
   function log(state, text, extra) {
     state.log.push({ t: text, turn: state.turn, ...extra });
-    if (state.log.length > 400) state.log.shift();
+    if (state.log.length > LOG_CAP) state.log.shift();
   }
 
   window.QB = {
     VERSION,
-    PALANTIR,
-    BALROG,
-    SHADOW_FACTIONS,
+    STRATEGY,
+    PHASE,
+    DECK,
+    HAND,
+    HAND_LIMIT,
+    DIE_KIND,
     DIE_STATE,
+    FACE,
+    DIE_REQUIREMENT,
+    isFactionRequirement,
+    FP_STANCE,
+    FP_STANCE_RANK,
+    SHADOW_NATIONS,
+    FP_NATIONS,
+    SHADOW_FACTIONS,
+    CARD,
+    CARD_EFFECT,
+    BASE_ACTION_DICE,
     SHADOW_NATION_START,
     shadowNationAtWar,
     allShadowNationsAtWar,

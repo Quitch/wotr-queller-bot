@@ -10,7 +10,7 @@ const ok = (condition, message) => {
   } else console.log("ok  ", message);
 };
 const die = (face, status) => ({
-  k: "A",
+  k: engine.DIE_KIND.ACTION,
   face,
   st: status || DIE_STATE.AVAIL,
 });
@@ -46,10 +46,10 @@ function driveWalk(state, rules, maxPrompts = 80) {
   return seen;
 }
 // A game at Phase 5 with the given settings and strategy; both hands start empty so a scenario deals exactly the cards it needs.
-function phase5State(settings, strategy = "corruption") {
+function phase5State(settings, strategy = engine.STRATEGY.CORRUPTION) {
   const state = engine.newState(settings);
   state.strategy = strategy;
-  state.phase = "p5";
+  state.phase = engine.PHASE.P5;
   state.cards.hand = [];
   state.cards.factionHand = [];
   return state;
@@ -59,7 +59,7 @@ function phase5State(settings, strategy = "corruption") {
 {
   const reservedAndHuntState = phase5State(
     { dice: true, cards: false, tracker: true, wome: false },
-    "military",
+    engine.STRATEGY.MILITARY,
   );
   reservedAndHuntState.board.nations.isengard = 0;
   reservedAndHuntState.dice.pool = [
@@ -67,7 +67,7 @@ function phase5State(settings, strategy = "corruption") {
     die("Eye", DIE_STATE.HUNT),
   ];
   reservedAndHuntState.minionReserved = true;
-  engine.startPhase(reservedAndHuntState, "p5");
+  engine.startPhase(reservedAndHuntState, engine.PHASE.P5);
   driveWalk(reservedAndHuntState, [
     [/Will of the West/, true],
     [/^Pass/, "no"],
@@ -84,12 +84,12 @@ function phase5State(settings, strategy = "corruption") {
   );
   const reservedOnlyState = phase5State(
     { dice: true, cards: false, tracker: true, wome: false },
-    "military",
+    engine.STRATEGY.MILITARY,
   );
   reservedOnlyState.board.nations.isengard = 0;
   reservedOnlyState.dice.pool = [die("Muster", DIE_STATE.RESERVED)];
   reservedOnlyState.minionReserved = true;
-  engine.startPhase(reservedOnlyState, "p5");
+  engine.startPhase(reservedOnlyState, engine.PHASE.P5);
   driveWalk(reservedOnlyState, [
     [/Will of the West/, true],
     [/^Pass/, "no"],
@@ -115,7 +115,7 @@ function phase5State(settings, strategy = "corruption") {
 {
   const twoReservedState = phase5State(
     { dice: true, cards: false, tracker: true, wome: false },
-    "military",
+    engine.STRATEGY.MILITARY,
   );
   twoReservedState.board.nations.isengard = 0;
   twoReservedState.dice.pool = [
@@ -124,7 +124,7 @@ function phase5State(settings, strategy = "corruption") {
   ];
   twoReservedState.minionReserved = true;
   for (let i = 0; i < 3; i++) {
-    engine.startPhase(twoReservedState, "p5");
+    engine.startPhase(twoReservedState, engine.PHASE.P5);
     driveWalk(twoReservedState, [
       [/Will of the West/, true],
       [/^Pass/, "no"],
@@ -142,10 +142,10 @@ function phase5State(settings, strategy = "corruption") {
 {
   const diceOffState = phase5State(
     { dice: false, cards: false, tracker: true, wome: false },
-    "military",
+    engine.STRATEGY.MILITARY,
   );
   diceOffState.board.nations.isengard = 0;
-  engine.startPhase(diceOffState, "p5");
+  engine.startPhase(diceOffState, engine.PHASE.P5);
   const seen = driveWalk(diceOffState, [
     [/Does Queller have a Muster die/, true],
     [/Will of the West/, true],
@@ -174,7 +174,7 @@ function phase5State(settings, strategy = "corruption") {
   };
   const noRingState = stateWithEventAndMusterDice();
   noRingState.board.rings = 0;
-  engine.startPhase(noRingState, "p5");
+  engine.startPhase(noRingState, engine.PHASE.P5);
   driveWalk(noRingState, [
     [/under \*threat\*/, true],
     [/adjacent to \*threat\*/, true],
@@ -186,7 +186,7 @@ function phase5State(settings, strategy = "corruption") {
   );
   const oneRingState = stateWithEventAndMusterDice();
   oneRingState.board.rings = 1;
-  engine.startPhase(oneRingState, "p5");
+  engine.startPhase(oneRingState, engine.PHASE.P5);
   driveWalk(oneRingState, [
     [/under \*threat\*/, true],
     [/adjacent to \*threat\*/, true],
@@ -204,15 +204,15 @@ function phase5State(settings, strategy = "corruption") {
 {
   const militaryState = phase5State(
     { dice: true, cards: true, tracker: true, wome: false },
-    "military",
+    engine.STRATEGY.MILITARY,
   );
   militaryState.cards.hand = ["sa017", "sa002"];
   militaryState.cards.decks.S = ["sa019"];
   militaryState.board.fs.revealed = true;
-  militaryState.cards.table.push("sa045");
+  militaryState.cards.table.push(engine.CARD.PALANTIR);
   militaryState.board.chars.saruman = true;
   militaryState.dice.pool = [die("Event"), die("Army")]; // no Character die → "Play card using event die"
-  engine.startPhase(militaryState, "p5");
+  engine.startPhase(militaryState, engine.PHASE.P5);
   const seen = driveWalk(militaryState, [[/confirm/, true]]);
   const playCardPrompt = seen.find((prompt) => prompt?.type === "playcard");
   ok(
@@ -238,9 +238,9 @@ function phase5State(settings, strategy = "corruption") {
 {
   const balrogState = phase5State(
     { dice: true, cards: true, tracker: true, wome: false },
-    "military",
+    engine.STRATEGY.MILITARY,
   );
-  balrogState.cards.table = ["sa001b2"];
+  balrogState.cards.table = [engine.CARD.BALROG];
   balrogState.cards.hand = ["sa002"];
   engine.startBattle(balrogState, 1);
   const seen = driveWalk(balrogState, [
@@ -253,12 +253,12 @@ function phase5State(settings, strategy = "corruption") {
   ]);
   const playCardPrompt = seen.find((prompt) => prompt?.type === "playcard");
   ok(
-    playCardPrompt?.card === "sa001b2" && playCardPrompt.combat,
+    playCardPrompt?.card === engine.CARD.BALROG && playCardPrompt.combat,
     "6.2 Durin's Bane chosen from the table",
   );
   ok(
-    !balrogState.cards.table.includes("sa001b2") &&
-      balrogState.cards.discards.C.includes("sa001b2"),
+    !balrogState.cards.table.includes(engine.CARD.BALROG) &&
+      balrogState.cards.discards.C.includes(engine.CARD.BALROG),
     "6.2 Balrog discarded from the table after combat use",
   );
 }
@@ -272,7 +272,9 @@ function phase5State(settings, strategy = "corruption") {
   });
   corsairsState.cards.factionHand = ["sa_Faction01"];
   corsairsState.walk = null;
-  engine.startWalk(corsairsState, "FA", "Recruit Faction", { die: "FRecruit" });
+  engine.startWalk(corsairsState, "FA", "Recruit Faction", {
+    die: engine.DIE_REQUIREMENT.FACTION_RECRUIT,
+  });
   driveWalk(corsairsState, [[/eligible/, true]]);
   ok(
     corsairsState.board.factions.corsairs === true,
@@ -286,7 +288,7 @@ function phase5State(settings, strategy = "corruption") {
   });
   witchKingState.walk = null;
   engine.startWalk(witchKingState, "CH", "Character 3 / Muster Witch King", {
-    die: "Muster",
+    die: engine.DIE_REQUIREMENT.MUSTER,
   });
   driveWalk(witchKingState, [[/Mustered Witch King/, true]]);
   ok(
@@ -301,7 +303,9 @@ function phase5State(settings, strategy = "corruption") {
   });
   hillmenState.cards.factionHand = ["sa_Faction06"];
   hillmenState.walk = null;
-  engine.startWalk(hillmenState, "FA", "Play Faction Event", { die: "FPlay" });
+  engine.startWalk(hillmenState, "FA", "Play Faction Event", {
+    die: engine.DIE_REQUIREMENT.FACTION_PLAY,
+  });
   driveWalk(hillmenState, [[/confirm/, true]]);
   ok(
     hillmenState.board.factions.dunlendings === true,
@@ -312,7 +316,7 @@ function phase5State(settings, strategy = "corruption") {
 {
   const lidlessEyeState = phase5State(
     { dice: true, cards: true, tracker: true, wome: false },
-    "corruption",
+    engine.STRATEGY.CORRUPTION,
   );
   lidlessEyeState.cards.hand = ["sa043"];
   lidlessEyeState.dice.pool = [
@@ -323,7 +327,10 @@ function phase5State(settings, strategy = "corruption") {
     die("Character"),
   ];
   lidlessEyeState.walk = null;
-  engine.startWalk(lidlessEyeState, "EV", "Event", { die: "Event", dieObj: 3 });
+  engine.startWalk(lidlessEyeState, "EV", "Event", {
+    die: engine.DIE_REQUIREMENT.EVENT,
+    dieObj: 3,
+  });
   driveWalk(lidlessEyeState, [[/confirm/, true]]);
   const huntDice = lidlessEyeState.dice.pool.filter(
     (pooledDie) => pooledDie.st === DIE_STATE.HUNT,
@@ -398,31 +405,37 @@ function phase5State(settings, strategy = "corruption") {
     tracker: true,
     wome: false,
   });
-  tableState.cards.table = ["sa051", "sa045", "sa050", "sa009"];
+  tableState.cards.table = [
+    engine.CARD.WORMTONGUE,
+    engine.CARD.PALANTIR,
+    engine.CARD.THREATS_AND_PROMISES,
+    engine.CARD.FLOCKS_OF_CREBAIN,
+  ];
   tableState.board.chars.saruman = true;
   let asks = engine.tableTriggers(tableState, {
     key: "nations.rohan",
-    from: "passive",
-    to: "active",
+    from: engine.FP_STANCE.PASSIVE,
+    to: engine.FP_STANCE.ACTIVE,
   });
   ok(
-    !tableState.cards.table.includes("sa051") && asks.length === 0,
+    !tableState.cards.table.includes(engine.CARD.WORMTONGUE) &&
+      asks.length === 0,
     "6.6 Wormtongue discarded when Rohan activates",
   );
   ok(
-    !tableState.cards.table.includes("sa050"),
+    !tableState.cards.table.includes(engine.CARD.THREATS_AND_PROMISES),
     "6.6 Threats and Promises discarded on a passive→active advance",
   );
-  tableState.cards.table.push("sa050");
+  tableState.cards.table.push(engine.CARD.THREATS_AND_PROMISES);
   asks = engine.tableTriggers(tableState, {
     key: "nations.gondor",
-    from: "active",
-    to: "war",
+    from: engine.FP_STANCE.ACTIVE,
+    to: engine.FP_STANCE.WAR,
   });
   ok(
-    tableState.cards.table.includes("sa050") &&
+    tableState.cards.table.includes(engine.CARD.THREATS_AND_PROMISES) &&
       asks.length === 1 &&
-      asks[0].card === "sa050",
+      asks[0].card === engine.CARD.THREATS_AND_PROMISES,
     "6.6 Threats and Promises asked about on active→war",
   );
   engine.tableTriggers(tableState, {
@@ -431,7 +444,7 @@ function phase5State(settings, strategy = "corruption") {
     to: false,
   });
   ok(
-    !tableState.cards.table.includes("sa045"),
+    !tableState.cards.table.includes(engine.CARD.PALANTIR),
     "6.6 Palantír discarded when Saruman is eliminated",
   );
   tableState.board.fs.revealed = true;
@@ -442,7 +455,7 @@ function phase5State(settings, strategy = "corruption") {
     to: true,
   });
   ok(
-    asks.length === 1 && asks[0].card === "sa009",
+    asks.length === 1 && asks[0].card === engine.CARD.FLOCKS_OF_CREBAIN,
     "6.6 Flocks of Crebain asked about when revealed in a Free Peoples settlement",
   );
 }
@@ -500,7 +513,7 @@ function phase5State(settings, strategy = "corruption") {
   const edges = fakeWindow.QB_FLOW.C14.edges;
   const saved = edges.slice();
   edges.unshift(["p4", "title"], ["title", "title"]); // an artificial cycle through a note box
-  engine.startPhase(cycleState, "p4");
+  engine.startPhase(cycleState, engine.PHASE.P4);
   edges.length = 0;
   edges.push(...saved);
   ok(

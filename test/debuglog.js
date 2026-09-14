@@ -64,11 +64,16 @@ ok(
   "new state stamped with the app version " + engine.VERSION,
 );
 debug.action({ a: "pageLoad", autosave: false }, null);
-debug.begin({ a: "phase", id: "setup" }, state);
-engine.startPhase(state, "setup");
+debug.begin({ a: "phase", id: engine.PHASE.SETUP }, state);
+engine.startPhase(state, engine.PHASE.SETUP);
 debug.finishAction(state);
 drive(state);
-for (const phase of ["p1", "p3", "p4", "p5"]) {
+for (const phase of [
+  engine.PHASE.P1,
+  engine.PHASE.P3,
+  engine.PHASE.P4,
+  engine.PHASE.P5,
+]) {
   debug.begin({ a: "phase", id: phase }, state);
   engine.startPhase(state, phase);
   debug.finishAction(state);
@@ -120,8 +125,8 @@ ok(
   "a finished walk is recorded once, not on every later action",
 );
 // abandoning a walk mid-way keeps its trail
-debug.begin({ a: "phase", id: "p5" }, state);
-engine.startPhase(state, "p5");
+debug.begin({ a: "phase", id: engine.PHASE.P5 }, state);
+engine.startPhase(state, engine.PHASE.P5);
 debug.finishAction(state);
 if (state.walk && !state.walk.done) {
   debug.begin({ a: "phase", id: "abandon" }, state);
@@ -291,10 +296,17 @@ const longGameState = engine.newState({
   tracker: true,
   wome: true,
 });
-longGameState.strategy = "corruption";
-longGameState.phase = "p1";
+longGameState.strategy = engine.STRATEGY.CORRUPTION;
+longGameState.phase = engine.PHASE.P1;
 for (let turn = 0; turn < 8; turn++) {
-  for (const phase of ["p1", "p3", "p4", "p5", "p5", "p5"]) {
+  for (const phase of [
+    engine.PHASE.P1,
+    engine.PHASE.P3,
+    engine.PHASE.P4,
+    engine.PHASE.P5,
+    engine.PHASE.P5,
+    engine.PHASE.P5,
+  ]) {
     engine.startPhase(longGameState, phase);
     drive(longGameState);
   }
