@@ -10,7 +10,8 @@
     "lint:md": "markdownlint-cli2",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node test/check.js && node test/verify.js && node test/debuglog.js && node test/fuzz.js 1"
+    "test": "node test/check.js && node test/verify.js && node test/debuglog.js && node test/fuzz.js 1",
+    "verify": "npm run lint && npm test"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
