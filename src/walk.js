@@ -1853,7 +1853,7 @@
         break;
       }
       case "count": {
-        const c = Math.max(p.min, Math.min(p.max, parseInt(v, 10) || 0));
+        const c = Math.max(p.min, Math.min(p.max, Number.parseInt(v, 10) || 0));
         w.parts[p.part] = c;
         trail(S, { kind: "q", text: p.text, answer: String(c) });
         break;
