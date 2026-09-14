@@ -1055,7 +1055,7 @@
       opts = JSON.parse(U.lsGet("qb.opts") || "null");
     } catch (e) {}
     return DBG.text({
-      S: U.S,
+      state: U.S,
       history: U.history,
       report: $("#dbgReport")?.value || "",
       env: environment(),
@@ -1154,7 +1154,7 @@
       DBG.begin({ a: "load", title, turn: o.turn, version: o.appVersion }, U.S);
       U.history = [];
       U.S = o;
-      DBG.end(o);
+      DBG.finishAction(o);
       U.closeModal();
       U.commit();
     };

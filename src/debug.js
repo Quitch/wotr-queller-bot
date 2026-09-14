@@ -1,13 +1,13 @@
 // ===== Debug log: action history, error capture and the exportable report =====
-// Everything here lives outside the game state (S), so it is never saved, undone or shown to the player during play.
+// Everything here lives outside the game state, so it is never saved, undone or shown to the player during play.
 // The action history and errors are kept in localStorage (qb.debug) so a log can still be exported after a reload — including the
 // reload that failed to render a saved game.
 (function () {
-  const Q = window.QB,
-    F = window.QB_FLOW;
+  const engine = window.QB,
+    FLOW = window.QB_FLOW;
   const FORMAT = "queller-debug/1";
   const LIMITS = { actions: 300, errors: 30, walks: 8, states: 5 };
-  const D = {
+  const store = {
     actions: [],
     errors: [],
     walks: [],
@@ -16,311 +16,344 @@
     storage: null,
   };
 
-  function push(arr, e, lim) {
-    arr.push(e);
-    while (arr.length > lim) arr.shift();
+  function push(list, record, limit) {
+    list.push(record);
+    while (list.length > limit) list.shift();
   }
-  function store() {
-    if (!D.storage) return;
+  function persist() {
+    if (!store.storage) return;
     try {
-      D.storage.set(
+      store.storage.set(
         JSON.stringify({
-          actions: D.actions,
-          errors: D.errors,
-          walks: D.walks,
+          actions: store.actions,
+          errors: store.errors,
+          walks: store.walks,
         }),
       );
-    } catch (e) {}
+    } catch {
+      // Storage full or unavailable: the in-memory log still works for this page load.
+    }
   }
   // storage: {get():string|null, set(string)} — localStorage in the app, anything in tests
   function restore(storage) {
-    D.storage = storage || null;
+    store.storage = storage || null;
     if (!storage) return;
     try {
-      const o = JSON.parse(storage.get() || "null");
-      if (o) {
-        D.actions = (o.actions || []).slice(-LIMITS.actions);
-        D.errors = (o.errors || []).slice(-LIMITS.errors);
-        D.walks = (o.walks || []).slice(-LIMITS.walks);
+      const parsed = JSON.parse(storage.get() || "null");
+      if (parsed) {
+        store.actions = (parsed.actions || []).slice(-LIMITS.actions);
+        store.errors = (parsed.errors || []).slice(-LIMITS.errors);
+        store.walks = (parsed.walks || []).slice(-LIMITS.walks);
       }
-    } catch (e) {
+    } catch {
       // Storage unavailable or the saved log is corrupt: start with an empty log.
     }
   }
 
   // A one-line picture of the game after an action: enough to follow the timeline without opening the full state.
-  function digest(S) {
-    if (!S) return null;
-    const w = S.walk,
-      pool = S.dice.pool || [];
+  function digest(state) {
+    if (!state) return null;
+    const walk = state.walk,
+      pool = state.dice.pool || [];
     return {
-      turn: S.turn,
-      phase: S.phase,
-      strategy: S.strategy,
-      walk: w ? w.page + "." + w.node : null,
-      prompt: w?.prompt ? w.prompt.type : null,
-      done: w ? !!w.done : null,
-      result: w ? w.result : null,
-      trail: w ? w.trail.length : 0,
+      turn: state.turn,
+      phase: state.phase,
+      strategy: state.strategy,
+      walk: walk ? walk.page + "." + walk.node : null,
+      prompt: walk?.prompt ? walk.prompt.type : null,
+      done: walk ? !!walk.done : null,
+      result: walk ? walk.result : null,
+      trail: walk ? walk.trail.length : 0,
       dice: pool.length
         ? pool
             .map(
-              (d) =>
-                (d.k === "F" ? "F:" : "") +
-                (d.face || "-").replace("/", "+") +
+              (die) =>
+                (die.k === "F" ? "F:" : "") +
+                (die.face || "-").replace("/", "+") +
                 "/" +
-                d.st[0],
+                die.st[0],
             )
             .join(" ")
         : null,
-      hunt: S.dice.hunt,
-      hand: S.cards.hand.length,
-      faction: S.cards.factionHand.length,
-      table: S.cards.table.length,
-      rings: S.board.rings,
-      log: S.log.length,
+      hunt: state.dice.hunt,
+      hand: state.cards.hand.length,
+      faction: state.cards.factionHand.length,
+      table: state.cards.table.length,
+      rings: state.board.rings,
+      log: state.log.length,
     };
   }
-  function safeDigest(S) {
+  function safeDigest(state) {
     try {
-      return digest(S);
-    } catch (e) {
-      return { digestFailed: String(e?.message || e) };
+      return digest(state);
+    } catch (error) {
+      return { digestFailed: String(error?.message || error) };
     }
   }
-  function walkKey(S, w) {
+  function walkKey(state, walk) {
     return (
-      S.turn +
+      state.turn +
       "|" +
-      w.entry.page +
+      walk.entry.page +
       "|" +
-      w.entry.start +
+      walk.entry.start +
       "|" +
-      w.trail.length +
+      walk.trail.length +
       "|" +
-      (w.result || "")
+      (walk.result || "")
     );
   }
-  function compactWalk(S, w, note) {
+  function compactTrailEntry(entry) {
+    const compact = {
+      kind: entry.kind,
+      text: entry.text,
+      page: entry.page,
+      node: entry.node,
+    };
+    if (entry.answer != null) compact.answer = entry.answer;
+    if (entry.auto) compact.auto = true;
+    if (entry.why) compact.why = entry.why;
+    if (entry.card) compact.card = entry.card;
+    if (entry.choice) compact.choice = entry.choice;
+    if (entry.steps) compact.steps = entry.steps;
+    return compact;
+  }
+  function compactWalk(state, walk, note) {
     return {
       t: Date.now(),
-      turn: S.turn,
-      entry: w.entry,
-      page: w.page,
-      node: w.node,
-      result: w.result,
+      turn: state.turn,
+      entry: walk.entry,
+      page: walk.page,
+      node: walk.node,
+      result: walk.result,
       note: note || null,
-      die: w.die,
-      mode: w.mode,
-      trail: w.trail.map((e) => {
-        const o = { kind: e.kind, text: e.text, page: e.page, node: e.node };
-        if (e.answer != null) o.answer = e.answer;
-        if (e.auto) o.auto = true;
-        if (e.why) o.why = e.why;
-        if (e.card) o.card = e.card;
-        if (e.choice) o.choice = e.choice;
-        if (e.steps) o.steps = e.steps;
-        return o;
-      }),
+      die: walk.die,
+      mode: walk.mode,
+      trail: walk.trail.map(compactTrailEntry),
     };
   }
   // Walks are recorded once they finish (or are abandoned), so the trail of a walk the player has moved on from is still in the log.
-  function noteWalk(S, w, note) {
-    const key = walkKey(S, w);
-    const last = D.walks.at(-1);
+  function recordWalk(state, walk, { abandoned } = {}) {
+    const key = walkKey(state, walk);
+    const last = store.walks.at(-1);
     if (last?.key === key) return;
-    const c = compactWalk(S, w, note);
-    c.key = key;
-    push(D.walks, c, LIMITS.walks);
+    const compact = compactWalk(
+      state,
+      walk,
+      abandoned ? "replaced or abandoned" : null,
+    );
+    compact.key = key;
+    push(store.walks, compact, LIMITS.walks);
+  }
+  // The walk that was open when the action began, if the action replaced or dropped it without finishing it.
+  function recordAbandonedWalk(state, record) {
+    const before = store.preWalk;
+    if (
+      before &&
+      before !== state.walk &&
+      !before.done &&
+      record.a !== "undo" &&
+      record.a !== "load"
+    )
+      recordWalk(state, before, { abandoned: true });
+  }
+  function recordFinishedWalk(state) {
+    if (state.walk?.done) recordWalk(state, state.walk);
   }
 
-  // begin/end bracket a state-changing action (ui.js act()); action() records something that changed no game state.
-  function begin(info, S) {
-    D.inflight = { t: Date.now(), ...(info || { a: "act" }) };
-    D.preWalk = S ? S.walk : null;
-    if (S) D.inflight.before = safeDigest(S);
+  // begin/finishAction bracket a state-changing action (ui.js act()); action() records something that changed no game state.
+  function begin(info, state) {
+    store.inflight = { t: Date.now(), ...(info || { a: "act" }) };
+    store.preWalk = state ? state.walk : null;
+    if (state) store.inflight.before = safeDigest(state);
   }
-  function end(S) {
-    const e = D.inflight || { t: Date.now(), a: "act" };
-    D.inflight = null;
-    if (S) {
-      e.after = safeDigest(S);
-      const w = S.walk;
-      if (
-        D.preWalk &&
-        D.preWalk !== w &&
-        !D.preWalk.done &&
-        e.a !== "undo" &&
-        e.a !== "load"
-      )
-        noteWalk(S, D.preWalk, "replaced or abandoned");
-      if (w?.done) noteWalk(S, w);
+  function finishAction(state) {
+    const record = store.inflight || { t: Date.now(), a: "act" };
+    store.inflight = null;
+    if (state) {
+      record.after = safeDigest(state);
+      recordAbandonedWalk(state, record);
+      recordFinishedWalk(state);
     }
-    D.preWalk = null;
-    push(D.actions, e, LIMITS.actions);
-    store();
-    return e;
+    store.preWalk = null;
+    push(store.actions, record, LIMITS.actions);
+    persist();
+    return record;
   }
-  function action(info, S) {
-    begin(info, S);
-    return end(S);
+  function action(info, state) {
+    begin(info, state);
+    return finishAction(state);
   }
-  function error(err, info, S) {
-    const e = { t: Date.now(), ...info };
-    if (err && typeof err === "object") {
-      e.message = String(err.message || err);
-      e.name = err.name;
-      if (err.stack)
-        e.stack = String(err.stack).split("\n").slice(0, 12).join("\n");
-    } else e.message = String(err);
-    if (D.inflight && !e.during) e.during = D.inflight;
-    else if (!e.during && D.actions.length) e.lastAction = D.actions.at(-1);
-    if (S) e.state = safeDigest(S);
-    push(D.errors, e, LIMITS.errors);
-    D.inflight = null;
-    store();
-    return e;
+  function error(thrown, info, state) {
+    const record = { t: Date.now(), ...info };
+    if (thrown && typeof thrown === "object") {
+      record.message = String(thrown.message || thrown);
+      record.name = thrown.name;
+      if (thrown.stack)
+        record.stack = String(thrown.stack).split("\n").slice(0, 12).join("\n");
+    } else record.message = String(thrown);
+    if (store.inflight && !record.during) record.during = store.inflight;
+    else if (!record.during && store.actions.length)
+      record.lastAction = store.actions.at(-1);
+    if (state) record.state = safeDigest(state);
+    push(store.errors, record, LIMITS.errors);
+    store.inflight = null;
+    persist();
+    return record;
   }
 
-  const iso = (t) => {
+  const iso = (time) => {
     try {
-      return new Date(t).toISOString();
-    } catch (e) {
-      return String(t);
+      return new Date(time).toISOString();
+    } catch {
+      return String(time);
     }
   };
-  const withTimes = (list) => list.map((e) => ({ when: iso(e.t), ...e }));
-  function summary(S, env, errors) {
-    const s = [];
-    s.push(
+  const withTimes = (list) =>
+    list.map((record) => ({ when: iso(record.t), ...record }));
+  function summary(state, env, errors) {
+    const lines = [];
+    lines.push(
       "Queller Bot Runner version " +
-        Q.VERSION +
+        engine.VERSION +
         (env?.built ? " (built " + env.built + ")" : ""),
     );
-    if (!S) s.push("No game in progress (New game screen)");
+    if (!state) lines.push("No game in progress (New game screen)");
     else {
-      s.push(
+      lines.push(
         "Turn " +
-          S.turn +
+          state.turn +
           ", " +
-          S.phase +
-          (S.strategy ? ", " + S.strategy + " strategy" : "") +
+          state.phase +
+          (state.strategy ? ", " + state.strategy + " strategy" : "") +
           "; settings: dice " +
-          (S.settings.dice ? "on" : "off") +
+          (state.settings.dice ? "on" : "off") +
           ", cards " +
-          (S.settings.cards ? "on" : "off") +
+          (state.settings.cards ? "on" : "off") +
           ", tracker " +
-          (S.settings.tracker ? "on" : "off") +
+          (state.settings.tracker ? "on" : "off") +
           ", WoME " +
-          (S.settings.wome ? "on" : "off"),
+          (state.settings.wome ? "on" : "off"),
       );
-      const w = S.walk;
-      if (w)
-        s.push(
+      const walk = state.walk;
+      if (walk)
+        lines.push(
           "Walk: " +
-            (F[w.entry.page] ? F[w.entry.page].name : w.entry.page) +
+            (FLOW[walk.entry.page]
+              ? FLOW[walk.entry.page].name
+              : walk.entry.page) +
             " from “" +
-            Q.normalizeText(w.entry.start) +
+            engine.normalizeText(walk.entry.start) +
             "”, now at " +
-            w.page +
+            walk.page +
             "." +
-            w.node +
-            (w.prompt ? ", prompt " + w.prompt.type : "") +
-            (w.done ? ", finished (" + w.result + ")" : "") +
+            walk.node +
+            (walk.prompt ? ", prompt " + walk.prompt.type : "") +
+            (walk.done ? ", finished (" + walk.result + ")" : "") +
             ", " +
-            w.trail.length +
+            walk.trail.length +
             " trail entries",
         );
-      else s.push("No walk in progress");
+      else lines.push("No walk in progress");
     }
     if (errors.length)
-      s.push(
+      lines.push(
         errors.length +
           " error" +
           (errors.length === 1 ? "" : "s") +
           " recorded; latest: " +
           errors[errors.length - 1].message,
       );
-    else s.push("No errors recorded");
-    s.push(D.actions.length + " actions in the history");
-    return s;
+    else lines.push("No errors recorded");
+    lines.push(store.actions.length + " actions in the history");
+    return lines;
   }
-  // Build the log. ctx: {S, history (undo snapshots, JSON strings), report, env, dom, storage, brokenAutosave, opts}
-  function build(ctx) {
-    ctx = ctx || {};
-    const S = ctx.S || null;
-    const prev = (ctx.history || [])
+  // The undo snapshots (JSON strings), newest first, parsed.
+  function parseHistory(history) {
+    return history
       .slice(-LIMITS.states)
       .reverse()
-      .map((j) => {
+      .map((json) => {
         try {
-          return JSON.parse(j);
-        } catch (e) {
-          return { unparseable: String(e) };
+          return JSON.parse(json);
+        } catch (parseError) {
+          return { unparseable: String(parseError) };
         }
       });
-    let broken = null;
-    if (ctx.brokenAutosave) {
-      try {
-        broken = JSON.parse(ctx.brokenAutosave);
-      } catch (e) {
-        broken = {
-          unparseable: String(e),
-          head: String(ctx.brokenAutosave).slice(0, 400),
-        };
-      }
+  }
+  function parseBrokenAutosave(raw) {
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw);
+    } catch (parseError) {
+      return {
+        unparseable: String(parseError),
+        head: String(raw).slice(0, 400),
+      };
     }
-    const errors = withTimes(D.errors);
+  }
+  function flowDataCounts() {
+    const pages = Object.values(FLOW);
     return {
-      format: FORMAT,
-      app: { version: Q.VERSION, built: ctx.env?.built || null },
-      exported: iso(Date.now()),
-      report: ctx.report || "",
-      summary: summary(S, ctx.env, errors),
-      environment: ctx.env || null,
-      dom: ctx.dom || null,
-      storage: ctx.storage || null,
-      options: ctx.opts || null,
-      errors,
-      actions: withTimes(D.actions),
-      walks: withTimes(D.walks).map((w) => {
-        const o = { ...w };
-        delete o.key;
-        return o;
-      }),
-      state: S,
-      previousStates: prev,
-      undoDepth: (ctx.history || []).length,
-      brokenAutosave: broken,
-      data: {
-        pages: Object.keys(F).length,
-        nodes: Object.keys(F).reduce(
-          (n, k) => n + Object.keys(F[k].nodes).length,
-          0,
-        ),
-        edges: Object.keys(F).reduce((n, k) => n + F[k].edges.length, 0),
-        cards: Q.CARDS.length,
-      },
+      pages: pages.length,
+      nodes: pages.reduce(
+        (total, page) => total + Object.keys(page.nodes).length,
+        0,
+      ),
+      edges: pages.reduce((total, page) => total + page.edges.length, 0),
+      cards: engine.CARDS.length,
     };
   }
-  function text(ctx) {
-    return JSON.stringify(build(ctx), null, 1);
+  // Build the log from the game state, the undo history (JSON snapshots), the player's report and what the page knows about itself.
+  function build({
+    state = null,
+    history = [],
+    report = "",
+    env = null,
+    dom = null,
+    storage = null,
+    brokenAutosave = null,
+    opts = null,
+  } = {}) {
+    const errors = withTimes(store.errors);
+    return {
+      format: FORMAT,
+      app: { version: engine.VERSION, built: env?.built || null },
+      exported: iso(Date.now()),
+      report,
+      summary: summary(state, env, errors),
+      environment: env,
+      dom,
+      storage,
+      options: opts,
+      errors,
+      actions: withTimes(store.actions),
+      walks: withTimes(store.walks).map(({ key, ...walk }) => walk),
+      state,
+      previousStates: parseHistory(history),
+      undoDepth: history.length,
+      brokenAutosave: parseBrokenAutosave(brokenAutosave),
+      data: flowDataCounts(),
+    };
   }
-  function fileName(S) {
+  function text(context) {
+    return JSON.stringify(build(context), null, 1);
+  }
+  function fileName(state) {
     return (
       "queller-debug" +
-      (S ? "-turn" + S.turn : "") +
+      (state ? "-turn" + state.turn : "") +
       "-" +
       iso(Date.now()).replace(/[:.]/g, "-").slice(0, 19) +
       ".json"
     );
   }
   function reset() {
-    D.actions = [];
-    D.errors = [];
-    D.walks = [];
-    D.inflight = null;
-    store();
+    store.actions = [];
+    store.errors = [];
+    store.walks = [];
+    store.inflight = null;
+    persist();
   }
 
   window.QB_DEBUG = {
@@ -328,7 +361,7 @@
     LIMITS,
     restore,
     begin,
-    end,
+    finishAction,
     action,
     error,
     digest,
@@ -337,13 +370,13 @@
     fileName,
     reset,
     get errors() {
-      return D.errors;
+      return store.errors;
     },
     get actions() {
-      return D.actions;
+      return store.actions;
     },
     get walks() {
-      return D.walks;
+      return store.walks;
     },
   };
 })();

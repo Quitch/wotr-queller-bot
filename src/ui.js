@@ -83,14 +83,14 @@
       showErrBar();
       return;
     }
-    DBG.end(S);
+    DBG.finishAction(S);
     commit();
   }
   function undo() {
     if (!history.length) return;
     DBG.begin({ a: "undo" }, S);
     S = JSON.parse(history.pop());
-    DBG.end(S);
+    DBG.finishAction(S);
     commit();
   }
   function loadJSON(txt) {
@@ -438,7 +438,7 @@
       S = Q.newState(st);
       history = [];
       Q.log(S, "New game. Roll for Queller’s starting strategy.");
-      DBG.end(S);
+      DBG.finishAction(S);
       commit();
     };
     $("#loadBtn").onclick = () => {
@@ -1834,7 +1834,7 @@
         S = null;
         modal = null;
         lsSet(LS, "");
-        DBG.end(null);
+        DBG.finishAction(null);
         render();
       },
     });

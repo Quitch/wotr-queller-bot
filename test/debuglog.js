@@ -47,7 +47,7 @@ function drive(S) {
       S,
     );
     Q.answer(S, value);
-    DBG.end(S);
+    DBG.finishAction(S);
   }
 }
 
@@ -60,12 +60,12 @@ ok(
 DBG.action({ a: "pageLoad", autosave: false }, null);
 DBG.begin({ a: "phase", id: "setup" }, S);
 Q.startPhase(S, "setup");
-DBG.end(S);
+DBG.finishAction(S);
 drive(S);
 for (const ph of ["p1", "p3", "p4", "p5"]) {
   DBG.begin({ a: "phase", id: ph }, S);
   Q.startPhase(S, ph);
-  DBG.end(S);
+  DBG.finishAction(S);
   drive(S);
 }
 const acts = DBG.actions;
@@ -108,11 +108,11 @@ ok(
 // abandoning a walk mid-way keeps its trail
 DBG.begin({ a: "phase", id: "p5" }, S);
 Q.startPhase(S, "p5");
-DBG.end(S);
+DBG.finishAction(S);
 if (S.walk && !S.walk.done) {
   DBG.begin({ a: "phase", id: "abandon" }, S);
   S.walk = null;
-  DBG.end(S);
+  DBG.finishAction(S);
   ok(
     DBG.walks[DBG.walks.length - 1].note === "replaced or abandoned",
     "an abandoned walk is kept with a note",
@@ -185,7 +185,7 @@ const history = [
   JSON.stringify(S),
 ];
 const txt = DBG.text({
-  S,
+  state: S,
   history,
   report: "the walk went wrong",
   env: { built: "test", userAgent: "node" },
@@ -253,7 +253,7 @@ if (L) {
     "flowchart and card data counts included",
   );
 }
-const txt2 = DBG.text({ S: null, history: [] });
+const txt2 = DBG.text({ state: null, history: [] });
 const L2 = JSON.parse(txt2);
 ok(
   L2.state === null && L2.summary.some((s) => /No game/.test(s)),
@@ -277,7 +277,7 @@ for (let t = 0; t < 8; t++) {
   Q.nextTurn(S3);
 }
 const big = DBG.text({
-  S: S3,
+  state: S3,
   history: new Array(60).fill(JSON.stringify(S3)),
 });
 ok(
