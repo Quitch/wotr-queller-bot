@@ -1,3 +1,5 @@
 node_modules/
 index.html
 docs/refs
+test/shot-*.png
+test/smoke.png
