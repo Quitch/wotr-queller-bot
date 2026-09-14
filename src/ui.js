@@ -1,153 +1,165 @@
 // ===== UI =====
 (function () {
-  const Q = window.QB,
-    F = window.QB_FLOW,
-    byId = Q.cardById,
-    G = window.QB_GLOSSARY,
-    DBG = window.QB_DEBUG;
-  let S = null,
+  const engine = window.QB,
+    FLOW = window.QB_FLOW,
+    cardById = engine.cardById,
+    GLOSSARY = window.QB_GLOSSARY,
+    debug = window.QB_DEBUG;
+  let state = null,
     history = [],
     modal = null,
     shownCard = null;
-  const $ = (s) => document.querySelector(s);
-  const esc = (s) =>
-    String(s).replace(
+  const find = (selector) => document.querySelector(selector);
+  const escapeHTML = (text) =>
+    String(text).replace(
       /[&<>"]/g,
-      (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c],
+      (character) =>
+        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character],
     );
-  function termKey(t) {
-    t = t.toLowerCase().replace(/\s+/g, " ").trim();
-    if (G[t]) return t;
-    if (window.QB_GLOSSARY_ALIASES[t]) return window.QB_GLOSSARY_ALIASES[t];
-    const s = t.replace(/s$/, "");
-    if (G[s]) return s;
+  function termKey(term) {
+    term = term.toLowerCase().replace(/\s+/g, " ").trim();
+    if (GLOSSARY[term]) return term;
+    if (window.QB_GLOSSARY_ALIASES[term])
+      return window.QB_GLOSSARY_ALIASES[term];
+    const singular = term.replace(/s$/, "");
+    if (GLOSSARY[singular]) return singular;
     return null;
   }
-  function fmt(t) {
-    if (t == null) return "";
-    return esc(t)
-      .replace(/\*([^*]+)\*/g, (m, w) => {
-        const k = termKey(w);
-        return k
+  // Card and flowchart text as HTML: *term* becomes a glossary button (or italics when the glossary has no entry), newlines become <br>.
+  function formatText(text) {
+    if (text == null) return "";
+    return escapeHTML(text)
+      .replace(/\*([^*]+)\*/g, (match, term) => {
+        const key = termKey(term);
+        return key
           ? '<button type="button" class="term" data-term="' +
-              k +
+              key +
               '" aria-describedby="tip">' +
-              w +
+              term +
               "</button>"
-          : "<i>" + w + "</i>";
+          : "<i>" + term + "</i>";
       })
       .replaceAll("\n", "<br>");
   }
-  function plain(t) {
-    return String(t || "").replaceAll("*", "");
+  function stripMarkup(text) {
+    return String(text || "").replaceAll("*", "");
   }
 
   // ---------- persistence ----------
-  const LS = "qb.autosave",
-    LSLOTS = "qb.slots",
-    LSOPTS = "qb.opts",
-    LSDEBUG = "qb.debug";
-  function lsGet(k) {
+  const STORAGE_KEY = {
+    AUTOSAVE: "qb.autosave",
+    BROKEN_AUTOSAVE: "qb.autosave.broken",
+    SLOTS: "qb.slots",
+    OPTIONS: "qb.opts",
+    DEBUG: "qb.debug",
+    PROBE: "qb.probe",
+  };
+  function storageGet(key) {
     try {
-      return localStorage.getItem(k);
-    } catch (e) {
+      return localStorage.getItem(key);
+    } catch {
       return null;
     }
   }
-  function lsSet(k, v) {
+  function storageSet(key, value) {
     try {
-      localStorage.setItem(k, v);
-    } catch (e) {}
+      localStorage.setItem(key, value);
+    } catch {}
   }
   function snapshot() {
-    history.push(JSON.stringify(S));
+    history.push(JSON.stringify(state));
     if (history.length > 60) history.shift();
   }
   function commit() {
-    if (S) S.appVersion = Q.VERSION;
-    lsSet(LS, JSON.stringify(S));
+    if (state) state.appVersion = engine.VERSION;
+    storageSet(STORAGE_KEY.AUTOSAVE, JSON.stringify(state));
     render();
   }
   // Every change to the game goes through here. `info` names the action for the debug log ({a:"answer", ...}).
   // If the action throws, the game is put back as it was before it, the error is recorded and the error bar offers a debug log.
   function act(fn, info) {
     snapshot();
-    DBG.begin(info || { a: "act" }, S);
+    debug.begin(info || { a: "act" }, state);
     try {
       fn();
-    } catch (e) {
-      const bad = S;
-      S = JSON.parse(history.pop());
-      DBG.error(e, { a: "actionFailed", rolledBack: true }, bad);
+    } catch (error) {
+      const brokenState = state;
+      state = JSON.parse(history.pop());
+      debug.error(error, { a: "actionFailed", rolledBack: true }, brokenState);
       commit();
       showErrBar();
       return;
     }
-    DBG.finishAction(S);
+    debug.finishAction(state);
     commit();
   }
   function undo() {
     if (!history.length) return;
-    DBG.begin({ a: "undo" }, S);
-    S = JSON.parse(history.pop());
-    DBG.finishAction(S);
+    debug.begin({ a: "undo" }, state);
+    state = JSON.parse(history.pop());
+    debug.finishAction(state);
     commit();
   }
-  function loadJSON(txt) {
-    const o = JSON.parse(txt);
-    if (!o?.settings || !o.board) throw new Error("not a Queller save");
-    return Q.migrate(o);
+  function loadJSON(text) {
+    const save = JSON.parse(text);
+    if (!save?.settings || !save.board) throw new Error("not a Queller save");
+    return engine.migrate(save);
   }
 
   // ---------- boot ----------
   function boot() {
-    DBG.restore({ get: () => lsGet(LSDEBUG), set: (v) => lsSet(LSDEBUG, v) });
-    window.addEventListener("error", (e) => {
-      DBG.error(
-        e.error || e.message,
+    debug.restore({
+      get: () => storageGet(STORAGE_KEY.DEBUG),
+      set: (text) => storageSet(STORAGE_KEY.DEBUG, text),
+    });
+    window.addEventListener("error", (event) => {
+      debug.error(
+        event.error || event.message,
         {
           a: "uncaught",
-          src: e.filename ? String(e.filename).split("/").pop() : null,
-          line: e.lineno,
-          col: e.colno,
+          src: event.filename ? String(event.filename).split("/").pop() : null,
+          line: event.lineno,
+          col: event.colno,
         },
-        S,
+        state,
       );
       showErrBar();
     });
-    window.addEventListener("unhandledrejection", (e) => {
-      DBG.error(
-        e.reason || "unhandled promise rejection",
+    window.addEventListener("unhandledrejection", (event) => {
+      debug.error(
+        event.reason || "unhandled promise rejection",
         { a: "unhandledrejection" },
-        S,
+        state,
       );
       showErrBar();
     });
-    const a = lsGet(LS);
-    let loadErr = null;
-    if (a) {
+    const autosaveText = storageGet(STORAGE_KEY.AUTOSAVE);
+    let loadError = null;
+    if (autosaveText) {
       try {
-        S = loadJSON(a);
-      } catch (e) {
-        S = null;
-        loadErr = e;
+        state = loadJSON(autosaveText);
+      } catch (error) {
+        state = null;
+        loadError = error;
       }
     }
-    if (loadErr) {
-      lsSet(LS + ".broken", a);
-      DBG.error(loadErr, {
+    if (loadError) {
+      storageSet(STORAGE_KEY.BROKEN_AUTOSAVE, autosaveText);
+      debug.error(loadError, {
         a: "boot-load",
-        note: "the autosave could not be parsed; kept under " + LS + ".broken",
+        note:
+          "the autosave could not be parsed; kept under " +
+          STORAGE_KEY.BROKEN_AUTOSAVE,
       });
     }
-    DBG.action(
+    debug.action(
       {
         a: "pageLoad",
-        autosave: !!a,
-        restored: !!S,
-        broken: !!lsGet(LS + ".broken"),
+        autosave: !!autosaveText,
+        restored: !!state,
+        broken: !!storageGet(STORAGE_KEY.BROKEN_AUTOSAVE),
       },
-      S,
+      state,
     );
     document.documentElement.lang = document.documentElement.lang || "en";
     tipEl = document.createElement("div");
@@ -156,33 +168,33 @@
     tipEl.setAttribute("role", "tooltip");
     tipEl.addEventListener("mouseleave", hideTip);
     document.body.appendChild(tipEl);
-    document.body.addEventListener("mouseover", (e) => {
-      const t = e.target.closest(".term");
-      if (t) showTip(t);
+    document.body.addEventListener("mouseover", (event) => {
+      const term = event.target.closest(".term");
+      if (term) showTip(term);
     });
-    document.body.addEventListener("mouseout", (e) => {
-      const t = e.target.closest(".term");
-      if (t && !e.relatedTarget?.closest?.("#tip")) hideTip();
+    document.body.addEventListener("mouseout", (event) => {
+      const term = event.target.closest(".term");
+      if (term && !event.relatedTarget?.closest?.("#tip")) hideTip();
     });
-    document.body.addEventListener("focusin", (e) => {
-      const t = e.target.closest(".term");
-      if (t) showTip(t);
+    document.body.addEventListener("focusin", (event) => {
+      const term = event.target.closest(".term");
+      if (term) showTip(term);
     });
-    document.body.addEventListener("focusout", (e) => {
-      if (e.target.closest(".term")) hideTip();
+    document.body.addEventListener("focusout", (event) => {
+      if (event.target.closest(".term")) hideTip();
     });
-    document.body.addEventListener("click", (e) => {
-      const t = e.target.closest(".term");
-      if (t) {
+    document.body.addEventListener("click", (event) => {
+      const term = event.target.closest(".term");
+      if (term) {
         hideTip();
-        openModal("glossary", t.dataset.term);
+        openModal("glossary", term.dataset.term);
       }
     });
-    document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
         if (tipEl && !tipEl.hidden) {
           hideTip();
-          e.stopPropagation();
+          event.stopPropagation();
           return;
         }
         if (modal) closeModal();
@@ -190,24 +202,26 @@
     });
     try {
       render();
-    } catch (e) {
+    } catch (error) {
       console.error(
         "Queller Runner: could not render the saved game — starting at the New game screen.",
-        e,
+        error,
       );
-      lsSet(LS + ".broken", lsGet(LS) || "");
-      DBG.error(
-        e,
+      storageSet(
+        STORAGE_KEY.BROKEN_AUTOSAVE,
+        storageGet(STORAGE_KEY.AUTOSAVE) || "",
+      );
+      debug.error(
+        error,
         {
           a: "boot-render",
           note:
             "the saved game could not be rendered; kept under " +
-            LS +
-            ".broken",
+            STORAGE_KEY.BROKEN_AUTOSAVE,
         },
-        S,
+        state,
       );
-      S = null;
+      state = null;
       history = [];
       render();
       showErrBar();
@@ -222,11 +236,11 @@
       bar.setAttribute("role", "alert");
       document.body.prepend(bar);
     }
-    const n = DBG.errors.length,
-      last = DBG.errors[n - 1];
+    const count = debug.errors.length,
+      last = debug.errors[count - 1];
     bar.innerHTML =
       '<div class="wrap"><span class="msg"><b>Something went wrong in the app</b> — ' +
-      esc(last ? last.message : "an error was recorded") +
+      escapeHTML(last ? last.message : "an error was recorded") +
       (last?.rolledBack
         ? ". Your last action was undone; the game continues."
         : ".") +
@@ -236,22 +250,25 @@
     document.getElementById("errbarClose").onclick = () => bar.remove();
   }
   let tipEl = null;
-  function showTip(t) {
-    const k = t.dataset.term;
-    if (!G[k]) return;
+  function showTip(term) {
+    const key = term.dataset.term;
+    if (!GLOSSARY[key]) return;
     tipEl.innerHTML =
-      "<b>" + esc(k) + "</b>" + esc(G[k]).replace(/\*([^*]+)\*/g, "<i>$1</i>");
-    const r = t.getBoundingClientRect();
-    const w = Math.min(360, window.innerWidth - 24);
-    tipEl.style.maxWidth = w + "px";
-    let x = Math.min(r.left, window.innerWidth - w - 12),
-      y = r.bottom + 8;
+      "<b>" +
+      escapeHTML(key) +
+      "</b>" +
+      escapeHTML(GLOSSARY[key]).replace(/\*([^*]+)\*/g, "<i>$1</i>");
+    const rect = term.getBoundingClientRect();
+    const width = Math.min(360, window.innerWidth - 24);
+    tipEl.style.maxWidth = width + "px";
+    let x = Math.min(rect.left, window.innerWidth - width - 12),
+      y = rect.bottom + 8;
     tipEl.style.left = Math.max(8, x) + "px";
     tipEl.style.top = y + "px";
     tipEl.hidden = false;
-    const h = tipEl.offsetHeight;
-    if (y + h > window.innerHeight - 8)
-      tipEl.style.top = Math.max(8, r.top - h - 8) + "px";
+    const height = tipEl.offsetHeight;
+    if (y + height > window.innerHeight - 8)
+      tipEl.style.top = Math.max(8, rect.top - height - 8) + "px";
   }
   function hideTip() {
     if (tipEl) tipEl.hidden = true;
@@ -261,7 +278,7 @@
   function focusKey(el) {
     if (!el || el === document.body) return null;
     if (el.id) return "#" + el.id;
-    for (const a of [
+    for (const attr of [
       "data-phase",
       "data-ans",
       "data-card",
@@ -270,12 +287,12 @@
       "data-modal",
       "data-t-reset",
     ]) {
-      if (el.hasAttribute(a))
+      if (el.hasAttribute(attr))
         return (
           "[" +
-          a +
+          attr +
           '="' +
-          el.getAttribute(a) +
+          el.getAttribute(attr) +
           '"]' +
           (el.dataset.d === undefined
             ? ""
@@ -288,29 +305,29 @@
     return null;
   }
   function render() {
-    const root = $("#app");
+    const root = find("#app");
     hideTip();
     const prevKey = focusKey(document.activeElement),
       prevWasAnswer = document.activeElement?.dataset?.ans !== undefined;
     const openMore = [...root.querySelectorAll("details.more")].map(
-      (d) => d.open,
+      (details) => details.open,
     );
-    if (!S) {
+    if (!state) {
       root.innerHTML = setupHTML();
       wireSetup();
       return;
     }
     root.innerHTML = gameHTML();
     wire();
-    root.querySelectorAll("details.more").forEach((d, i) => {
-      if (openMore[i]) d.open = true;
+    root.querySelectorAll("details.more").forEach((details, i) => {
+      if (openMore[i]) details.open = true;
     });
-    const live = $("#live");
-    const last = S.log[S.log.length - 1];
-    if (live && last && S.walk) live.textContent = last.t;
-    if (prevWasAnswer || (S.walk?.prompt && !prevKey)) {
-      const p = $(".prompt, .result");
-      if (p) p.focus();
+    const live = find("#live");
+    const last = state.log[state.log.length - 1];
+    if (live && last && state.walk) live.textContent = last.t;
+    if (prevWasAnswer || (state.walk?.prompt && !prevKey)) {
+      const focusTarget = find(".prompt, .result");
+      if (focusTarget) focusTarget.focus();
     } else if (prevKey) {
       const el = root.querySelector(prevKey);
       if (el) el.focus();
@@ -320,12 +337,12 @@
   // The game screen: header, the dice and cards panels, the walkthrough, the board tracker and the footer.
   // With the full board tracker on, the dice and cards panels sit under the walkthrough in the left column; otherwise they share a top row.
   function gameHTML() {
-    const below = S.settings.tracker;
+    const below = state.settings.tracker;
     const panels =
-      (S.settings.dice ? diceHTML() : "") +
-      (S.settings.cards ? cardsHTML() : "");
+      (state.settings.dice ? diceHTML() : "") +
+      (state.settings.cards ? cardsHTML() : "");
     const top = below ? "" : panels;
-    const tr = trackerHTML();
+    const trackerPanel = trackerHTML();
     const body =
       (top
         ? '<div class="toprow" aria-label="Queller’s dice and cards">' +
@@ -333,12 +350,14 @@
           "</div>"
         : "") +
       '<div class="grid' +
-      (tr ? "" : " nowalk") +
+      (trackerPanel ? "" : " nowalk") +
       '"><main id="main" tabindex="-1" aria-label="Walkthrough">' +
       walkHTML(below ? panels : "") +
       "</main>" +
-      (tr
-        ? '<aside class="side" aria-label="Board tracker">' + tr + "</aside>"
+      (trackerPanel
+        ? '<aside class="side" aria-label="Board tracker">' +
+          trackerPanel +
+          "</aside>"
         : "") +
       "</div>";
     return (
@@ -359,48 +378,57 @@
     );
   }
   function setupHTML() {
-    const s = { dice: false, cards: false, tracker: false, wome: false };
+    const settings = { dice: false, cards: false, tracker: false, wome: false };
     try {
-      Object.assign(s, JSON.parse(lsGet(LSOPTS) || "{}"));
-    } catch (e) {}
+      Object.assign(
+        settings,
+        JSON.parse(storageGet(STORAGE_KEY.OPTIONS) || "{}"),
+      );
+    } catch {}
     return (
       '<div class="top"><div class="brand"><h1>Queller Bot Runner</h1><span class="sub">Shadow player · War of the Ring 2nd Ed.</span></div></div>' +
       '<div class="setup"><h2 style="font-size:1.3rem;margin-bottom:6px">New game</h2><p class="notice" style="max-width:none">Choose which parts of the bot the app should run for you. Each part works on its own — turn off anything you would rather keep on the table.</p>' +
-      opt(
-        "dice",
-        "Roll and track Queller’s dice",
-        "Rolls the Shadow Action dice (and the Faction die) and keeps the Hunt box.",
-        "the walkthrough takes or skips options by the dice Queller actually has.",
-        "you roll for Queller, and the walkthrough asks which dice are available.",
-        s.dice,
-      ) +
-      opt(
-        "cards",
-        "Draw and hold Queller’s cards",
-        "Shuffles the Character, Strategy and Faction Event decks, draws, and discards by the priority lists.",
-        "you only see how many cards Queller holds — a card is shown when a flowchart needs to know whether it is *playable*, or when it is played.",
-        "you hold Queller’s cards yourself, and the walkthrough asks about them.",
-        s.cards,
-      ) +
-      opt(
-        "tracker",
-        "Track board state in the app",
-        "A trade-off. The app always walks the flowcharts.",
-        "you keep a board tracker up to date (Fellowship, characters, Political Track, nations, factions) and the app answers every board question from it.",
-        "no tracker to maintain, but every question about the board is put to you.",
-        s.tracker,
-      ) +
+      optionHTML("dice", {
+        title: "Roll and track Queller’s dice",
+        description:
+          "Rolls the Shadow Action dice (and the Faction die) and keeps the Hunt box.",
+        whenOn:
+          "the walkthrough takes or skips options by the dice Queller actually has.",
+        whenOff:
+          "you roll for Queller, and the walkthrough asks which dice are available.",
+        checked: settings.dice,
+      }) +
+      optionHTML("cards", {
+        title: "Draw and hold Queller’s cards",
+        description:
+          "Shuffles the Character, Strategy and Faction Event decks, draws, and discards by the priority lists.",
+        whenOn:
+          "you only see how many cards Queller holds — a card is shown when a flowchart needs to know whether it is *playable*, or when it is played.",
+        whenOff:
+          "you hold Queller’s cards yourself, and the walkthrough asks about them.",
+        checked: settings.cards,
+      }) +
+      optionHTML("tracker", {
+        title: "Track board state in the app",
+        description: "A trade-off. The app always walks the flowcharts.",
+        whenOn:
+          "you keep a board tracker up to date (Fellowship, characters, Political Track, nations, factions) and the app answers every board question from it.",
+        whenOff:
+          "no tracker to maintain, but every question about the board is put to you.",
+        checked: settings.tracker,
+      }) +
       '<h4 style="margin-top:18px">Expansions</h4>' +
-      opt(
-        "wome",
-        "Warriors of Middle-earth",
-        "Adds the Faction Event deck, Call to Battle cards, the Faction die and the “– WoME –” decisions.",
-        "the “– WoME –” decisions are asked and the faction cards and die are in play.",
-        "those decisions are answered No and skipped.",
-        s.wome,
-      ) +
+      optionHTML("wome", {
+        title: "Warriors of Middle-earth",
+        description:
+          "Adds the Faction Event deck, Call to Battle cards, the Faction die and the “– WoME –” decisions.",
+        whenOn:
+          "the “– WoME –” decisions are asked and the faction cards and die are in play.",
+        whenOff: "those decisions are answered No and skipped.",
+        checked: settings.wome,
+      }) +
       '<div style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap"><button class="btn primary" id="start">Start game</button><button class="btn" id="loadBtn">Load a saved game</button><button class="btn ghost" id="debugBtn">Export debug log</button></div>' +
-      (lsGet(LS + ".broken")
+      (storageGet(STORAGE_KEY.BROKEN_AUTOSAVE)
         ? '<p class="notice" role="status" style="margin-top:12px;color:var(--bad)">An earlier game could not be shown after the page reloaded, so the app started here. That game is kept in the debug log — please export it and send it with a description of what happened. Starting a new game clears it.</p>'
         : "") +
       '<div id="loadArea" hidden style="margin-top:14px"></div>' +
@@ -409,48 +437,49 @@
       "</footer></div>"
     );
   }
-  function opt(id, t, d, onT, offT, on) {
+  // One New-game option: a checkbox with its title, description and what happens when it is on or off.
+  function optionHTML(id, { title, description, whenOn, whenOff, checked }) {
     return (
       '<label class="opt"><input type="checkbox" id="opt-' +
       id +
       '" ' +
-      (on ? "checked" : "") +
+      (checked ? "checked" : "") +
       "><div><b>" +
-      t +
+      title +
       "</b><span>" +
-      fmt(d) +
+      formatText(description) +
       '<span class="oo"><b>On:</b> ' +
-      fmt(onT) +
+      formatText(whenOn) +
       '</span><span class="oo"><b>Off:</b> ' +
-      fmt(offT) +
+      formatText(whenOff) +
       "</span></span></div></label>"
     );
   }
   function wireSetup() {
-    $("#start").onclick = () => {
-      const st = {};
+    find("#start").onclick = () => {
+      const settings = {};
       ["dice", "cards", "tracker", "wome"].forEach(
-        (k) => (st[k] = $("#opt-" + k).checked),
+        (key) => (settings[key] = find("#opt-" + key).checked),
       );
-      lsSet(LSOPTS, JSON.stringify(st));
-      lsSet(LS + ".broken", "");
-      DBG.begin({ a: "newGame", settings: st }, null);
-      S = Q.newState(st);
+      storageSet(STORAGE_KEY.OPTIONS, JSON.stringify(settings));
+      storageSet(STORAGE_KEY.BROKEN_AUTOSAVE, "");
+      debug.begin({ a: "newGame", settings }, null);
+      state = engine.newState(settings);
       history = [];
-      Q.log(S, "New game. Roll for Queller’s starting strategy.");
-      DBG.finishAction(S);
+      engine.log(state, "New game. Roll for Queller’s starting strategy.");
+      debug.finishAction(state);
       commit();
     };
-    $("#loadBtn").onclick = () => {
-      const a = $("#loadArea");
-      a.hidden = false;
-      a.innerHTML = loadHTML();
-      wireLoad(a);
+    find("#loadBtn").onclick = () => {
+      const area = find("#loadArea");
+      area.hidden = false;
+      area.innerHTML = loadHTML();
+      wireLoad(area);
     };
-    $("#debugBtn").onclick = () => openModal("debug");
+    find("#debugBtn").onclick = () => openModal("debug");
   }
   function headerHTML() {
-    const ph =
+    const phaseLabel =
       {
         setup: "Setup",
         p1: "Phase 1",
@@ -459,23 +488,23 @@
         p4: "Phase 4",
         p5: "Phase 5",
         p6: "Phase 6",
-      }[S.phase] || S.phase;
+      }[state.phase] || state.phase;
     return (
       '<header class="top"><div class="brand"><h1>Queller Bot Runner</h1><span class="sub">Shadow player</span></div>' +
       '<div class="status"><span class="chip">Turn <b>' +
-      S.turn +
+      state.turn +
       "</b></span>" +
       '<span class="chip">' +
-      ph +
+      phaseLabel +
       "</span>" +
-      (S.strategy
+      (state.strategy
         ? '<span class="chip strat-' +
-          S.strategy +
+          state.strategy +
           '">' +
-          cap(S.strategy) +
+          capitalize(state.strategy) +
           " strategy</span>"
         : "") +
-      (S.settings.wome
+      (state.settings.wome
         ? '<span class="chip"><abbr title="Warriors of Middle-earth">WoME</abbr></span>'
         : "") +
       "</div>" +
@@ -484,43 +513,44 @@
       ' title="Undo the last action">Undo</button><button class="btn" data-modal="save">Save / Load</button><button class="btn" data-modal="glossary">Glossary</button><button class="btn" data-modal="flow">Flowcharts</button><button class="btn" data-modal="rules">Rules</button><button class="btn" data-modal="calc">Army value</button><button class="btn" data-modal="help">Help</button><button class="btn ghost" data-modal="settings">Settings</button><button class="btn ghost" id="newGameBtn">New game</button></nav></header>'
     );
   }
-  const cap = (s) => (s ? s[0].toUpperCase() + s.slice(1) : "");
+  const capitalize = (text) =>
+    text ? text[0].toUpperCase() + text.slice(1) : "";
 
   // ---------- walk panel ----------
   function walkHTML(extra) {
-    let h =
+    let html =
       '<section class="panel" aria-labelledby="h-walk"><h2 class="ph" id="h-walk">Walkthrough</h2>';
-    h += phaseButtonsHTML();
-    const w = S.walk;
-    if (w && !w.done) {
-      h += promptHTML(w);
-    } else if (w?.done) {
-      h += resultHTML(w);
-    } else h += '<div class="idle">' + idleText() + "</div>";
-    if (w)
-      h +=
+    html += phaseButtonsHTML();
+    const walk = state.walk;
+    if (walk && !walk.done) {
+      html += promptHTML(walk);
+    } else if (walk?.done) {
+      html += resultHTML(walk);
+    } else html += '<div class="idle">' + idleText() + "</div>";
+    if (walk)
+      html +=
         "<details " +
-        (w.done ? "" : "open") +
+        (walk.done ? "" : "open") +
         "><summary>Walk trail — " +
-        esc(F[w.entry.page].name) +
+        escapeHTML(FLOW[walk.entry.page].name) +
         " from “" +
-        esc(Q.normalizeText(w.entry.start)) +
+        escapeHTML(engine.normalizeText(walk.entry.start)) +
         "” (" +
-        w.trail.length +
+        walk.trail.length +
         " steps)</summary>" +
-        trailHTML(w) +
+        trailHTML(walk) +
         "</details>";
-    h += "</section>" + (extra || "") + logHTML();
-    return h;
+    html += "</section>" + (extra || "") + logHTML();
+    return html;
   }
   function idleText() {
-    switch (S.phase) {
+    switch (state.phase) {
       case "setup":
         return "Roll a die to choose Queller’s starting strategy (Start of game box).";
       case "p1":
         return "Phase 1: recover Queller’s dice, draw cards and check the hand limit.";
       case "p2":
-        return S.strategy === "corruption"
+        return state.strategy === "corruption"
           ? "Phase 2: declare or hide your Fellowship, then check whether Queller changes strategy."
           : "Phase 2: declare or hide your Fellowship. The military strategy has nothing to do here.";
       case "p3":
@@ -547,57 +577,61 @@
     setup: () => [phaseBtn("setup", "Start of game", true)],
     p1: () => [phaseBtn("p1", "Phase 1", true)],
     p2: () => [
-      S.strategy === "corruption"
+      state.strategy === "corruption"
         ? phaseBtn("p2", "Phase 2", true)
         : phaseBtn("p3", "Phase 3", true),
     ],
     p3: () => [phaseBtn("p3", "Phase 3", true)],
     p4: () => [phaseBtn("p4", "Phase 4", true)],
     p5: () => {
-      const b = [
+      const buttons = [
         dicePoolSpent()
           ? phaseBtn("p6", "Phase 6", true)
           : phaseBtn("p5", "Phase 5", true),
-        S.battleOpen
+        state.battleOpen
           ? phaseBtn("battle2", "Battle (next round)")
           : phaseBtn("battle1", "Battle"),
       ];
-      if (!S.settings.dice) b.push(phaseBtn("p6", "Phase 6"));
-      return b;
+      if (!state.settings.dice) buttons.push(phaseBtn("p6", "Phase 6"));
+      return buttons;
     },
-    p6: () => [phaseBtn("next", "Phase 1 (turn " + (S.turn + 1) + ")", true)],
+    p6: () => [
+      phaseBtn("next", "Phase 1 (turn " + (state.turn + 1) + ")", true),
+    ],
   };
   function phaseButtonsHTML() {
-    const b = [];
-    const P = S.phase;
-    const busy = S.walk && !S.walk.done;
+    const buttons = [];
+    const phase = state.phase;
+    const busy = state.walk && !state.walk.done;
     if (busy) {
-      b.push(
+      buttons.push(
         '<button class="btn small ghost" data-phase="abandon">Abandon this walk</button>',
       );
-    } else if (PHASE_BUTTONS[P]) b.push(...PHASE_BUTTONS[P]());
-    if (!busy && P !== "setup")
-      b.push(
+    } else if (PHASE_BUTTONS[phase]) buttons.push(...PHASE_BUTTONS[phase]());
+    if (!busy && phase !== "setup")
+      buttons.push(
         '<button class="btn small ghost" data-phase="jumpto">Other start point…</button>',
       );
     return (
       '<div class="phasebar"><span class="lbl">' +
       (busy ? "Walking" : "Start point") +
       "</span>" +
-      b.join("") +
+      buttons.join("") +
       "</div>"
     );
   }
   // With dice tracked, Phase 6 replaces Phase 5 once Queller has no usable die left (available or set aside for a minion).
   function dicePoolSpent() {
-    const D = Q.DIE_STATE;
+    const DIE_STATE = engine.DIE_STATE;
     return (
-      S.settings.dice &&
-      S.dice.pool.length > 0 &&
-      !S.dice.pool.some((d) => d.st === D.AVAIL || d.st === D.RESERVED)
+      state.settings.dice &&
+      state.dice.pool.length > 0 &&
+      !state.dice.pool.some(
+        (die) => die.st === DIE_STATE.AVAIL || die.st === DIE_STATE.RESERVED,
+      )
     );
   }
-  const KIND_NAME = {
+  const NODE_KIND_NAME = {
     D: "Decision",
     d: "Follow-up decision",
     A: "Action",
@@ -606,72 +640,78 @@
     J: "Jump",
     S: "Start",
   };
-  function promptHTML(w) {
-    const p = w.prompt,
-      page = F[w.page],
-      node = page.nodes[w.node] || ["D"];
-    const kind = p.kind || node[0] || "D";
+  function promptHTML(walk) {
+    const prompt = walk.prompt,
+      page = FLOW[walk.page],
+      node = page.nodes[walk.node] || ["D"];
+    const kind = prompt.kind || node[0] || "D";
     const eyebrow =
       '<div class="eyebrow"><span class="sw" style="background:var(--n' +
       kind +
       ')"></span>' +
-      esc(page.name) +
+      escapeHTML(page.name) +
       " · " +
-      (KIND_NAME[kind] || "") +
-      (w.die ? " · " + esc(Q.DIE_REQUIREMENT_NAME[w.die]) + " die" : "") +
-      (w.mode === "ringAny" ? " · ring search" : "") +
+      (NODE_KIND_NAME[kind] || "") +
+      (walk.die
+        ? " · " + escapeHTML(engine.DIE_REQUIREMENT_NAME[walk.die]) + " die"
+        : "") +
+      (walk.mode === "ringAny" ? " · ring search" : "") +
       "</div>";
     let body = "",
       answers = "";
-    const yn = () =>
+    const yesNoButtons = () =>
       '<button class="btn yes" data-ans="yes">Yes</button><button class="btn no" data-ans="no">No</button>';
-    switch (p.type) {
+    switch (prompt.type) {
       case "yesno": {
-        const isRing = p.bold || (node[6]?.bold && !p.sub);
+        const isRing = prompt.bold || (node[6]?.bold && !prompt.sub);
         body =
-          (p.board ? '<div class="eyebrow">Board question</div>' : "") +
+          (prompt.board ? '<div class="eyebrow">Board question</div>' : "") +
           '<p class="q">' +
           (isRing ? ringIcon() + " " : "") +
-          fmt(p.text) +
+          formatText(prompt.text) +
           "?</p>" +
           (isRing
             ? '<div class="bold-note">Elven Ring condition: if it is true and Queller lacks the die the next step needs, it uses an Elven Ring (rule 36).</div>'
             : "") +
-          (p.items
+          (prompt.items
             ? "<ol>" +
-              p.items.map((i) => "<li>" + fmt(i) + "</li>").join("") +
+              prompt.items
+                .map((item) => "<li>" + formatText(item) + "</li>")
+                .join("") +
               "</ol>"
             : "");
-        answers = yn();
+        answers = yesNoButtons();
         break;
       }
       case "count":
         body =
           '<div class="eyebrow">Board question</div><p class="q">' +
-          fmt(p.text) +
+          formatText(prompt.text) +
           '</p><p><label for="cnt">Number</label> <input type="number" id="cnt" class="askctl" min="' +
-          p.min +
+          prompt.min +
           '" max="' +
-          p.max +
+          prompt.max +
           '" value="' +
-          (p.value | 0) +
+          (prompt.value | 0) +
           '" style="min-width:100px"></p>';
         answers = '<button class="btn yes" id="cntOk">Continue</button>';
         break;
       case "choice":
         body =
           '<div class="eyebrow">Priority list — you decide</div><p class="q">' +
-          fmt(p.text) +
+          formatText(prompt.text) +
           "</p><ol>" +
-          (p.items || []).map((i) => "<li>" + fmt(i) + "</li>").join("") +
+          (prompt.items || [])
+            .map((item) => "<li>" + formatText(item) + "</li>")
+            .join("") +
           "</ol>";
-        answers = p.options
+        answers = prompt.options
           .map(
-            (o) =>
+            (option) =>
               '<button class="btn" data-ans="' +
-              esc(o.value) +
+              escapeHTML(option.value) +
               '">' +
-              esc(o.label) +
+              escapeHTML(option.label) +
               "</button>",
           )
           .join("");
@@ -679,60 +719,69 @@
       case "situ":
         body =
           '<div class="eyebrow">Board check (for a card in Queller’s hand)</div><p class="q">' +
-          fmt(p.text) +
+          formatText(prompt.text) +
           "</p>";
-        answers = yn();
+        answers = yesNoButtons();
         break;
       case "confirm":
         body =
           '<div class="eyebrow">' +
-          (p.ctx === "combat" ? "Combat card" : "Card") +
+          (prompt.ctx === "combat" ? "Combat card" : "Card") +
           ' check — the condition on this card is met</div><p class="q">Is this card *playable* now? Every paragraph must be usable and have an effect (rule 17).</p>' +
-          cardHTML(byId[p.card], p.ctx === "combat" ? "combat" : "event");
+          cardHTML(
+            cardById[prompt.card],
+            prompt.ctx === "combat" ? CARD_HALF.COMBAT : CARD_HALF.EVENT,
+          );
         answers =
           '<button class="btn yes" data-ans="yes">Playable</button><button class="btn no" data-ans="no">Not playable</button>';
         break;
       case "diecheck":
         body =
           '<p class="q">' +
-          fmt(p.text) +
+          formatText(prompt.text) +
           '</p><div class="help">Grey box: ' +
-          esc(p.label) +
+          escapeHTML(prompt.label) +
           "</div>";
-        answers = yn();
+        answers = yesNoButtons();
         break;
       case "ring":
-        body = '<p class="q">' + fmt(p.text) + "</p>";
+        body = '<p class="q">' + formatText(prompt.text) + "</p>";
         answers =
           '<button class="btn yes" data-ans="yes">Ring used</button><button class="btn no" data-ans="no">No ring available</button>';
         break;
       case "action":
         body =
           '<p class="q">Queller: ' +
-          fmt(p.text) +
+          formatText(prompt.text) +
           "</p>" +
-          (p.help ? '<div class="help">' + fmt(p.help) + "</div>" : "") +
-          (p.pass ? "" : '<div class="help">' + dieHelpText(w) + "</div>");
+          (prompt.help
+            ? '<div class="help">' + formatText(prompt.help) + "</div>"
+            : "") +
+          (prompt.pass
+            ? ""
+            : '<div class="help">' + dieHelpText(walk) + "</div>");
         answers =
           '<button class="btn yes" data-ans="done">Done</button>' +
-          (p.auto
+          (prompt.auto
             ? ""
             : '<button class="btn no" data-ans="no">Not possible (rule 29)</button>');
         break;
       case "playcard": {
-        const c = byId[p.card];
+        const card = cardById[prompt.card];
         body =
           '<p class="q">Queller plays a card' +
-          (p.combat ? " as its combat card" : "") +
+          (prompt.combat ? " as its combat card" : "") +
           ":</p>" +
-          cardHTML(c) +
-          (w.steps?.length
+          cardHTML(card) +
+          (walk.steps?.length
             ? '<ol class="steps">' +
-              w.steps.map((s) => "<li>" + fmt(s) + "</li>").join("") +
+              walk.steps
+                .map((step) => "<li>" + formatText(step) + "</li>")
+                .join("") +
               "</ol>"
             : "") +
           '<div class="help">Resolve it with the matching decision page (rule 12). ' +
-          (Q.staysOnTable(p.card) && !p.combat
+          (engine.staysOnTable(prompt.card) && !prompt.combat
             ? "It stays on the table until discarded."
             : "") +
           "</div>";
@@ -742,51 +791,65 @@
       case "step":
         body =
           '<p class="q">' +
-          fmt(p.text) +
+          formatText(prompt.text) +
           "</p>" +
-          (p.items
+          (prompt.items
             ? "<ol>" +
-              p.items.map((i) => "<li>" + fmt(i) + "</li>").join("") +
+              prompt.items
+                .map((item) => "<li>" + formatText(item) + "</li>")
+                .join("") +
               "</ol>"
             : "");
-        answers = p.move
+        answers = prompt.move
           ? '<button class="btn yes" data-ans="done">Done</button><button class="btn no" data-ans="no">Not possible</button>'
           : '<button class="btn yes" data-ans="done">Continue</button>';
         break;
       case "roll":
-        body = '<p class="q">' + fmt(p.text) + "</p>";
-        answers = p.options
+        body = '<p class="q">' + formatText(prompt.text) + "</p>";
+        answers = prompt.options
           .map(
-            (o) =>
-              '<button class="btn" data-ans="' + o + '">' + o + "</button>",
+            (option) =>
+              '<button class="btn" data-ans="' +
+              option +
+              '">' +
+              option +
+              "</button>",
           )
           .join("");
         break;
       case "priority": {
-        const half = w.page === "BA" ? "combat" : "event";
+        const half = walk.page === "BA" ? CARD_HALF.COMBAT : CARD_HALF.EVENT;
         body =
           '<p class="q">' +
-          fmt(p.text) +
+          formatText(prompt.text) +
           "</p><ol>" +
-          (p.items || []).map((i) => "<li>" + fmt(i) + "</li>").join("") +
+          (prompt.items || [])
+            .map((item) => "<li>" + formatText(item) + "</li>")
+            .join("") +
           "</ol>" +
-          (p.steps
+          (prompt.steps
             ? '<ol class="steps">' +
-              p.steps.map((s) => "<li>" + fmt(s) + "</li>").join("") +
+              prompt.steps
+                .map((step) => "<li>" + formatText(step) + "</li>")
+                .join("") +
               "</ol>"
             : "") +
-          (p.card
-            ? "<div><b>Chosen:</b> " + cardHTML(byId[p.card], half) + "</div>"
+          (prompt.card
+            ? "<div><b>Chosen:</b> " +
+              cardHTML(cardById[prompt.card], half) +
+              "</div>"
             : "") +
-          (p.choice ? "<p><b>Result:</b> " + esc(p.choice) + "</p>" : "") +
-          (!p.steps && !p.card
+          (prompt.choice
+            ? "<p><b>Result:</b> " + escapeHTML(prompt.choice) + "</p>"
+            : "") +
+          (!prompt.steps && !prompt.card
             ? '<div class="help">Apply the list as filters (rule 30), then continue.</div>'
             : "");
         answers = '<button class="btn yes" data-ans="ok">Continue</button>';
         break;
       }
       case "battleForm":
-        body = battleFormHTML(p);
+        body = battleFormHTML(prompt);
         answers = '<button class="btn yes" id="bfOk">Start the round</button>';
         break;
     }
@@ -803,7 +866,7 @@
   }
   // Touch-sized tracker rows shared by the board tracker, the battle form and the army value calculator.
   // attrs: extra attributes for the control (data-* hooks); id: the control's id (label target / aria-labelledby)
-  function rowChk(id, label, on, attrs) {
+  function checkboxRowHTML(id, label, checked, attrs) {
     return (
       '<label class="row chk"><span><span class="lt">' +
       label +
@@ -811,11 +874,11 @@
       id +
       '" ' +
       (attrs || "") +
-      (on ? " checked" : "") +
+      (checked ? " checked" : "") +
       "></label>"
     );
   }
-  function rowNum(id, label, value, attrs = "") {
+  function numberRowHTML(id, label, value, attrs = "") {
     return (
       '<div class="row"><span id="' +
       id +
@@ -826,7 +889,7 @@
       '-l"><button type="button" ' +
       attrs +
       ' data-d="-1" aria-label="Decrease ' +
-      esc(plain(label)) +
+      escapeHTML(stripMarkup(label)) +
       '">\u2212</button><span class="n" id="' +
       id +
       '-n" aria-live="polite">' +
@@ -834,175 +897,190 @@
       '</span><button type="button" ' +
       attrs +
       ' data-d="1" aria-label="Increase ' +
-      esc(plain(label)) +
+      escapeHTML(stripMarkup(label)) +
       '">+</button></span></div>'
     );
   }
-  function battleFormHTML(p) {
-    const B = S.battle || {},
-      f = B.figures || {};
-    const chk = (id, l, v) => rowChk("bf-" + id, l, v);
-    let h = '<p class="q">' + esc(p.text) + '</p><div class="bform tracker">';
-    const nl = B.nazLead || 0;
-    h +=
-      rowNum(
+  function battleFormHTML(prompt) {
+    const battle = state.battle || {},
+      figures = battle.figures || {};
+    const checkbox = (id, label, checked) =>
+      checkboxRowHTML("bf-" + id, label, checked);
+    let html =
+      '<p class="q">' +
+      escapeHTML(prompt.text) +
+      '</p><div class="bform tracker">';
+    const nazgulLeadership = battle.nazLead || 0;
+    html +=
+      numberRowHTML(
         "bf-nazLead",
         "Nazg\u00fbl leadership in the battle",
-        nl,
+        nazgulLeadership,
         'data-bs="1"',
       ) +
       '<input type="hidden" id="bf-nazLead" value="' +
-      nl +
+      nazgulLeadership +
       '">';
-    h += chk(
+    html += checkbox(
       "shadowElite",
       "A Shadow Elite unit is in the battle",
-      B.shadowElite,
+      battle.shadowElite,
     );
-    h += chk(
+    html += checkbox(
       "seElite",
       "A Southrons & Easterlings Elite is in the battle",
-      B.seElite,
+      battle.seElite,
     );
-    h += chk(
+    html += checkbox(
       "isengardStronghold",
       "Isengard unit in the battle and the defender is in a Stronghold",
-      B.isengardStronghold,
+      battle.isengardStronghold,
     );
-    h += chk(
+    html += checkbox(
       "defInFs",
       "The defending army is in the Fellowship region",
-      B.defInFs,
+      battle.defInFs,
     );
-    h += chk(
+    html += checkbox(
       "nearMoria",
       "The defending army is within two regions of Moria",
-      B.nearMoria,
+      battle.nearMoria,
     );
-    if (S.settings.wome) {
-      h +=
-        chk("underSiege", "The Shadow army is under siege", B.underSiege) +
-        chk(
+    if (state.settings.wome) {
+      html +=
+        checkbox(
+          "underSiege",
+          "The Shadow army is under siege",
+          battle.underSiege,
+        ) +
+        checkbox(
           "attackingSiege",
           "The Shadow army is attacking in a siege",
-          B.attackingSiege,
+          battle.attackingSiege,
         ) +
         '<h3 class="full">Faction figures with the Shadow army</h3>' +
-        chk("f-corsairs", "Corsairs", f.corsairs) +
-        chk("f-dunlendings", "Dunlendings", f.dunlendings) +
-        chk("f-spiders", "Spiders", f.spiders);
+        checkbox("f-corsairs", "Corsairs", figures.corsairs) +
+        checkbox("f-dunlendings", "Dunlendings", figures.dunlendings) +
+        checkbox("f-spiders", "Spiders", figures.spiders);
     }
-    return h + "</div>";
+    return html + "</div>";
   }
   function readBattleForm() {
-    const g = (id) => {
-      const e = document.getElementById("bf-" + id);
-      return e ? e.checked : false;
+    const checked = (id) => {
+      const input = document.getElementById("bf-" + id);
+      return input ? input.checked : false;
     };
     return {
-      nazLead: +($("#bf-nazLead").value || 0),
-      shadowElite: g("shadowElite"),
-      seElite: g("seElite"),
-      isengardStronghold: g("isengardStronghold"),
-      defInFs: g("defInFs"),
-      nearMoria: g("nearMoria"),
+      nazLead: +(find("#bf-nazLead").value || 0),
+      shadowElite: checked("shadowElite"),
+      seElite: checked("seElite"),
+      isengardStronghold: checked("isengardStronghold"),
+      defInFs: checked("defInFs"),
+      nearMoria: checked("nearMoria"),
       figures: {
-        corsairs: g("f-corsairs"),
-        dunlendings: g("f-dunlendings"),
-        spiders: g("f-spiders"),
+        corsairs: checked("f-corsairs"),
+        dunlendings: checked("f-dunlendings"),
+        spiders: checked("f-spiders"),
       },
-      underSiege: g("underSiege"),
-      attackingSiege: g("attackingSiege"),
+      underSiege: checked("underSiege"),
+      attackingSiege: checked("attackingSiege"),
     };
   }
   // Which die the walk's current action uses, for the action prompt's help line.
-  function dieHelpText(w) {
-    if (S.settings.dice && w.dieObj != null)
-      return "Uses the " + esc(S.dice.pool[w.dieObj].face) + " die.";
-    return w.die
-      ? "Uses a " + esc(Q.DIE_REQUIREMENT_NAME[w.die]) + " die."
+  function dieHelpText(walk) {
+    if (state.settings.dice && walk.dieObj != null)
+      return (
+        "Uses the " + escapeHTML(state.dice.pool[walk.dieObj].face) + " die."
+      );
+    return walk.die
+      ? "Uses a " + escapeHTML(engine.DIE_REQUIREMENT_NAME[walk.die]) + " die."
       : "";
   }
   // The deck line above a card's title.
-  function cardTag(c) {
-    if (c.deck === "F") return "Faction Event · " + (c.faction || "Sauron");
-    if (c.deck === "B") return "Call to Battle · " + c.faction;
+  function cardTag(card) {
+    if (card.deck === "F")
+      return "Faction Event · " + (card.faction || "Sauron");
+    if (card.deck === "B") return "Call to Battle · " + card.faction;
     return (
-      (c.deck === "C" ? "Character" : "Strategy") +
+      (card.deck === "C" ? "Character" : "Strategy") +
       " · " +
-      (c.type || "") +
+      (card.type || "") +
       " symbol"
     );
   }
   // Card text as paragraphs (blank lines separate them).
   const paragraphsHTML = (text) =>
-    esc(text || "")
+    escapeHTML(text || "")
       .split("\n\n")
-      .map((p) => "<p>" + p + "</p>")
+      .map((paragraph) => "<p>" + paragraph + "</p>")
       .join("");
-  // The combat (bottom) half of a card; `only` when the event half is not shown above it.
-  function combatHalfHTML(c, showEvent) {
+  // The combat (bottom) half of a card; styled as the only half when the event half is not shown above it.
+  function combatHalfHTML(card, eventShownAbove) {
     return (
       '<div class="combat' +
-      (showEvent ? "" : " only") +
+      (eventShownAbove ? "" : " only") +
       '"><div class="ct"><b style="font-size:.9rem">' +
-      esc(c.ct) +
+      escapeHTML(card.ct) +
       '</b><span class="tag">combat</span></div>' +
-      (c.cc ? '<div class="cond">' + esc(c.cc) + "</div>" : "") +
-      paragraphsHTML(c.ctext) +
+      (card.cc ? '<div class="cond">' + escapeHTML(card.cc) + "</div>" : "") +
+      paragraphsHTML(card.ctext) +
       "</div>"
     );
   }
-  function cardHTML(c, half) {
-    // half: "event" (top half only), "combat" (bottom half only) or omitted for the whole card
-    const tag = cardTag(c);
-    const showEvent = half !== "combat" || c.deck === "B",
-      showCombat = half !== "event" && !!c.ct;
-    let h =
+  // Which half of a card to show: the top (event) half, the bottom (combat) half, or the whole card when omitted.
+  const CARD_HALF = { EVENT: "event", COMBAT: "combat" };
+  function cardHTML(card, half) {
+    const tag = cardTag(card);
+    const showEvent = half !== CARD_HALF.COMBAT || card.deck === "B",
+      showCombat = half !== CARD_HALF.EVENT && !!card.ct;
+    let html =
       '<div class="card' +
       (half ? " half" : "") +
       '"><div class="ct"><b>' +
-      esc(c.title) +
+      escapeHTML(card.title) +
       '</b><span class="tag">' +
-      esc(tag) +
-      (c.init != null ? " · init " + esc(c.init) : "") +
+      escapeHTML(tag) +
+      (card.init != null ? " · init " + escapeHTML(card.init) : "") +
       "</span></div>";
     if (showEvent) {
-      if (c.cond) h += '<div class="cond">' + esc(c.cond) + "</div>";
-      h += paragraphsHTML(c.text);
+      if (card.cond)
+        html += '<div class="cond">' + escapeHTML(card.cond) + "</div>";
+      html += paragraphsHTML(card.text);
     }
-    if (showCombat) h += combatHalfHTML(c, showEvent);
+    if (showCombat) html += combatHalfHTML(card, showEvent);
     if (half)
-      h +=
+      html +=
         '<div class="tag halfnote">' +
-        (half === "combat"
+        (half === CARD_HALF.COMBAT
           ? "Bottom (combat) half shown"
           : "Top (event) half shown") +
         "</div>";
-    return h + "</div>";
+    return html + "</div>";
   }
-  function resultHTML(w) {
-    const r = w.result || "";
+  function resultHTML(walk) {
+    const result = walk.result || "";
     let big = "",
       small = "";
-    if (r === "action") {
-      big = "Queller acts: " + esc(plain(w.trail[w.trail.length - 1].text));
+    if (result === "action") {
+      big =
+        "Queller acts: " +
+        escapeHTML(stripMarkup(walk.trail[walk.trail.length - 1].text));
       small =
         "Do this on the board, then take your own action. When Queller is next eligible to act, walk again.";
-    } else if (r === "pass") {
+    } else if (result === "pass") {
       big = "Queller passes.";
-    } else if (r === "noaction") {
+    } else if (result === "noaction") {
       big = "Queller has no usable action.";
-      small = esc(w.trail[w.trail.length - 1].text);
-    } else if (r === "strategy") {
-      big = esc(w.trail[w.trail.length - 1].text);
-    } else if (r === "battleNext") {
+      small = escapeHTML(walk.trail[walk.trail.length - 1].text);
+    } else if (result === "strategy") {
+      big = escapeHTML(walk.trail[walk.trail.length - 1].text);
+    } else if (result === "battleNext") {
       big = "Combat continues.";
       small = "After both sides resolve this round, walk “Battle: next round”.";
-    } else if (r === "end") {
+    } else if (result === "end") {
       big = "End of the walk.";
-    } else if (r.startsWith("phase:")) {
-      big = esc(w.trail[w.trail.length - 1].text);
+    } else if (result.startsWith("phase:")) {
+      big = escapeHTML(walk.trail[walk.trail.length - 1].text);
     }
     return (
       '<div class="result" tabindex="-1"><div class="big">' +
@@ -1014,12 +1092,12 @@
       "</div>"
     );
   }
-  function trailHTML(w) {
+  function trailHTML(walk) {
     return (
       '<ul class="trail" tabindex="0" aria-label="Walk trail">' +
-      w.trail
-        .map((e) => {
-          const k = e.kind;
+      walk.trail
+        .map((entry) => {
+          const kind = entry.kind;
           let label =
             {
               start: "Start",
@@ -1035,27 +1113,35 @@
               reveal: "Card",
               ring: "Ring",
               end: "End",
-            }[k] || k;
-          if (k === "q" && e.auto) label = "Auto";
-          let txt = (e.ring ? ringIcon() + " " : "") + fmt(e.text);
-          if (e.die)
-            txt += ' <span class="why">(' + esc(e.die) + " die)</span>";
-          if (e.why) txt += ' <span class="why">— ' + fmt(e.why) + "</span>";
-          if (k === "pri" && e.card)
-            txt +=
-              ' <span class="why">→ ' + esc(byId[e.card].title) + "</span>";
-          if (k === "pri" && e.choice)
-            txt += ' <span class="why">→ ' + esc(e.choice) + "</span>";
+            }[kind] || kind;
+          if (kind === "q" && entry.auto) label = "Auto";
+          let text =
+            (entry.ring ? ringIcon() + " " : "") + formatText(entry.text);
+          if (entry.die)
+            text +=
+              ' <span class="why">(' + escapeHTML(entry.die) + " die)</span>";
+          if (entry.why)
+            text += ' <span class="why">— ' + formatText(entry.why) + "</span>";
+          if (kind === "pri" && entry.card)
+            text +=
+              ' <span class="why">→ ' +
+              escapeHTML(cardById[entry.card].title) +
+              "</span>";
+          if (kind === "pri" && entry.choice)
+            text +=
+              ' <span class="why">→ ' + escapeHTML(entry.choice) + "</span>";
           return (
             '<li class="t-' +
-            k +
-            (e.auto ? " auto" : "") +
+            kind +
+            (entry.auto ? " auto" : "") +
             '"><span class="k">' +
             label +
             '</span><span class="txt">' +
-            txt +
+            text +
             "</span>" +
-            (e.answer ? '<span class="a">' + esc(e.answer) + "</span>" : "") +
+            (entry.answer
+              ? '<span class="a">' + escapeHTML(entry.answer) + "</span>"
+              : "") +
             "</li>"
           );
         })
@@ -1064,20 +1150,20 @@
     );
   }
   function logHTML() {
-    const items = S.log.slice(-40).reverse();
+    const items = state.log.slice(-40).reverse();
     return (
       '<div class="panel" style="margin-top:14px"><h2 class="ph">Log <span class="r">' +
-      S.log.length +
+      state.log.length +
       ' entries</span></h2><ul class="log" tabindex="0" aria-label="Game log">' +
       items
         .map(
-          (l) =>
+          (entry) =>
             '<li class="' +
-            (l.card ? "c" : "") +
+            (entry.card ? "c" : "") +
             '">T' +
-            l.turn +
+            entry.turn +
             " · " +
-            esc(l.t) +
+            escapeHTML(entry.t) +
             "</li>",
         )
         .join("") +
@@ -1104,9 +1190,9 @@
   function ringIcon(label) {
     return (
       '<svg class="ring-ico" viewBox="0 0 24 24" role="img" aria-label="' +
-      esc(label || "Elven Ring condition") +
+      escapeHTML(label || "Elven Ring condition") +
       '"><title>' +
-      esc(label || "Elven Ring condition (rule 36)") +
+      escapeHTML(label || "Elven Ring condition (rule 36)") +
       "</title>" +
       RING_PATH +
       "</svg>"
@@ -1132,96 +1218,101 @@
       ? '<svg class="ico" aria-hidden="true"><use href="#f-' + id + '"/></svg>'
       : "";
   }
+  const DIE_STATUS_TEXT = {
+    pool: "not yet rolled",
+    hunt: "in the Hunt box",
+    avail: "available — tap to mark it used",
+    used: "used",
+    reserved: "set aside for a minion",
+  };
+  // One die in the pool; an available die is a button that marks it used (index = its position in the pool).
+  function dieHTML(die, index) {
+    const dieStatus = DIE_STATUS_TEXT[die.st];
+    const cls =
+      "die k-" +
+      die.k +
+      " st-" +
+      die.st +
+      (die.face ? " f-" + die.face.replace("/", "-") : "");
+    const inner =
+      (die.face
+        ? faceIcon(die.face)
+        : '<span class="blank" aria-hidden="true"></span>') +
+      '<span class="sr">' +
+      (die.k === "F" ? "Faction die" : "Action die") +
+      (die.face ? " showing " + escapeHTML(die.face) : "") +
+      ", " +
+      dieStatus +
+      "</span>";
+    const title = escapeHTML(die.face || "not rolled") + " · " + dieStatus;
+    return die.st === "avail"
+      ? '<li><button type="button" class="' +
+          cls +
+          '" data-spend="' +
+          index +
+          '" title="' +
+          title +
+          '">' +
+          inner +
+          "</button></li>"
+      : '<li class="' + cls + '" title="' + title + '">' + inner + "</li>";
+  }
   function diceHTML() {
-    const d = S.dice,
-      av = Q.availableDice(S);
-    let h =
+    const dice = state.dice,
+      available = engine.availableDice(state);
+    let html =
       '<section class="panel" aria-labelledby="h-dice"><h2 class="ph" id="h-dice">Queller’s dice <span class="r">' +
-      Q.diceCount(S) +
+      engine.diceCount(state) +
       " action dice" +
-      (d.factionDie && S.settings.wome ? " + Faction die" : "") +
+      (dice.factionDie && state.settings.wome ? " + Faction die" : "") +
       "</span></h2>";
-    h += SPRITE;
-    if (!d.pool.length)
-      h += '<div class="notice">Dice are recovered in Phase 1.</div>';
+    html += SPRITE;
+    if (!dice.pool.length)
+      html += '<div class="notice">Dice are recovered in Phase 1.</div>';
     else {
-      const die = ([x, i]) => {
-        const st = {
-          pool: "not yet rolled",
-          hunt: "in the Hunt box",
-          avail: "available — tap to mark it used",
-          used: "used",
-          reserved: "set aside for a minion",
-        }[x.st];
-        const cls =
-          "die k-" +
-          x.k +
-          " st-" +
-          x.st +
-          (x.face ? " f-" + x.face.replace("/", "-") : "");
-        const inner =
-          (x.face
-            ? faceIcon(x.face)
-            : '<span class="blank" aria-hidden="true"></span>') +
-          '<span class="sr">' +
-          (x.k === "F" ? "Faction die" : "Action die") +
-          (x.face ? " showing " + esc(x.face) : "") +
-          ", " +
-          st +
-          "</span>";
-        const t = esc(x.face || "not rolled") + " · " + st;
-        return x.st === "avail"
-          ? '<li><button type="button" class="' +
-              cls +
-              '" data-spend="' +
-              i +
-              '" title="' +
-              t +
-              '">' +
-              inner +
-              "</button></li>"
-          : '<li class="' + cls + '" title="' + t + '">' + inner + "</li>";
-      };
-      const all = d.pool.map((x, i) => [x, i]);
-      const hunt = all.filter(([x]) => x.st === "hunt"),
-        rest = all.filter(([x]) => x.st !== "hunt");
-      h +=
+      const indexedDice = dice.pool.map((die, index) => [die, index]);
+      const huntDice = indexedDice.filter(([die]) => die.st === "hunt"),
+        otherDice = indexedDice.filter(([die]) => die.st !== "hunt");
+      html +=
         '<div class="dicewrap"><div class="huntbox"><span class="hlbl">Hunt box</span><ul class="dice" aria-label="Dice in the Hunt box">' +
-        (hunt.length
-          ? hunt.map(die).join("")
+        (huntDice.length
+          ? huntDice.map(([die, index]) => dieHTML(die, index)).join("")
           : '<li class="die empty" aria-hidden="true"></li>') +
         '</ul></div><ul class="dice" aria-label="Dice">' +
-        rest.map(die).join("") +
+        otherDice.map(([die, index]) => dieHTML(die, index)).join("") +
         "</ul></div>";
-      if (av.length)
-        h +=
+      if (available.length)
+        html +=
           '<div class="notice" style="margin-top:8px">Tap an available die to mark it used (a card effect, for example).</div>';
     }
-    h +=
+    html +=
       '<div class="legend" aria-hidden="true">' +
       ["Character", "Army", "Muster", "Army/Muster", "Event", "Eye"]
-        .map((f) => "<span>" + faceIcon(f) + esc(f) + "</span>")
+        .map((face) => "<span>" + faceIcon(face) + escapeHTML(face) + "</span>")
         .join("") +
-      (d.factionDie && S.settings.wome
+      (dice.factionDie && state.settings.wome
         ? ["Recruit", "Play/Draw", "Recruit/Play", "Recruit/Draw", "Wild"]
-            .map((f) => "<span>" + faceIcon(f) + esc(f) + "</span>")
+            .map(
+              (face) =>
+                "<span>" + faceIcon(face) + escapeHTML(face) + "</span>",
+            )
             .join("")
         : "") +
       "</div>";
-    h +=
+    html +=
       '<div class="dicerow"><span>Available: <b>' +
-      av.length +
+      available.length +
       "</b></span>" +
-      (S.minionReserved ? "<span>1 set aside for a minion</span>" : "") +
-      (Q.ringsKnown(S)
-        ? "<span>Rings held: <b>" + S.board.rings + "</b></span>"
+      (state.minionReserved ? "<span>1 set aside for a minion</span>" : "") +
+      (engine.ringsKnown(state)
+        ? "<span>Rings held: <b>" + state.board.rings + "</b></span>"
         : "") +
       "</div>";
-    const huntCards = S.cards.table.filter(
-      (id) => id === Q.BALROG || id === "sa009",
+    const huntCards = state.cards.table.filter(
+      (id) => id === engine.BALROG || id === "sa009",
     );
     if (huntCards.length)
-      h +=
+      html +=
         '<div class="notice" style="margin-top:8px">At a Hunt roll: ' +
         huntCards
           .map((id) =>
@@ -1231,78 +1322,78 @@
           )
           .join("; ") +
         ".</div>";
-    return h + "</section>";
+    return html + "</section>";
   }
   // ---------- cards panel ----------
   function cardsHTML() {
-    const c = S.cards,
-      hc = Q.handCounts(S);
-    let h =
+    const cards = state.cards,
+      handCount = engine.handCounts(state);
+    let html =
       '<section class="panel" aria-labelledby="h-cards"><h2 class="ph" id="h-cards">Queller’s cards <span class="r">' +
-      hc.total +
+      handCount.total +
       " in hand" +
-      (S.settings.wome ? " · " + hc.faction + " faction" : "") +
+      (state.settings.wome ? " · " + handCount.faction + " faction" : "") +
       "</span></h2>";
-    h +=
+    html +=
       '<div class="hand"><ul aria-label="Cards in hand: ' +
-      hc.character +
+      handCount.character +
       " Character, " +
-      hc.strategy +
+      handCount.strategy +
       " Strategy" +
-      (S.settings.wome ? ", " + hc.faction + " Faction Event" : "") +
+      (state.settings.wome ? ", " + handCount.faction + " Faction Event" : "") +
       '">' +
-      c.hand
+      cards.hand
         .map(
           (id) =>
             '<li class="back' +
-            (byId[id].deck === "S" ? " s" : "") +
+            (cardById[id].deck === "S" ? " s" : "") +
             '" title="' +
-            (byId[id].deck === "C" ? "Character" : "Strategy") +
+            (cardById[id].deck === "C" ? "Character" : "Strategy") +
             ' card"><span aria-hidden="true">' +
-            (byId[id].deck === "C" ? "C" : "S") +
+            (cardById[id].deck === "C" ? "C" : "S") +
             '</span><span class="sr">' +
-            (byId[id].deck === "C" ? "Character" : "Strategy") +
+            (cardById[id].deck === "C" ? "Character" : "Strategy") +
             " card</span></li>",
         )
         .join("") +
-      c.factionHand
+      cards.factionHand
         .map(
           () =>
             '<li class="back f" title="Faction Event card"><span aria-hidden="true">F</span><span class="sr">Faction Event card</span></li>',
         )
         .join("") +
       "</ul></div>";
-    h +=
+    html +=
       '<div class="kv"><span>Character deck</span><span class="v">' +
-      c.decks.C.length +
+      cards.decks.C.length +
       " / " +
-      c.discards.C.length +
+      cards.discards.C.length +
       ' discarded</span><span>Strategy deck</span><span class="v">' +
-      c.decks.S.length +
+      cards.decks.S.length +
       " / " +
-      c.discards.S.length +
+      cards.discards.S.length +
       " discarded</span>" +
-      (S.settings.wome
+      (state.settings.wome
         ? '<span>Faction deck</span><span class="v">' +
-          c.decks.F.length +
+          cards.decks.F.length +
           " / " +
-          c.discards.F.length +
+          cards.discards.F.length +
           " discarded</span>"
         : "") +
       "</div>";
-    const tbl = c.table.concat(c.factionTable);
-    h += '<div class="more tablecards"><div class="mlbl">On the table</div>';
-    if (!tbl.length)
-      h +=
+    const tableCards = cards.table.concat(cards.factionTable);
+    html += '<div class="more tablecards"><div class="mlbl">On the table</div>';
+    if (!tableCards.length)
+      html +=
         '<div class="notice">No cards in play. Cards Queller plays “on the table” are listed here until discarded.</div>';
     else
-      h += tbl
+      html += tableCards
         .map((id) => {
           const open = shownCard === id,
-            cd = byId[id];
+            card = cardById[id];
           return (
             '<div class="tc"><b>' +
-            esc(cd.title) +
+            escapeHTML(card.title) +
             '</b><button class="btn small" data-card="' +
             (open ? "hide" : "show") +
             '" data-id="' +
@@ -1314,56 +1405,70 @@
             '</button><button class="btn small" data-card="discard" data-id="' +
             id +
             '">Discard</button>' +
-            (cd.reminder
-              ? '<div class="notice rem">' + esc(cd.reminder) + "</div>"
+            (card.reminder
+              ? '<div class="notice rem">' +
+                escapeHTML(card.reminder) +
+                "</div>"
               : "") +
             "</div>" +
-            (open ? cardHTML(cd) : "")
+            (open ? cardHTML(card) : "")
           );
         })
         .join("");
-    h += "</div>";
-    return h + "</section>";
+    html += "</div>";
+    return html + "</section>";
   }
   // ---------- tracker ----------
   // Tracker rows: a checkbox, a number stepper and a Free Peoples nation selector, keyed by the tracker path (e.g. "fs.progress").
-  const tId = (k) => "t-" + k.replaceAll(".", "-");
-  const tChk = (k, l) => rowChk(tId(k), l, getT(k), 'data-t="' + k + '"');
-  const tNum = (k, l) => rowNum(tId(k), l, getT(k), 'data-step="' + k + '"');
-  const tSel = (k, l) =>
+  const trackerId = (path) => "t-" + path.replaceAll(".", "-");
+  const trackerCheckbox = (path, label) =>
+    checkboxRowHTML(
+      trackerId(path),
+      label,
+      boardValue(path),
+      'data-t="' + path + '"',
+    );
+  const trackerNumber = (path, label) =>
+    numberRowHTML(
+      trackerId(path),
+      label,
+      boardValue(path),
+      'data-step="' + path + '"',
+    );
+  const trackerSelect = (path, label) =>
     '<div class="row"><label for="' +
-    tId(k) +
+    trackerId(path) +
     '">' +
-    l +
+    label +
     '</label><select id="' +
-    tId(k) +
+    trackerId(path) +
     '" data-t="' +
-    k +
+    path +
     '"><option value="passive"' +
-    (getT(k) === "passive" ? " selected" : "") +
+    (boardValue(path) === "passive" ? " selected" : "") +
     '>Passive</option><option value="active"' +
-    (getT(k) === "active" ? " selected" : "") +
+    (boardValue(path) === "active" ? " selected" : "") +
     '>Active</option><option value="war"' +
-    (getT(k) === "war" ? " selected" : "") +
+    (boardValue(path) === "war" ? " selected" : "") +
     ">At war</option></select></div>";
   // The situational card checks answered this turn, with a button to forget them (and the playability cache).
   function situBlockHTML() {
-    const sk = Object.keys(S.situ);
+    const answeredKeys = Object.keys(state.situ);
     return (
       '<h3>Card checks answered this turn</h3><div class="situ">' +
-      (sk.length
-        ? sk
+      (answeredKeys.length
+        ? answeredKeys
             .map(
-              (k) =>
+              (key) =>
                 '<div class="row"><span>' +
-                esc(Q.SITUATIONAL_QUESTIONS[k]) +
+                escapeHTML(engine.SITUATIONAL_QUESTIONS[key]) +
                 "</span><b>" +
-                (S.situ[k] ? "Yes" : "No") +
+                (state.situ[key] ? "Yes" : "No") +
                 "</b></div>",
             )
             .join("")
         : '<div class="row"><span>None yet</span></div>') +
-      (sk.length || Object.keys(S.playable).length
+      (answeredKeys.length || Object.keys(state.playable).length
         ? '<div class="row"><span></span><button class="btn small" data-t-reset="1">Forget</button></div>'
         : "") +
       "</div>"
@@ -1371,121 +1476,127 @@
   }
   // Without the full tracker, only the facts the dice pool and card priorities need are tracked.
   function minimalTrackerHTML() {
-    let m = "";
-    if (S.settings.dice)
-      m +=
+    let html = "";
+    if (state.settings.dice)
+      html +=
         "<h3>Minions in play (sizes the dice pool)</h3>" +
-        tChk("chars.saruman", "Saruman") +
-        tChk("chars.witchKing", "Witch King") +
-        tChk("chars.mouth", "Mouth of Sauron");
-    if ((S.settings.cards || S.settings.dice) && S.settings.wome)
-      m +=
+        trackerCheckbox("chars.saruman", "Saruman") +
+        trackerCheckbox("chars.witchKing", "Witch King") +
+        trackerCheckbox("chars.mouth", "Mouth of Sauron");
+    if ((state.settings.cards || state.settings.dice) && state.settings.wome)
+      html +=
         "<h3>Shadow factions in play (" +
-        (S.settings.cards ? "card priorities" : "") +
-        (S.settings.cards && S.settings.dice ? ", " : "") +
-        (S.settings.dice ? "Faction die" : "") +
+        (state.settings.cards ? "card priorities" : "") +
+        (state.settings.cards && state.settings.dice ? ", " : "") +
+        (state.settings.dice ? "Faction die" : "") +
         ")</h3>" +
-        tChk("factions.corsairs", "Corsairs") +
-        tChk("factions.dunlendings", "Dunlendings") +
-        tChk("factions.spiders", "Spiders");
-    if (S.settings.dice)
-      m +=
+        trackerCheckbox("factions.corsairs", "Corsairs") +
+        trackerCheckbox("factions.dunlendings", "Dunlendings") +
+        trackerCheckbox("factions.spiders", "Spiders");
+    if (state.settings.dice)
+      html +=
         "<h3>Hunt box and Elven Rings</h3>" +
-        tNum("fs.companions", "Companions in the Fellowship") +
-        tNum("rings", "Elven Rings held by the Shadow");
-    if (S.settings.cards) m += situBlockHTML();
-    if (!m) return "";
+        trackerNumber("fs.companions", "Companions in the Fellowship") +
+        trackerNumber("rings", "Elven Rings held by the Shadow");
+    if (state.settings.cards) html += situBlockHTML();
+    if (!html) return "";
     return (
       '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">minimal</span></h2><div class="tracker">' +
-      m +
+      html +
       "</div></section>"
     );
   }
   function trackerHTML() {
-    if (!S.settings.tracker) return minimalTrackerHTML();
-    let h =
+    if (!state.settings.tracker) return minimalTrackerHTML();
+    let html =
       '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">answers what it can</span></h2><div class="tracker">';
-    h +=
+    html +=
       "<h3>Score</h3>" +
-      tNum("shadowVP", "Shadow victory points") +
-      tNum("corruption", "Corruption") +
-      tNum("rings", "Elven Rings held by the Shadow");
-    h +=
+      trackerNumber("shadowVP", "Shadow victory points") +
+      trackerNumber("corruption", "Corruption") +
+      trackerNumber("rings", "Elven Rings held by the Shadow");
+    html +=
       "<h3>Fellowship</h3>" +
-      tNum("fs.progress", "Progress counter") +
-      tNum("fs.companions", "Companions in the Fellowship") +
-      tChk("fs.revealed", "Revealed") +
-      tChk("fs.mordor", "On the Mordor track") +
-      tChk("fs.atStart", "Figure in Rivendell") +
-      tChk("fs.inFPSettlement", "Figure in a Free Peoples settlement region") +
-      tChk("fs.inStrongholdOrSea", "Figure in a Stronghold or at sea") +
-      tChk("fs.guideGollum", "Gollum is the Guide");
-    h +=
+      trackerNumber("fs.progress", "Progress counter") +
+      trackerNumber("fs.companions", "Companions in the Fellowship") +
+      trackerCheckbox("fs.revealed", "Revealed") +
+      trackerCheckbox("fs.mordor", "On the Mordor track") +
+      trackerCheckbox("fs.atStart", "Figure in Rivendell") +
+      trackerCheckbox(
+        "fs.inFPSettlement",
+        "Figure in a Free Peoples settlement region",
+      ) +
+      trackerCheckbox(
+        "fs.inStrongholdOrSea",
+        "Figure in a Stronghold or at sea",
+      ) +
+      trackerCheckbox("fs.guideGollum", "Gollum is the Guide");
+    html +=
       "<h3>Characters in play</h3>" +
-      tChk("chars.saruman", "Saruman") +
-      tChk("chars.witchKing", "Witch King") +
-      tChk("chars.mouth", "Mouth of Sauron") +
-      tNum("nazgul", "Nazg\u00fbl on the map") +
-      tChk("chars.gandalfWhite", "Gandalf the White") +
-      tChk("chars.aragorn", "Aragorn, Heir to Isildur");
-    const selN = (k, l, max) => {
-      let o = "";
-      for (let v = 0; v <= max; v++)
-        o +=
+      trackerCheckbox("chars.saruman", "Saruman") +
+      trackerCheckbox("chars.witchKing", "Witch King") +
+      trackerCheckbox("chars.mouth", "Mouth of Sauron") +
+      trackerNumber("nazgul", "Nazg\u00fbl on the map") +
+      trackerCheckbox("chars.gandalfWhite", "Gandalf the White") +
+      trackerCheckbox("chars.aragorn", "Aragorn, Heir to Isildur");
+    const shadowNationSelect = (path, label, max) => {
+      let options = "";
+      for (let steps = 0; steps <= max; steps++)
+        options +=
           '<option value="' +
-          v +
+          steps +
           '"' +
-          ((getT(k) | 0) === v ? " selected" : "") +
+          ((boardValue(path) | 0) === steps ? " selected" : "") +
           ">" +
-          Q.politicalTrackLabel(v) +
+          engine.politicalTrackLabel(steps) +
           "</option>";
       return (
         '<div class="row"><label for="' +
-        tId(k) +
+        trackerId(path) +
         '">' +
-        l +
+        label +
         '</label><select id="' +
-        tId(k) +
+        trackerId(path) +
         '" data-t="' +
-        k +
+        path +
         '" data-num="1">' +
-        o +
+        options +
         "</select></div>"
       );
     };
-    h +=
+    html +=
       "<h3>Shadow nations (Political Track)</h3>" +
-      selN("nations.sauron", "Sauron", 3) +
-      selN("nations.isengard", "Isengard", 3) +
-      selN("nations.se", "Southrons & Easterlings", 3);
-    h +=
+      shadowNationSelect("nations.sauron", "Sauron", 3) +
+      shadowNationSelect("nations.isengard", "Isengard", 3) +
+      shadowNationSelect("nations.se", "Southrons & Easterlings", 3);
+    html +=
       "<h3>Free Peoples nations</h3>" +
-      tSel("nations.gondor", "Gondor") +
-      tSel("nations.rohan", "Rohan") +
-      tSel("nations.north", "North") +
-      tSel("nations.dwarves", "Dwarves") +
-      tSel("nations.elves", "Elves");
-    if (S.settings.wome)
-      h +=
+      trackerSelect("nations.gondor", "Gondor") +
+      trackerSelect("nations.rohan", "Rohan") +
+      trackerSelect("nations.north", "North") +
+      trackerSelect("nations.dwarves", "Dwarves") +
+      trackerSelect("nations.elves", "Elves");
+    if (state.settings.wome)
+      html +=
         "<h3>Factions in play</h3>" +
-        tChk("factions.corsairs", "Corsairs") +
-        tChk("factions.dunlendings", "Dunlendings") +
-        tChk("factions.spiders", "Spiders") +
-        tChk("factions.ents", "Ents") +
-        tChk("factions.eagles", "Eagles") +
-        tChk("factions.deadmen", "Dead Men");
-    h += situBlockHTML();
-    return h + "</div></section>";
+        trackerCheckbox("factions.corsairs", "Corsairs") +
+        trackerCheckbox("factions.dunlendings", "Dunlendings") +
+        trackerCheckbox("factions.spiders", "Spiders") +
+        trackerCheckbox("factions.ents", "Ents") +
+        trackerCheckbox("factions.eagles", "Eagles") +
+        trackerCheckbox("factions.deadmen", "Dead Men");
+    html += situBlockHTML();
+    return html + "</div></section>";
   }
-  // dotted paths into S.board ("fs.progress")
-  function getT(k) {
-    return k.split(".").reduce((o, p) => o[p], S.board);
+  // dotted paths into state.board ("fs.progress")
+  function boardValue(path) {
+    return path.split(".").reduce((object, key) => object[key], state.board);
   }
-  function setT(k, v) {
-    const ps = k.split(".");
-    let o = S.board;
-    for (let i = 0; i < ps.length - 1; i++) o = o[ps[i]];
-    o[ps[ps.length - 1]] = v;
+  function setBoardValue(path, value) {
+    const keys = path.split(".");
+    let object = state.board;
+    for (let i = 0; i < keys.length - 1; i++) object = object[keys[i]];
+    object[keys[keys.length - 1]] = value;
   }
   const STEP_LIMITS = {
     shadowVP: [0, 10],
@@ -1496,33 +1607,38 @@
     nazgul: [0, 8],
   };
   // A tracker change: apply it, forget cached card checks it may affect, and discard table cards whose condition it triggers (asking when the app cannot tell).
-  function trackerChange(k, v) {
+  function trackerChange(path, value) {
     let asks = [];
-    const from = getT(k);
+    const from = boardValue(path);
     act(
       () => {
-        setT(k, v);
-        if (/^(nations|chars|fs|factions)\./.test(k) || k === "rings")
-          S.playable = {};
-        asks = Q.tableTriggers(S, { key: k, from, to: v });
+        setBoardValue(path, value);
+        if (/^(nations|chars|fs|factions)\./.test(path) || path === "rings")
+          state.playable = {};
+        asks = engine.tableTriggers(state, { key: path, from, to: value });
       },
-      { a: "tracker", key: k, from, to: v },
+      { a: "tracker", key: path, from, to: value },
     );
     const next = () => {
-      const a = asks.shift();
-      if (!a) return;
+      const pending = asks.shift();
+      if (!pending) return;
       ask({
-        title: "Discard “" + byId[a.card].title + "”?",
-        text: a.q,
+        title: "Discard “" + cardById[pending.card].title + "”?",
+        text: pending.q,
         buttons: [
           { v: "ok", label: "Discard it", primary: true },
           { v: "no", label: "Keep it" },
         ],
-        onPick: (v) => {
-          if (v === "ok")
+        onPick: (choice) => {
+          if (choice === "ok")
             act(
-              () => Q.discardCard(S, a.card, "its discard condition was met"),
-              { a: "tableTrigger", card: a.card },
+              () =>
+                engine.discardCard(
+                  state,
+                  pending.card,
+                  "its discard condition was met",
+                ),
+              { a: "tableTrigger", card: pending.card },
             );
           next();
         },
@@ -1533,114 +1649,133 @@
 
   // ---------- wiring ----------
   function wire() {
-    $("#undoBtn").onclick = undo;
-    const ng = $("#newGameBtn");
-    if (ng) ng.onclick = askNewGame;
+    find("#undoBtn").onclick = undo;
+    const newGameBtn = find("#newGameBtn");
+    if (newGameBtn) newGameBtn.onclick = askNewGame;
     document
       .querySelectorAll("[data-modal]")
       .forEach(
-        (b) =>
-          (b.onclick = () =>
+        (button) =>
+          (button.onclick = () =>
             openModal(
-              b.dataset.modal,
-              b.dataset.modal === "flow" ? { current: true } : undefined,
+              button.dataset.modal,
+              button.dataset.modal === "flow" ? { current: true } : undefined,
             )),
       );
     document
       .querySelectorAll("[data-phase]")
-      .forEach((b) => (b.onclick = () => onPhase(b.dataset.phase)));
+      .forEach(
+        (button) => (button.onclick = () => onPhase(button.dataset.phase)),
+      );
     document
       .querySelectorAll("[data-ans]")
-      .forEach((b) => (b.onclick = () => onAnswer(b.dataset.ans)));
-    const bf = $("#bfOk");
-    if (bf)
-      bf.onclick = () => {
+      .forEach(
+        (button) => (button.onclick = () => onAnswer(button.dataset.ans)),
+      );
+    const battleFormOk = find("#bfOk");
+    if (battleFormOk)
+      battleFormOk.onclick = () => {
         const form = readBattleForm();
         act(
           () => {
-            Q.answer(S, form);
+            engine.answer(state, form);
           },
           { a: "answer", prompt: "battleForm", value: form },
         );
       };
     document.querySelectorAll("[data-bs]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          const h = $("#bf-nazLead");
-          const v = Math.max(0, Math.min(8, (+h.value || 0) + +b.dataset.d));
-          h.value = v;
-          $("#bf-nazLead-n").textContent = v;
+      (button) =>
+        (button.onclick = () => {
+          const input = find("#bf-nazLead");
+          const value = Math.max(
+            0,
+            Math.min(8, (+input.value || 0) + +button.dataset.d),
+          );
+          input.value = value;
+          find("#bf-nazLead-n").textContent = value;
         }),
     );
-    const co = $("#cntOk");
-    if (co)
-      co.onclick = () => {
-        const v = $("#cnt").value;
+    const countOk = find("#cntOk");
+    if (countOk)
+      countOk.onclick = () => {
+        const value = find("#cnt").value;
         act(
           () => {
-            Q.answer(S, v);
+            engine.answer(state, value);
             afterWalk();
           },
           {
             a: "answer",
             prompt: "count",
-            page: S.walk?.page,
-            node: S.walk?.node,
-            value: v,
+            page: state.walk?.page,
+            node: state.walk?.node,
+            value,
           },
         );
       };
     document
       .querySelectorAll("[data-spend]")
-      .forEach((b) => (b.onclick = () => spendDieClick(+b.dataset.spend)));
+      .forEach(
+        (button) =>
+          (button.onclick = () => spendDieClick(+button.dataset.spend)),
+      );
     document
       .querySelectorAll("[data-card]")
-      .forEach((b) => (b.onclick = () => onCard(b.dataset.card, b.dataset.id)));
+      .forEach(
+        (button) =>
+          (button.onclick = () =>
+            onCard(button.dataset.card, button.dataset.id)),
+      );
     document.querySelectorAll(".tracker [data-t]").forEach((el) => {
       el.onchange = () => trackerChange(el.dataset.t, trackerValue(el));
     });
     document.querySelectorAll("[data-step]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          const k = b.dataset.step;
-          const lim = STEP_LIMITS[k] || [0, 99];
+      (button) =>
+        (button.onclick = () => {
+          const path = button.dataset.step;
+          const limits = STEP_LIMITS[path] || [0, 99];
           trackerChange(
-            k,
-            Math.min(lim[1], Math.max(lim[0], getT(k) + +b.dataset.d)),
+            path,
+            Math.min(
+              limits[1],
+              Math.max(limits[0], boardValue(path) + +button.dataset.d),
+            ),
           );
         }),
     );
-    const tr = $("[data-t-reset]");
-    if (tr)
-      tr.onclick = () =>
+    const resetBtn = find("[data-t-reset]");
+    if (resetBtn)
+      resetBtn.onclick = () =>
         act(
           () => {
-            S.situ = {};
-            S.playable = {};
+            state.situ = {};
+            state.playable = {};
           },
           { a: "forgetCardChecks" },
         );
   }
-  function onAnswer(a) {
-    const w = S.walk,
-      p = w?.prompt;
-    if (!p) return;
+  function onAnswer(answer) {
+    const walk = state.walk,
+      prompt = walk?.prompt;
+    if (!prompt) return;
     act(
       () => {
-        let v = a;
-        if (["yesno", "situ", "confirm", "diecheck", "ring"].includes(p.type))
-          v = a === "yes";
-        Q.answer(S, v);
+        let value = answer;
+        if (
+          ["yesno", "situ", "confirm", "diecheck", "ring"].includes(prompt.type)
+        )
+          value = answer === "yes";
+        engine.answer(state, value);
         afterWalk();
       },
       {
         a: "answer",
-        prompt: p.type,
-        page: w.page,
-        node: w.node,
-        text: p.text ? String(p.text).slice(0, 80) : undefined,
-        card: p.card,
-        value: a,
+        prompt: prompt.type,
+        page: walk.page,
+        node: walk.node,
+        text: prompt.text ? String(prompt.text).slice(0, 80) : undefined,
+        card: prompt.card,
+        value: answer,
       },
     );
   }
@@ -1650,82 +1785,83 @@
     return el.dataset.num ? +el.value : el.value;
   }
   // The player marks an available die as used by hand (the [data-spend] buttons in the dice row).
-  function spendDieClick(i) {
-    const d = S.dice.pool[i];
-    if (d?.st !== "avail") return;
+  function spendDieClick(index) {
+    const die = state.dice.pool[index];
+    if (die?.st !== "avail") return;
     ask({
       title: "Mark this die as used?",
       text:
         "The " +
-        d.face +
-        (d.k === "F" ? " Faction" : "") +
+        die.face +
+        (die.k === "F" ? " Faction" : "") +
         " die will be marked as used for the rest of this turn. Undo reverses it.",
       buttons: [
         { v: "ok", label: "Mark as used", primary: true },
         { v: "no", label: "Cancel" },
       ],
-      onPick: (v) => {
-        if (v !== "ok") return;
+      onPick: (choice) => {
+        if (choice !== "ok") return;
         act(
           () => {
-            const d2 = S.dice.pool[i];
-            if (d2?.st === "avail") Q.spendDie(S, d2, "marked by you");
+            const dieNow = state.dice.pool[index];
+            if (dieNow?.st === "avail")
+              engine.spendDie(state, dieNow, "marked by you");
           },
-          { a: "spendDie", index: i, face: d.face },
+          { a: "spendDie", index, face: die.face },
         );
       },
     });
   }
   function afterWalk() {
-    const w = S.walk;
-    if (!w?.done) return;
-    const r = w.result || "";
-    if (w.entry.page === "BA") {
-      S.battleOpen = r === "battleNext";
-    } else if (r !== "") {
-      S.battleOpen = false;
+    const walk = state.walk;
+    if (!walk?.done) return;
+    const result = walk.result || "";
+    if (walk.entry.page === "BA") {
+      state.battleOpen = result === "battleNext";
+    } else if (result !== "") {
+      state.battleOpen = false;
     }
-    if (r === "strategy") {
-      S.phase = "p1";
-    } else if (r.startsWith("phase:")) {
-      const name = r.slice(6);
+    if (result === "strategy") {
+      state.phase = "p1";
+    } else if (result.startsWith("phase:")) {
+      const name = result.slice(6);
       const map = {
         "Phase 2": "p2",
         "Phase 3": "p3",
         "Phase 4": "p4",
         "Phase 5": "p5",
       };
-      if (map[name]) S.phase = map[name];
+      if (map[name]) state.phase = map[name];
     }
   }
   function onPhase(id) {
     act(
       () => {
         if (id === "abandon") {
-          S.walk = null;
-          Q.log(S, "Walk abandoned.");
+          state.walk = null;
+          engine.log(state, "Walk abandoned.");
           return;
         }
         if (id === "next") {
-          Q.nextTurn(S);
+          engine.nextTurn(state);
           return;
         }
         if (id === "p6") {
-          S.phase = "p6";
-          S.walk = null;
-          Q.log(
-            S,
+          state.phase = "p6";
+          state.walk = null;
+          engine.log(
+            state,
             "Phase 6: check victory conditions (Shadow VP 10, Corruption 12, Ring destroyed).",
           );
           return;
         }
         if (id === "battle1") {
-          Q.startBattle(S, 1);
+          engine.startBattle(state, 1);
           afterWalk();
           return;
         }
         if (id === "battle2") {
-          Q.startBattle(S, 2);
+          engine.startBattle(state, 2);
           afterWalk();
           return;
         }
@@ -1734,31 +1870,31 @@
           return;
         }
         if (id === "setup") {
-          Q.startPhase(S, "setup");
+          engine.startPhase(state, "setup");
           afterWalk();
           return;
         }
-        Q.startPhase(S, id);
+        engine.startPhase(state, id);
         afterWalk();
       },
       { a: "phase", id },
     );
   }
-  function onCard(k, id) {
-    if (k === "discard") {
-      const c = byId[id];
+  function onCard(action, id) {
+    if (action === "discard") {
+      const card = cardById[id];
       ask({
-        title: "Discard “" + c.title + "”?",
+        title: "Discard “" + card.title + "”?",
         text: "Do this when the card’s own text says it must be discarded, or when a Free Peoples action discards it. It goes to the discard pile.",
         buttons: [
           { v: "ok", label: "Discard", primary: true },
           { v: "no", label: "Cancel" },
         ],
-        onPick: (v) => {
-          if (v !== "ok") return;
+        onPick: (choice) => {
+          if (choice !== "ok") return;
           act(
             () => {
-              Q.discardCard(S, id, "discarded from the table");
+              engine.discardCard(state, id, "discarded from the table");
               if (shownCard === id) shownCard = null;
             },
             { a: "discardTable", card: id },
@@ -1767,8 +1903,8 @@
       });
       return;
     }
-    shownCard = k === "show" ? id : null;
-    DBG.action({ a: "tableCard", show: k === "show", card: id }, S);
+    shownCard = action === "show" ? id : null;
+    debug.action({ a: "tableCard", show: action === "show", card: id }, state);
     render();
   }
 
@@ -1777,47 +1913,48 @@
     showErrBar,
     ringIcon,
     RING_PATH,
-    get S() {
-      return S;
+    get state() {
+      return state;
     },
-    set S(v) {
-      S = v;
+    set state(value) {
+      state = value;
     },
     get history() {
       return history;
     },
-    set history(v) {
-      history = v;
+    set history(value) {
+      history = value;
     },
     act,
     commit,
     render,
-    fmt,
-    esc,
-    plain,
+    find,
+    formatText,
+    escapeHTML,
+    stripMarkup,
     cardHTML,
-    rowChk,
-    rowNum,
+    CARD_HALF,
+    checkboxRowHTML,
+    numberRowHTML,
     openModal,
-    setModal: (m) => {
-      modal = m;
+    setModal: (spec) => {
+      modal = spec;
     },
     getModal: () => modal,
     loadJSON,
-    lsGet,
-    lsSet,
-    LS,
-    LSLOTS,
+    storageGet,
+    storageSet,
+    STORAGE_KEY,
     boot,
     LEGAL,
   };
   function openModal(name, arg) {
     modal = { name, arg };
-    if (name !== "ask") DBG.action({ a: "modal", name }, S);
+    if (name !== "ask") debug.action({ a: "modal", name }, state);
     window.QBUI.renderModal();
   }
-  function ask(a) {
-    openModal("ask", a);
+  function ask(spec) {
+    openModal("ask", spec);
   }
   function askNewGame() {
     ask({
@@ -1827,14 +1964,14 @@
         { v: "ok", label: "Start a new game", primary: true },
         { v: "no", label: "Cancel" },
       ],
-      onPick: (v) => {
-        if (v !== "ok") return;
-        DBG.begin({ a: "newGameScreen" }, S);
+      onPick: (choice) => {
+        if (choice !== "ok") return;
+        debug.begin({ a: "newGameScreen" }, state);
         history = [];
-        S = null;
+        state = null;
         modal = null;
-        lsSet(LS, "");
-        DBG.finishAction(null);
+        storageSet(STORAGE_KEY.AUTOSAVE, "");
+        debug.finishAction(null);
         render();
       },
     });
@@ -1850,7 +1987,7 @@
   function loadHTML() {
     return window.QBUI.loadHTML();
   }
-  function wireLoad(a) {
-    window.QBUI.wireLoad(a);
+  function wireLoad(area) {
+    window.QBUI.wireLoad(area);
   }
 })();

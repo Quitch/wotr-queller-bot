@@ -5,8 +5,8 @@
     U = window.QBUI,
     G = window.QB_GLOSSARY,
     DBG = window.QB_DEBUG;
-  const esc = U.esc,
-    fmt = U.fmt;
+  const esc = U.escapeHTML,
+    fmt = U.formatText;
   const $ = (s) => document.querySelector(s);
   const CALC_DEFAULTS = {
     reg: 0,
@@ -215,7 +215,7 @@
     return ["", ""];
   }
   function currentPage() {
-    const S = U.S;
+    const S = U.state;
     if (!S) return "C14";
     if (S.walk && !S.walk.done && F[S.walk.page]) return S.walk.page;
     const c = S.strategy === "military" ? "M" : "C";
@@ -293,7 +293,7 @@
   };
   function svgPage(pk) {
     const P = F[pk];
-    const S = U.S;
+    const S = U.state;
     const w = S?.walk;
     const curNode = w && !w.done && w.page === pk ? w.node : null;
     const visited = new Set();
@@ -522,7 +522,7 @@
   }
   function textPage(pk) {
     const P = F[pk];
-    const S = U.S,
+    const S = U.state,
       w = S?.walk;
     const curNode = w && !w.done && w.page === pk ? w.node : null;
     const KIND = {
@@ -863,9 +863,9 @@
   function calcHTML() {
     const c = calc;
     const num = (k, l) =>
-      U.rowNum("c-" + k, fmt(l), c[k], 'data-cs="' + k + '"');
+      U.numberRowHTML("c-" + k, fmt(l), c[k], 'data-cs="' + k + '"');
     const chk = (k, l) =>
-      U.rowChk("c-" + k, fmt(l), c[k], 'data-c="' + k + '"');
+      U.checkboxRowHTML("c-" + k, fmt(l), c[k], 'data-c="' + k + '"');
     return (
       '<div class="body"><p class="notice">' +
       fmt(
@@ -984,8 +984,8 @@
     };
     let storage = "ok";
     try {
-      localStorage.setItem("qb.probe", "1");
-      localStorage.removeItem("qb.probe");
+      localStorage.setItem(U.STORAGE_KEY.PROBE, "1");
+      localStorage.removeItem(U.STORAGE_KEY.PROBE);
     } catch (e) {
       storage = "unavailable: " + (e.message || e);
     }
@@ -1014,8 +1014,8 @@
   }
   function storageOverview() {
     const o = {};
-    for (const k of [U.LS, U.LS + ".broken", U.LSLOTS, "qb.opts", "qb.debug"]) {
-      const v = U.lsGet(k);
+    for (const k of Object.values(U.STORAGE_KEY)) {
+      const v = U.storageGet(k);
       o[k] = v == null ? null : v.length;
     }
     return o;
@@ -1052,16 +1052,16 @@
   function debugText() {
     let opts = null;
     try {
-      opts = JSON.parse(U.lsGet("qb.opts") || "null");
+      opts = JSON.parse(U.storageGet(U.STORAGE_KEY.OPTIONS) || "null");
     } catch (e) {}
     return DBG.text({
-      state: U.S,
+      state: U.state,
       history: U.history,
       report: $("#dbgReport")?.value || "",
       env: environment(),
       dom: domSnapshot(),
       storage: storageOverview(),
-      brokenAutosave: U.lsGet(U.LS + ".broken") || null,
+      brokenAutosave: U.storageGet(U.STORAGE_KEY.BROKEN_AUTOSAVE) || null,
       opts,
     });
   }
@@ -1084,7 +1084,7 @@
       } catch (e) {
         ta.value =
           "The debug log could not be built: " + (e.stack || e.message || e);
-        DBG.error(e, { a: "debugBuild" }, U.S);
+        DBG.error(e, { a: "debugBuild" }, U.state);
       }
       return ta.value;
     };
@@ -1094,10 +1094,10 @@
       const data = refresh();
       DBG.action(
         { a: "debugExport", how: "download", bytes: data.length },
-        U.S,
+        U.state,
       );
       downloadText(
-        DBG.fileName(U.S),
+        DBG.fileName(U.state),
         data,
         el.querySelector("#dbgNote"),
         "Copy debug log",
@@ -1105,14 +1105,17 @@
     };
     el.querySelector("#dbgCopy").onclick = () => {
       const data = refresh();
-      DBG.action({ a: "debugExport", how: "copy", bytes: data.length }, U.S);
+      DBG.action(
+        { a: "debugExport", how: "copy", bytes: data.length },
+        U.state,
+      );
       copyText(data, el.querySelector("#dbgNote"), "Debug log", ta);
     };
   }
   // ---------- save / load ----------
   function slots() {
     try {
-      return JSON.parse(U.lsGet(U.LSLOTS) || "[]");
+      return JSON.parse(U.storageGet(U.STORAGE_KEY.SLOTS) || "[]");
     } catch (e) {
       return [];
     }
@@ -1151,14 +1154,17 @@
   // Replace the game with a parsed save, confirming first when a game is in progress.
   function loadGame(o, title) {
     const go = () => {
-      DBG.begin({ a: "load", title, turn: o.turn, version: o.appVersion }, U.S);
+      DBG.begin(
+        { a: "load", title, turn: o.turn, version: o.appVersion },
+        U.state,
+      );
       U.history = [];
-      U.S = o;
+      U.state = o;
       DBG.finishAction(o);
       U.closeModal();
       U.commit();
     };
-    if (!U.S) return go();
+    if (!U.state) return go();
     U.ask({
       title,
       text: "The game in progress will be replaced.",
@@ -1193,7 +1199,7 @@
       };
   };
   function settingsHTML() {
-    const s = U.S.settings;
+    const s = U.state.settings;
     const chk = (k, l, d, dis) =>
       '<label class="opt' +
       (dis ? " dis" : "") +
@@ -1315,14 +1321,14 @@
     el.querySelectorAll("[data-save]").forEach(
       (b) =>
         (b.onclick = () => {
-          DBG.action({ a: "saveSlot", slot: +b.dataset.save }, U.S);
+          DBG.action({ a: "saveSlot", slot: +b.dataset.save }, U.state);
           const sl = slots();
           sl[+b.dataset.save] = {
-            turn: U.S.turn,
+            turn: U.state.turn,
             when: new Date().toLocaleString(),
-            data: JSON.stringify(U.S),
+            data: JSON.stringify(U.state),
           };
-          U.lsSet(U.LSLOTS, JSON.stringify(sl));
+          U.storageSet(U.STORAGE_KEY.SLOTS, JSON.stringify(sl));
           U.renderModal();
         }),
     );
@@ -1341,15 +1347,20 @@
     if (dl)
       dl.onclick = () =>
         downloadText(
-          "queller-turn" + U.S.turn + ".json",
-          JSON.stringify(U.S),
+          "queller-turn" + U.state.turn + ".json",
+          JSON.stringify(U.state),
           $("#dlNote"),
           "Copy save code",
         );
     const cp = $("#copyBtn");
     if (cp)
       cp.onclick = () =>
-        copyText(JSON.stringify(U.S), $("#dlNote"), "Save code", $("#loadTxt"));
+        copyText(
+          JSON.stringify(U.state),
+          $("#dlNote"),
+          "Save code",
+          $("#loadTxt"),
+        );
     const dbo = $("#dbgOpen");
     if (dbo) dbo.onclick = () => U.openModal("debug");
     wireDebug(el);
@@ -1360,19 +1371,19 @@
           U.act(
             () => {
               const k = i.dataset.set;
-              U.S.settings[k] = i.checked;
+              U.state.settings[k] = i.checked;
               if (
                 k === "wome" ||
                 (k === "cards" &&
                   i.checked &&
-                  !U.S.cards.decks.C.length &&
-                  !U.S.cards.hand.length)
+                  !U.state.cards.decks.C.length &&
+                  !U.state.cards.hand.length)
               ) {
-                Q.buildDecks(U.S);
-                Q.log(U.S, "Decks rebuilt.");
+                Q.buildDecks(U.state);
+                Q.log(U.state, "Decks rebuilt.");
               }
               if (k === "wome" && !i.checked) {
-                U.S.dice.factionDie = false;
+                U.state.dice.factionDie = false;
               }
               U.renderModal();
             },
@@ -1387,7 +1398,7 @@
           const val = inp ? inp.value : undefined;
           DBG.action(
             { a: "ask", title: a.title, pick: b.dataset.ask, input: val },
-            U.S,
+            U.state,
           );
           U.closeModal();
           if (a.onPick) a.onPick(b.dataset.ask, val);
@@ -1401,8 +1412,8 @@
         const die = $("#jumpDie").value || null;
         U.act(
           () => {
-            U.S.walk = null;
-            Q.startWalk(U.S, pk, F[pk].nodes[id][5], { die });
+            U.state.walk = null;
+            Q.startWalk(U.state, pk, F[pk].nodes[id][5], { die });
             U.closeModal();
           },
           { a: "jump", page: pk, start: id, die },

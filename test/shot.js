@@ -27,7 +27,7 @@ const fs = require("node:fs"),
   await page.click("#start");
   await page.evaluate(() => {
     window.QBUI.act(() => {
-      const S = window.QBUI.S,
+      const S = window.QBUI.state,
         Q = window.QB;
       S.strategy = "corruption";
       S.phase = "p5";
@@ -45,7 +45,7 @@ const fs = require("node:fs"),
   });
   await page.evaluate(() => {
     window.QBUI.act(() => {
-      window.QBUI.S.settings.tracker = false;
+      window.QBUI.state.settings.tracker = false;
     });
   });
   await page.screenshot({

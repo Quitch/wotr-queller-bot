@@ -28,7 +28,7 @@ const fs = require("node:fs"),
     r.fulfill({ status: 200, body: "", contentType: "text/css" }),
   );
   await page.goto(url, { waitUntil: "load" });
-  const S = () => page.evaluate(() => window.QBUI.S);
+  const S = () => page.evaluate(() => window.QBUI.state);
   const click = async (sel) => {
     await page.click(sel);
   };
@@ -104,7 +104,7 @@ const fs = require("node:fs"),
   // 4. tracker: tick Saruman, put Wormtongue + Palantír on the table, untick Saruman → auto-discards; Rohan active → ask dialog for Threats and Promises
   await page.evaluate(() => {
     window.QBUI.act(() => {
-      const S = window.QBUI.S;
+      const S = window.QBUI.state;
       S.board.chars.saruman = true;
       S.cards.table.push("sa051", "sa045", "sa050", "sa009");
       S.cards.discards.C = S.cards.discards.C.filter(
@@ -171,7 +171,7 @@ const fs = require("node:fs"),
   // 6. tracker off + dice on → minimal tracker shows Companions and Rings
   await page.evaluate(() => {
     window.QBUI.act(() => {
-      window.QBUI.S.settings.tracker = false;
+      window.QBUI.state.settings.tracker = false;
     });
   });
   console.log(
@@ -215,7 +215,7 @@ const fs = require("node:fs"),
   await page.evaluate(() => {
     window.QBUI.act(
       () => {
-        window.QBUI.S.turn = 99;
+        window.QBUI.state.turn = 99;
         throw new Error("smoke: deliberate action failure");
       },
       { a: "smokeFail" },
