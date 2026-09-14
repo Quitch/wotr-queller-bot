@@ -22,7 +22,7 @@
     }
     return a;
   };
-  const VERSION = 53; // app version (shown in the debug log and stamped on saves)
+  const VERSION = 59; // app version (shown in the debug log and stamped on saves)
   const PALANTIR = "sa045",
     BALROG = "sa001b2";
   const SHADOW_FACTIONS = ["corsairs", "dunlendings", "spiders"];
