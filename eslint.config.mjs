@@ -33,12 +33,23 @@ export default [
   },
   {
     files: ["*.mjs"],
-    languageOptions: { ecmaVersion: 2022, sourceType: "module", globals: { ...globals.node } },
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+      globals: { ...globals.node },
+    },
   },
   {
     rules: {
       "no-empty": ["error", { allowEmptyCatch: true }],
-      "no-unused-vars": ["error", { args: "none", caughtErrors: "none", destructuredArrayIgnorePattern: "^_" }],
+      "no-unused-vars": [
+        "error",
+        {
+          args: "none",
+          caughtErrors: "none",
+          destructuredArrayIgnorePattern: "^_",
+        },
+      ],
     },
   },
   prettier, // keep last: turns off rules that conflict with Prettier formatting
