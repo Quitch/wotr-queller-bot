@@ -1563,7 +1563,7 @@
       text: txt,
       items: x.items,
       node: w.node,
-      move: /^Move/.test(txt),
+      move: txt.startsWith("Move"),
     });
   }
 
