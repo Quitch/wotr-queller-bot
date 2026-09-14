@@ -347,7 +347,7 @@ function spendCurrentDie(S,why){
  w.die=null; w.dieObj=null;
 }
 function exitAction(S){ // rule 29
- const w=S.walk; if(follow(S,null)) return; doReturn(S);
+ if(follow(S,null)) return; doReturn(S);
 }
 
 // ----- steps (orange) -----

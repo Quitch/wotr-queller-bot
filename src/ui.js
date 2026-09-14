@@ -278,7 +278,6 @@ function cardsHTML(){
 }
 // ---------- tracker ----------
 function trackerHTML(){
- const B=S.board;
  const idOf=k=>"t-"+k.replace(/\./g,"-");
  const chk=(k,l)=>rowChk(idOf(k),l,getT(k),'data-t="'+k+'"');
  const num=(k,l)=>rowNum(idOf(k),l,getT(k),'data-step="'+k+'"');

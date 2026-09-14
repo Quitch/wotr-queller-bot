@@ -11,7 +11,7 @@ function base(st,strategy){ const S=Q.newState(st); S.strategy=strategy||'corrup
   Q.startPhase(S,'p5'); drive(S,[[/Will of the West/,true],[/^Pass/,'no'],[/action/,'no']]);
   ok(!S.dice.pool.some(d=>d.st===D.RESERVED||d.st===D.AVAIL) && S.walk.done, '7.1 set-aside die spent when Muster 2 finds no action ('+S.walk.result+')');
   const S2=base({dice:true,cards:false,tracker:true,wome:false},'military'); S2.board.nations.isengard=0; S2.dice.pool=[die('Muster',D.RESERVED)]; S2.minionReserved=true;
-  Q.startPhase(S2,'p5'); const seen=drive(S2,[[/Will of the West/,true],[/^Pass/,'no']]);
+  Q.startPhase(S2,'p5'); drive(S2,[[/Will of the West/,true],[/^Pass/,'no']]);
   ok(S2.walk.result==='action' && S2.dice.pool[0].st===D.USED && S2.walk.trail.some(t=>t.kind==='q'&&/Will of the West/.test(t.text)&&t.auto&&t.answer==='No'), '7.1 Will-of-the-West check auto-answered No for a die already set aside; minion mustered');
   ok(S2.board.chars.saruman===true, '6.3 muster action updated the tracker (Saruman)'); }
 // two dice set aside in one walk are both used eventually
@@ -74,7 +74,7 @@ function base(st,strategy){ const S=Q.newState(st); S.strategy=strategy||'corrup
   S.cards.table.push('sa050');
   asks=Q.tableTriggers(S,{key:'nations.gondor',from:'active',to:'war'});
   ok(S.cards.table.includes('sa050') && asks.length===1 && asks[0].card==='sa050', '6.6 Threats and Promises asked about on active→war');
-  asks=Q.tableTriggers(S,{key:'chars.saruman',from:true,to:false});
+  Q.tableTriggers(S,{key:'chars.saruman',from:true,to:false});
   ok(!S.cards.table.includes('sa045'), '6.6 Palantír discarded when Saruman is eliminated');
   S.board.fs.revealed=true; S.board.fs.inFPSettlement=true;
   asks=Q.tableTriggers(S,{key:'fs.revealed',from:false,to:true});

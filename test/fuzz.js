@@ -1,7 +1,5 @@
-const fs=require('fs');
-
 require('./load.js')();
-const Q=window.QB, byId=Q.byId; const RESERVE_FIX=true;
+const Q=window.QB;
 let seed=+process.argv[2]||1; const rnd=()=>{ seed=(seed*1103515245+12345)&0x7fffffff; return seed/0x7fffffff; };
 Math.random=rnd;
 const problems={}; const prob=(k,d)=>{ problems[k]=problems[k]||{n:0,ex:d}; problems[k].n++; };

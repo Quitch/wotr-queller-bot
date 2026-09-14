@@ -294,7 +294,7 @@ function applyPriority(S, ids, criteria, ctx){
   if(kept.length>0 && kept.length<opts.length){ steps.push(crit+" → "+kept.length+" left"); opts=kept; }
   else if(kept.length===0) steps.push(crit+" → no card, skipped");
  }
- let chosen=null;
+ let chosen;
  if(opts.length>1){ chosen=pick(opts); steps.push("Tie between "+opts.length+" cards — chosen at random (rule 3)"); }
  else chosen=opts[0]||null;
  return {chosen, steps};

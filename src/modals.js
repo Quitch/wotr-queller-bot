@@ -105,17 +105,17 @@ function textPage(pk){
  }
  return h+'</ol></div>';
 }
-function nodeInner(n){ const [k,x,y,w,h,t,ex]=n; let s=esc(t).replace(/\*([^*]+)\*/g,'<i>$1</i>').replace(/\n/g,'<br>');
+function nodeInner(n){ const [,,,,,t,ex]=n; let s=esc(t).replace(/\*([^*]+)\*/g,'<i>$1</i>').replace(/\n/g,'<br>');
  if(ex&&ex.t2) s='<b>'+s+'</b> or '+esc(ex.t2).replace(/\*([^*]+)\*/g,'<i>$1</i>');
  if(ex&&ex.items) s='<div style="text-align:left;width:100%"><b style="display:block;text-align:center">'+s+'</b><'+(ex.any?"ul":"ol")+' style="margin:2px 0 0;padding-left:18px">'+ex.items.map(i=>'<li>'+esc(i).replace(/\*([^*]+)\*/g,'<i>$1</i>')+'</li>').join("")+'</'+(ex.any?"ul":"ol")+'></div>';
  return s; }
 function midpoint(pts){ let L=0; const segs=[]; for(let i=1;i<pts.length;i++){ const d=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]); segs.push(d); L+=d; } let t=L/2; for(let i=1;i<pts.length;i++){ if(t<=segs[i-1]){ const f=segs[i-1]?t/segs[i-1]:0; return [pts[i-1][0]+(pts[i][0]-pts[i-1][0])*f, pts[i-1][1]+(pts[i][1]-pts[i-1][1])*f]; } t-=segs[i-1]; } return pts[pts.length-1]; }
-function anchor(n,px,py){ const [k,x,y,w,h]=n; const cx=x+w/2, cy=y+h/2;
+function anchor(n,px,py){ const [,x,y,w,h]=n; const cx=x+w/2, cy=y+h/2;
  const dx=px-cx, dy=py-cy;
  if(Math.abs(dy)*w > Math.abs(dx)*h){ return dy>0?[clamp(px,x+8,x+w-8),y+h]:[clamp(px,x+8,x+w-8),y]; }
  return dx>0?[x+w,clamp(py,y+6,y+h-6)]:[x,clamp(py,y+6,y+h-6)]; }
 // anchor towards a draw.io waypoint: leave from the side the point lies beyond (horizontal when it is outside the box's x-range), like draw.io's orthogonal router
-function wpAnchor(n,px,py){ const [k,x,y,w,h]=n; const outX=px<x||px>x+w, outY=py<y||py>y+h;
+function wpAnchor(n,px,py){ const [,x,y,w,h]=n; const outX=px<x||px>x+w, outY=py<y||py>y+h;
  if(outX&&(!outY||Math.abs(px-(px<x?x:x+w))>=0)) return [px<x?x:x+w, (py>=y+6&&py<=y+h-6)?py:y+h/2];
  if(outY) return [(px>=x+8&&px<=x+w-8)?px:x+w/2, py<y?y:y+h];
  return anchor(n,px,py); }
@@ -243,7 +243,7 @@ function settingsHTML(){
  return '<div class="body setup" style="margin:0"><p class="notice">Changes apply from the next walk.</p>'+chk("dice","Roll and track Queller’s dice","")+chk("cards","Draw and hold Queller’s cards","Chosen when the game is set up; it cannot be changed mid-game.",true)+chk("tracker","Track board state in the app","")+chk("wome","Warriors of Middle-earth","Chosen when the game is set up; it cannot be changed mid-game.",true)+'<h4 style="margin-top:18px">Report a problem</h4><p class="notice">If the app does something wrong, export a debug log and send it with a description of what happened. The log records the game, the last actions and any errors.</p><p style="margin-top:8px"><button type="button" class="btn" id="dbgOpen">Export debug log</button></p><h4 style="margin-top:18px">About</h4><p class="notice">Queller Bot Runner version '+Q.VERSION+'.</p>'+U.LEGAL+'</div>';
 }
 function jumpHTML(){
- const S=U.S; let h='<div class="body"><p class="notice">Walk a page from any green start point — for example when a card tells Queller to make a choice (rule 12), to place Nazgûl, or to choose a discard. The walk uses no die unless you pick one.</p><div style="display:grid;gap:8px;grid-template-columns:1fr auto;align-items:center"><select id="jumpSel" aria-label="Start point">';
+ let h='<div class="body"><p class="notice">Walk a page from any green start point — for example when a card tells Queller to make a choice (rule 12), to place Nazgûl, or to choose a discard. The walk uses no die unless you pick one.</p><div style="display:grid;gap:8px;grid-template-columns:1fr auto;align-items:center"><select id="jumpSel" aria-label="Start point">';
  for(const k in F){ for(const id in F[k].nodes){ const n=F[k].nodes[id]; if(n[0]==="S") h+='<option value="'+k+'|'+id+'">'+esc(F[k].name)+' — '+esc(Q.norm(n[5]))+'</option>'; } }
  h+='</select><select id="jumpDie" aria-label="Die to use"><option value="">No die</option>'+Object.keys(Q.DIE_NAME).map(k=>'<option value="'+k+'">'+esc(Q.DIE_NAME[k])+' die</option>').join("")+'</select></div><div style="margin-top:12px"><button class="btn primary" id="jumpGo">Walk</button></div></div>';
  return h;
