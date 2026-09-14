@@ -1594,37 +1594,9 @@
           },
         );
       };
-    document.querySelectorAll("[data-spend]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          const i = +b.dataset.spend;
-          const d = S.dice.pool[i];
-          if (!d || d.st !== "avail") return;
-          ask({
-            title: "Mark this die as used?",
-            text:
-              "The " +
-              d.face +
-              (d.k === "F" ? " Faction" : "") +
-              " die will be marked as used for the rest of this turn. Undo reverses it.",
-            buttons: [
-              { v: "ok", label: "Mark as used", primary: true },
-              { v: "no", label: "Cancel" },
-            ],
-            onPick: (v) => {
-              if (v !== "ok") return;
-              act(
-                () => {
-                  const d2 = S.dice.pool[i];
-                  if (d2 && d2.st === "avail")
-                    Q.spendDie(S, d2, "marked by you");
-                },
-                { a: "spendDie", index: i, face: d.face },
-              );
-            },
-          });
-        }),
-    );
+    document
+      .querySelectorAll("[data-spend]")
+      .forEach((b) => (b.onclick = () => spendDieClick(+b.dataset.spend)));
     document
       .querySelectorAll("[data-card]")
       .forEach((b) => (b.onclick = () => onCard(b.dataset.card, b.dataset.id)));
@@ -1683,6 +1655,33 @@
         value: a,
       },
     );
+  }
+  // The player marks an available die as used by hand (the [data-spend] buttons in the dice row).
+  function spendDieClick(i) {
+    const d = S.dice.pool[i];
+    if (!d || d.st !== "avail") return;
+    ask({
+      title: "Mark this die as used?",
+      text:
+        "The " +
+        d.face +
+        (d.k === "F" ? " Faction" : "") +
+        " die will be marked as used for the rest of this turn. Undo reverses it.",
+      buttons: [
+        { v: "ok", label: "Mark as used", primary: true },
+        { v: "no", label: "Cancel" },
+      ],
+      onPick: (v) => {
+        if (v !== "ok") return;
+        act(
+          () => {
+            const d2 = S.dice.pool[i];
+            if (d2 && d2.st === "avail") Q.spendDie(S, d2, "marked by you");
+          },
+          { a: "spendDie", index: i, face: d.face },
+        );
+      },
+    });
   }
   function afterWalk() {
     const w = S.walk;
