@@ -285,12 +285,12 @@
           '="' +
           el.getAttribute(a) +
           '"]' +
-          (el.hasAttribute("data-d")
-            ? '[data-d="' + el.getAttribute("data-d") + '"]'
-            : "") +
-          (el.hasAttribute("data-id")
-            ? '[data-id="' + el.getAttribute("data-id") + '"]'
-            : "")
+          (el.dataset.d === undefined
+            ? ""
+            : '[data-d="' + el.dataset.d + '"]') +
+          (el.dataset.id === undefined
+            ? ""
+            : '[data-id="' + el.dataset.id + '"]')
         );
     }
     return null;
@@ -301,8 +301,8 @@
     const prevKey = focusKey(document.activeElement),
       prevWasAnswer =
         document.activeElement &&
-        document.activeElement.hasAttribute &&
-        document.activeElement.hasAttribute("data-ans");
+        document.activeElement.dataset &&
+        document.activeElement.dataset.ans !== undefined;
     const openMore = [...root.querySelectorAll("details.more")].map(
       (d) => d.open,
     );

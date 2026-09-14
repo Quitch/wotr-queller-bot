@@ -1017,7 +1017,7 @@
       viewport: [window.innerWidth, window.innerHeight],
       screen: [screen.width, screen.height],
       dpr: window.devicePixelRatio,
-      theme: document.documentElement.getAttribute("data-theme") || "system",
+      theme: document.documentElement.dataset.theme || "system",
       prefersDark: mq("(prefers-color-scheme: dark)"),
       coarsePointer: mq("(pointer: coarse)"),
       reducedMotion: mq("(prefers-reduced-motion: reduce)"),
