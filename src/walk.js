@@ -440,6 +440,7 @@
         );
       case "C5.wkNotMob":
       case "M5.wkNotMob":
+      case "CH.wkJoin":
         if (T && !B.chars.witchKing)
           return auto(false, "Witch King not in play");
         return ask(S, n);
@@ -517,6 +518,7 @@
           );
         return ask(S, n);
       case "M5.playMuster":
+      case "MU.musterCard":
         if (cards)
           return playableCount(
             handS().filter((i) => byId[i].type === "Muster"),
@@ -536,10 +538,7 @@
             " Nazgûl" +
             (B.chars.witchKing ? ", Witch King in play" : ""),
         );
-      case "CH.wkJoin":
-        if (T && !B.chars.witchKing)
-          return auto(false, "Witch King not in play");
-        return ask(S, n);
+      // CH.wkJoin shares the Witch King check with C5/M5.wkNotMob above.
       case "CH.nazFs":
       case "CH.nazJoin":
         if (T && B.nazgul === 0) return auto(false, "no Nazgûl on the map");
@@ -604,14 +603,7 @@
           w.nationChoice === "Faction",
           "priority chose " + (w.nationChoice || "nothing"),
         );
-      case "MU.musterCard":
-        if (cards)
-          return playableCount(
-            handS().filter((i) => byId[i].type === "Muster"),
-            "event",
-            "playable Muster card",
-          );
-        return ask(S, n);
+      // MU.musterCard shares the playable Muster card count with M5.playMuster above.
       case "MU.cardChoice":
         if (cards && w.chosen)
           return auto(
