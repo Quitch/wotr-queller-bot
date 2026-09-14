@@ -4,7 +4,19 @@
     FLOW = window.QB_FLOW,
     NODE = window.QB_NODE,
     NODE_KIND = window.QB_NODE_KIND,
-    { DECK, DIE_KIND, STRATEGY, PHASE, CARD, FP_STANCE } = window.QB,
+    {
+      DECK,
+      DIE_KIND,
+      STRATEGY,
+      PHASE,
+      CARD,
+      FP_STANCE,
+      TRAIL,
+      PROMPT,
+      YES_NO_PROMPTS,
+      WALK_RESULT,
+      phaseFromResult,
+    } = window.QB,
     cardById = engine.cardById,
     GLOSSARY = window.QB_GLOSSARY,
     debug = window.QB_DEBUG;
@@ -682,7 +694,7 @@
     const yesNoButtons = () =>
       '<button class="btn yes" data-ans="yes">Yes</button><button class="btn no" data-ans="no">No</button>';
     switch (prompt.type) {
-      case "yesno": {
+      case PROMPT.YES_NO: {
         const isRing = prompt.bold || (NODE.extra(node).bold && !prompt.sub);
         body =
           (prompt.board ? '<div class="eyebrow">Board question</div>' : "") +
@@ -703,7 +715,7 @@
         answers = yesNoButtons();
         break;
       }
-      case "count":
+      case PROMPT.COUNT:
         body =
           '<div class="eyebrow">Board question</div><p class="q">' +
           formatText(prompt.text) +
@@ -716,7 +728,7 @@
           '" style="min-width:100px"></p>';
         answers = '<button class="btn yes" id="cntOk">Continue</button>';
         break;
-      case "choice":
+      case PROMPT.CHOICE:
         body =
           '<div class="eyebrow">Priority list — you decide</div><p class="q">' +
           formatText(prompt.text) +
@@ -736,14 +748,14 @@
           )
           .join("");
         break;
-      case "situ":
+      case PROMPT.SITUATIONAL:
         body =
           '<div class="eyebrow">Board check (for a card in Queller’s hand)</div><p class="q">' +
           formatText(prompt.text) +
           "</p>";
         answers = yesNoButtons();
         break;
-      case "confirm":
+      case PROMPT.CONFIRM:
         body =
           '<div class="eyebrow">' +
           (prompt.ctx === "combat" ? "Combat card" : "Card") +
@@ -755,7 +767,7 @@
         answers =
           '<button class="btn yes" data-ans="yes">Playable</button><button class="btn no" data-ans="no">Not playable</button>';
         break;
-      case "diecheck":
+      case PROMPT.DIE_CHECK:
         body =
           '<p class="q">' +
           formatText(prompt.text) +
@@ -764,12 +776,12 @@
           "</div>";
         answers = yesNoButtons();
         break;
-      case "ring":
+      case PROMPT.RING:
         body = '<p class="q">' + formatText(prompt.text) + "</p>";
         answers =
           '<button class="btn yes" data-ans="yes">Ring used</button><button class="btn no" data-ans="no">No ring available</button>';
         break;
-      case "action":
+      case PROMPT.ACTION:
         body =
           '<p class="q">Queller: ' +
           formatText(prompt.text) +
@@ -786,7 +798,7 @@
             ? ""
             : '<button class="btn no" data-ans="no">Not possible (rule 29)</button>');
         break;
-      case "playcard": {
+      case PROMPT.PLAY_CARD: {
         const card = cardById[prompt.card];
         body =
           '<p class="q">Queller plays a card' +
@@ -808,7 +820,7 @@
         answers = '<button class="btn yes" data-ans="done">Done</button>';
         break;
       }
-      case "step":
+      case PROMPT.STEP:
         body =
           '<p class="q">' +
           formatText(prompt.text) +
@@ -824,7 +836,7 @@
           ? '<button class="btn yes" data-ans="done">Done</button><button class="btn no" data-ans="no">Not possible</button>'
           : '<button class="btn yes" data-ans="done">Continue</button>';
         break;
-      case "roll":
+      case PROMPT.ROLL:
         body = '<p class="q">' + formatText(prompt.text) + "</p>";
         answers = prompt.options
           .map(
@@ -837,7 +849,7 @@
           )
           .join("");
         break;
-      case "priority": {
+      case PROMPT.PRIORITY: {
         const half = walk.page === "BA" ? CARD_HALF.COMBAT : CARD_HALF.EVENT;
         body =
           '<p class="q">' +
@@ -868,7 +880,7 @@
         answers = '<button class="btn yes" data-ans="ok">Continue</button>';
         break;
       }
-      case "battleForm":
+      case PROMPT.BATTLE_FORM:
         body = battleFormHTML(prompt);
         answers = '<button class="btn yes" id="bfOk">Start the round</button>';
         break;
@@ -1081,25 +1093,25 @@
     const result = walk.result || "";
     let big = "",
       small = "";
-    if (result === "action") {
+    if (result === WALK_RESULT.ACTION) {
       big =
         "Queller acts: " +
         escapeHTML(stripMarkup(walk.trail[walk.trail.length - 1].text));
       small =
         "Do this on the board, then take your own action. When Queller is next eligible to act, walk again.";
-    } else if (result === "pass") {
+    } else if (result === WALK_RESULT.PASS) {
       big = "Queller passes.";
-    } else if (result === "noaction") {
+    } else if (result === WALK_RESULT.NO_ACTION) {
       big = "Queller has no usable action.";
       small = escapeHTML(walk.trail[walk.trail.length - 1].text);
-    } else if (result === "strategy") {
+    } else if (result === WALK_RESULT.STRATEGY) {
       big = escapeHTML(walk.trail[walk.trail.length - 1].text);
-    } else if (result === "battleNext") {
+    } else if (result === WALK_RESULT.BATTLE_NEXT) {
       big = "Combat continues.";
       small = "After both sides resolve this round, walk “Battle: next round”.";
-    } else if (result === "end") {
+    } else if (result === WALK_RESULT.END) {
       big = "End of the walk.";
-    } else if (result.startsWith("phase:")) {
+    } else if (phaseFromResult(result)) {
       big = escapeHTML(walk.trail[walk.trail.length - 1].text);
     }
     return (
@@ -1112,29 +1124,29 @@
       "</div>"
     );
   }
+  const TRAIL_LABEL = {
+    [TRAIL.START]: "Start",
+    [TRAIL.QUESTION]: "Ask",
+    [TRAIL.SKIP]: "Skipped",
+    [TRAIL.JUMP]: "Go to",
+    [TRAIL.RETURN]: "Return",
+    [TRAIL.BACK]: "Back at",
+    [TRAIL.ACTION]: "Action",
+    [TRAIL.STEP]: "Step",
+    [TRAIL.PRIORITY]: "Priority",
+    [TRAIL.NOTE]: "Note",
+    [TRAIL.REVEAL]: "Card",
+    [TRAIL.RING]: "Ring",
+    [TRAIL.END]: "End",
+  };
   function trailHTML(walk) {
     return (
       '<ul class="trail" tabindex="0" aria-label="Walk trail">' +
       walk.trail
         .map((entry) => {
           const kind = entry.kind;
-          let label =
-            {
-              start: "Start",
-              q: "Ask",
-              skip: "Skipped",
-              jump: "Go to",
-              ret: "Return",
-              back: "Back at",
-              act: "Action",
-              step: "Step",
-              pri: "Priority",
-              note: "Note",
-              reveal: "Card",
-              ring: "Ring",
-              end: "End",
-            }[kind] || kind;
-          if (kind === "q" && entry.auto) label = "Auto";
+          let label = TRAIL_LABEL[kind] || kind;
+          if (kind === TRAIL.QUESTION && entry.auto) label = "Auto";
           let text =
             (entry.ring ? ringIcon() + " " : "") + formatText(entry.text);
           if (entry.die)
@@ -1142,12 +1154,12 @@
               ' <span class="why">(' + escapeHTML(entry.die) + " die)</span>";
           if (entry.why)
             text += ' <span class="why">— ' + formatText(entry.why) + "</span>";
-          if (kind === "pri" && entry.card)
+          if (kind === TRAIL.PRIORITY && entry.card)
             text +=
               ' <span class="why">→ ' +
               escapeHTML(cardById[entry.card].title) +
               "</span>";
-          if (kind === "pri" && entry.choice)
+          if (kind === TRAIL.PRIORITY && entry.choice)
             text +=
               ' <span class="why">→ ' + escapeHTML(entry.choice) + "</span>";
           return (
@@ -1711,7 +1723,7 @@
           () => {
             engine.answer(state, form);
           },
-          { a: "answer", prompt: "battleForm", value: form },
+          { a: "answer", prompt: PROMPT.BATTLE_FORM, value: form },
         );
       };
     document.querySelectorAll("[data-bs]").forEach(
@@ -1737,7 +1749,7 @@
           },
           {
             a: "answer",
-            prompt: "count",
+            prompt: PROMPT.COUNT,
             page: state.walk?.page,
             node: state.walk?.node,
             value,
@@ -1792,10 +1804,7 @@
     act(
       () => {
         let value = answer;
-        if (
-          ["yesno", "situ", "confirm", "diecheck", "ring"].includes(prompt.type)
-        )
-          value = answer === "yes";
+        if (YES_NO_PROMPTS.includes(prompt.type)) value = answer === "yes";
         engine.answer(state, value);
         afterWalk();
       },
@@ -1848,14 +1857,14 @@
     if (!walk?.done) return;
     const result = walk.result || "";
     if (walk.entry.page === "BA") {
-      state.battleOpen = result === "battleNext";
+      state.battleOpen = result === WALK_RESULT.BATTLE_NEXT;
     } else if (result !== "") {
       state.battleOpen = false;
     }
-    if (result === "strategy") {
+    if (result === WALK_RESULT.STRATEGY) {
       state.phase = PHASE.P1;
-    } else if (result.startsWith("phase:")) {
-      const name = result.slice(6);
+    } else if (phaseFromResult(result)) {
+      const name = phaseFromResult(result);
       const map = {
         "Phase 2": PHASE.P2,
         "Phase 3": PHASE.P3,

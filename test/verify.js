@@ -16,9 +16,10 @@ const die = (face, status) => ({
 });
 // The answer a scenario gives when none of its rules match: No to every question, an empty battle form, "done" otherwise.
 function defaultAnswer(prompt) {
-  if (["yesno", "situ", "confirm", "diecheck", "ring"].includes(prompt.type))
-    return false;
-  return prompt.type === "battleForm" ? { nazLead: 0, figures: {} } : "done";
+  if (engine.YES_NO_PROMPTS.includes(prompt.type)) return false;
+  return prompt.type === engine.PROMPT.BATTLE_FORM
+    ? { nazLead: 0, figures: {} }
+    : "done";
 }
 // The scenario's answer to a prompt: the first rule whose pattern matches the prompt's text, type or card (a value, or a function of the prompt).
 function ruleAnswer(prompt, rules) {
@@ -95,11 +96,11 @@ function phase5State(settings, strategy = engine.STRATEGY.CORRUPTION) {
     [/^Pass/, "no"],
   ]);
   ok(
-    reservedOnlyState.walk.result === "action" &&
+    reservedOnlyState.walk.result === engine.WALK_RESULT.ACTION &&
       reservedOnlyState.dice.pool[0].st === DIE_STATE.USED &&
       reservedOnlyState.walk.trail.some(
         (entry) =>
-          entry.kind === "q" &&
+          entry.kind === engine.TRAIL.QUESTION &&
           /Will of the West/.test(entry.text) &&
           entry.auto &&
           entry.answer === "No",
@@ -153,7 +154,8 @@ function phase5State(settings, strategy = engine.STRATEGY.CORRUPTION) {
     [/threat\b.*muster/, false],
   ]);
   const asks = seen.filter(
-    (prompt) => prompt?.type === "diecheck" && /Muster/.test(prompt.text),
+    (prompt) =>
+      prompt?.type === engine.PROMPT.DIE_CHECK && /Muster/.test(prompt.text),
   ).length;
   ok(
     asks >= 2,
@@ -214,7 +216,9 @@ function phase5State(settings, strategy = engine.STRATEGY.CORRUPTION) {
   militaryState.dice.pool = [die("Event"), die("Army")]; // no Character die → "Play card using event die"
   engine.startPhase(militaryState, engine.PHASE.P5);
   const seen = driveWalk(militaryState, [[/confirm/, true]]);
-  const playCardPrompt = seen.find((prompt) => prompt?.type === "playcard");
+  const playCardPrompt = seen.find(
+    (prompt) => prompt?.type === engine.PROMPT.PLAY_CARD,
+  );
   ok(
     playCardPrompt?.card === "sa017",
     "6.1 playcard prompt raised for Lure of the Ring",
@@ -251,7 +255,9 @@ function phase5State(settings, strategy = engine.STRATEGY.CORRUPTION) {
     [/Witch King/, false],
     [/laying siege/, true],
   ]);
-  const playCardPrompt = seen.find((prompt) => prompt?.type === "playcard");
+  const playCardPrompt = seen.find(
+    (prompt) => prompt?.type === engine.PROMPT.PLAY_CARD,
+  );
   ok(
     playCardPrompt?.card === engine.CARD.BALROG && playCardPrompt.combat,
     "6.2 Durin's Bane chosen from the table",
@@ -518,7 +524,7 @@ function phase5State(settings, strategy = engine.STRATEGY.CORRUPTION) {
   edges.push(...saved);
   ok(
     cycleState.walk?.done &&
-      cycleState.walk.result === "noaction" &&
+      cycleState.walk.result === engine.WALK_RESULT.NO_ACTION &&
       /did not finish/.test(
         cycleState.walk.trail[cycleState.walk.trail.length - 1].text,
       ),

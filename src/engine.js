@@ -110,6 +110,22 @@
     LIDLESS_EYE: "lidlessEye",
     RECRUIT_FACTION: "recruitFaction",
   };
+  // The kinds of entry in a walk's trail (the walker writes most of them; the engine adds entries for card effects).
+  const TRAIL = {
+    START: "start",
+    QUESTION: "q",
+    PRIORITY: "pri",
+    JUMP: "jump",
+    SKIP: "skip",
+    RETURN: "ret",
+    BACK: "back",
+    NOTE: "note",
+    RING: "ring",
+    STEP: "step",
+    ACTION: "act",
+    REVEAL: "reveal",
+    END: "end",
+  };
   const BASE_ACTION_DICE = 7; // the Shadow's dice before any minion joins
   const STARTING_COMPANIONS = 7;
   const LOG_CAP = 400; // log entries kept in the game state
@@ -801,7 +817,7 @@
           " Faction Event cards, kept one, reshuffled the rest and the discards into the deck.",
       );
       out.push({
-        kind: "pri",
+        kind: TRAIL.PRIORITY,
         text: "Servants of Sauron — keep one of " + drawn.length + " cards",
         items: FACTION_PICK.concat("Otherwise at random (rule 3)"),
         steps: picked.steps,
@@ -829,7 +845,7 @@
           "His Will and His Malice: no Faction Event card in the discard pile.",
         );
       out.push({
-        kind: "pri",
+        kind: TRAIL.PRIORITY,
         text: "His Will and His Malice — take a card from the Faction discard pile",
         items: FACTION_PICK.concat("Otherwise at random (rule 3)"),
         steps: picked.chosen ? picked.steps : ["Discard pile empty"],
@@ -866,7 +882,7 @@
           ") to the Hunt box, non-preferred results first (rule 23)";
       }
       log(state, "The Lidless Eye: " + logText);
-      out.push({ kind: "note", text: "The Lidless Eye: " + noteText });
+      out.push({ kind: TRAIL.NOTE, text: "The Lidless Eye: " + noteText });
     } else if (card.effect === CARD_EFFECT.RECRUIT_FACTION) {
       const factionKey = card.faction.toLowerCase();
       if (!state.board.factions[factionKey]) {
@@ -878,7 +894,7 @@
             " are now in play (tracker updated; the Faction die joins the pool next turn).",
         );
         out.push({
-          kind: "note",
+          kind: TRAIL.NOTE,
           text: card.faction + " enter play — tracker updated",
         });
       }
@@ -901,7 +917,7 @@
           "” with an Event die.",
       );
       out.push({
-        kind: "note",
+        kind: TRAIL.NOTE,
         text:
           "The Palantír of Orthanc: drew a " +
           deckName(deckKey) +
@@ -1197,6 +1213,7 @@
     SHADOW_FACTIONS,
     CARD,
     CARD_EFFECT,
+    TRAIL,
     BASE_ACTION_DICE,
     SHADOW_NATION_START,
     shadowNationAtWar,

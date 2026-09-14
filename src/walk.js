@@ -6,8 +6,16 @@
     NODE_KIND = window.QB_NODE_KIND,
     EDGE = window.QB_EDGE,
     cardById = engine.cardById;
-  const { DECK, HAND, DIE_KIND, STRATEGY, PHASE, CARD, DIE_REQUIREMENT } =
-    engine;
+  const {
+    DECK,
+    HAND,
+    DIE_KIND,
+    STRATEGY,
+    PHASE,
+    CARD,
+    DIE_REQUIREMENT,
+    TRAIL,
+  } = engine;
   const SHADOW_NATION_NAME = {
       sauron: "Sauron",
       isengard: "Isengard",
@@ -18,7 +26,68 @@
       Isengard: "isengard",
       "Southrons and Easterlings": "se",
     };
-  const PENDING = null; // returned by a step that has set a prompt and is waiting for the player
+  // Returned by a handler that has set a prompt and is waiting for the player; only ever compared with ===.
+  const PENDING = Symbol("prompt open");
+  // What the walk is asking the player (walk.prompt.type).
+  const PROMPT = {
+    YES_NO: "yesno",
+    COUNT: "count",
+    SITUATIONAL: "situ",
+    CONFIRM: "confirm",
+    DIE_CHECK: "diecheck",
+    RING: "ring",
+    ACTION: "action",
+    STEP: "step",
+    ROLL: "roll",
+    PLAY_CARD: "playcard",
+    CHOICE: "choice",
+    PRIORITY: "priority",
+    BATTLE_FORM: "battleForm",
+  };
+  // The prompts answered with yes or no.
+  const YES_NO_PROMPTS = [
+    PROMPT.YES_NO,
+    PROMPT.SITUATIONAL,
+    PROMPT.CONFIRM,
+    PROMPT.DIE_CHECK,
+    PROMPT.RING,
+  ];
+  // How a walk ended (walk.result); a walk that reached another start point ends with phaseResult(name).
+  const WALK_RESULT = {
+    ACTION: "action",
+    PASS: "pass",
+    NO_ACTION: "noaction",
+    STRATEGY: "strategy",
+    BATTLE_NEXT: "battleNext",
+    END: "end",
+  };
+  const PHASE_RESULT_PREFIX = "phase:";
+  const phaseResult = (startName) => PHASE_RESULT_PREFIX + startName;
+  // The start point a walk ended at, or null for any other result.
+  const phaseFromResult = (result) =>
+    typeof result === "string" && result.startsWith(PHASE_RESULT_PREFIX)
+      ? result.slice(PHASE_RESULT_PREFIX.length)
+      : null;
+  // The strategy roll: 1-3 corruption, 4-6 military.
+  const STRATEGY_ROLL = { LOW: "1-3", HIGH: "4-6" };
+  const isLowRoll = (roll) => roll <= 3;
+  // The priority-list boxes whose items are card criteria (check.js verifies the engine understands every item).
+  const CARD_CRITERIA_NODES = [
+    "C14.disc14",
+    "C14.disc18",
+    "C14.discF",
+    "M14.disc",
+    "M14.discF",
+    "EV.prefPri",
+    "EV.anyPri",
+    "EV.discPri",
+    "FA.playPri",
+    "FA.discPri",
+    "BA.sortiePri",
+    "BA.wkPri",
+    "BA.atkPri",
+    "BA.defPri",
+  ];
 
   const JUMPS = [
     [/^Army$/, { page: "AR", start: "Army", die: DIE_REQUIREMENT.ARMY }],
@@ -203,7 +272,7 @@
       sub: 0,
       parts: {},
     }; // multi-part decisions and answers to board questions
-    trail(state, { kind: "start", text: startName, page });
+    trail(state, { kind: TRAIL.START, text: startName, page });
     engine.log(
       state,
       "Walk: " +
@@ -245,7 +314,7 @@
     walk.done = true;
     walk.result = result;
     walk.prompt = null;
-    trail(state, { kind: "end", text: message || result });
+    trail(state, { kind: TRAIL.END, text: message || result });
     if (message) engine.log(state, message);
   }
   function setPrompt(state, prompt) {
@@ -262,7 +331,7 @@
     else
       endWalk(
         state,
-        "phase:" + normalizeText(NODE.text(node)),
+        phaseResult(normalizeText(NODE.text(node))),
         "Reached “" + normalizeText(NODE.text(node)) + "”.",
       );
   }
@@ -283,7 +352,7 @@
       if (guard++ >= RUN_GUARD) {
         endWalk(
           state,
-          "noaction",
+          WALK_RESULT.NO_ACTION,
           "The walk did not finish (more than " +
             RUN_GUARD +
             " steps) — walk again.",
@@ -294,7 +363,11 @@
         node = cur(state),
         boxKind = NODE.kind(node);
       if (!STEP[boxKind]) {
-        endWalk(state, "noaction", "Unknown box kind “" + boxKind + "”.");
+        endWalk(
+          state,
+          WALK_RESULT.NO_ACTION,
+          "Unknown box kind “" + boxKind + "”.",
+        );
         break;
       }
       STEP[boxKind](state, walk, node);
@@ -320,7 +393,7 @@
   ) {
     const walk = state.walk;
     trail(state, {
-      kind: "q",
+      kind: TRAIL.QUESTION,
       text: question,
       answer: answer ? "Yes" : "No",
       auto: !!automatic,
@@ -334,12 +407,16 @@
     walk.sub = 0;
     walk.parts = {};
     if (!follow(state, answer ? "Yes" : "No")) {
-      endWalk(state, "noaction", "The flowchart has no arrow for that answer.");
+      endWalk(
+        state,
+        WALK_RESULT.NO_ACTION,
+        "The flowchart has no arrow for that answer.",
+      );
     }
   }
   function ask(state, node, question, promptExtra) {
     setPrompt(state, {
-      type: "yesno",
+      type: PROMPT.YES_NO,
       text: question || NODE.text(node),
       node: state.walk.node,
       page: state.walk.page,
@@ -354,7 +431,7 @@
       partKey = walk.page + "." + walk.node + "." + factKey;
     if (partKey in walk.parts) return walk.parts[partKey];
     setPrompt(state, {
-      type: "yesno",
+      type: PROMPT.YES_NO,
       text: question,
       part: partKey,
       node: walk.node,
@@ -520,7 +597,7 @@
               why: minions[0].name + ": " + minions[0].why,
             });
           trail(state, {
-            kind: "q",
+            kind: TRAIL.QUESTION,
             text: NODE.text(node),
             answer: "No",
             auto: true,
@@ -893,14 +970,18 @@
       }
       const met = playablePre(state, card, id, ctx);
       if (met && typeof met === "object") {
-        setPrompt(state, { type: "situ", key: met.situ, text: met.q });
+        setPrompt(state, {
+          type: PROMPT.SITUATIONAL,
+          key: met.situ,
+          text: met.q,
+        });
         return PENDING;
       }
       if (!met) {
         state.playable[cacheKey] = false;
         continue;
       }
-      setPrompt(state, { type: "confirm", card: id, ctx });
+      setPrompt(state, { type: PROMPT.CONFIRM, card: id, ctx });
       return PENDING;
     }
     return out;
@@ -912,12 +993,12 @@
       spec = jumpSpec(NODE.text(node)),
       label = normalizeText(NODE.text(node));
     if (!spec) {
-      trail(state, { kind: "skip", text: label, why: "unknown box" });
+      trail(state, { kind: TRAIL.SKIP, text: label, why: "unknown box" });
       exitJump(state);
       return;
     }
     if (NODE.extra(node).wome && !state.settings.wome) {
-      trail(state, { kind: "skip", text: label, why: "WoME not in play" });
+      trail(state, { kind: TRAIL.SKIP, text: label, why: "WoME not in play" });
       exitJump(state);
       return;
     }
@@ -929,14 +1010,14 @@
   function switchStrategy(state, walk, spec, label) {
     state.strategy = spec.strategy;
     engine.log(state, "Strategy changed to " + spec.strategy + " (rule 40).");
-    trail(state, { kind: "jump", text: label });
+    trail(state, { kind: TRAIL.JUMP, text: label });
     if (spec.endWalk) {
-      endWalk(state, "phase:" + spec.endWalk, spec.text);
+      endWalk(state, phaseResult(spec.endWalk), spec.text);
       return;
     }
     goto(state, spec.page, findStart(spec.page, spec.start));
     walk.trail[0] = {
-      kind: "start",
+      kind: TRAIL.START,
       text: spec.start,
       page: spec.page,
       node: walk.node,
@@ -948,7 +1029,7 @@
     // A die already set aside and brought back by "Use Muster die set aside for minion" must be used now (Rulings), not set aside again.
     if (walk.fromReserve) {
       trail(state, {
-        kind: "skip",
+        kind: TRAIL.SKIP,
         text: label,
         why: "this die was already set aside — it must be used now",
       });
@@ -962,7 +1043,10 @@
     delete walk.dieAns[DIE_REQUIREMENT.MUSTER];
     delete walk.dieAns[DIE_REQUIREMENT.CHAR_OR_MUSTER]; // the die the player said Queller had is no longer available
     engine.log(state, "Muster die set aside for a minion (Rulings).");
-    trail(state, { kind: "note", text: "Muster die set aside for a minion" });
+    trail(state, {
+      kind: TRAIL.NOTE,
+      text: "Muster die set aside for a minion",
+    });
     walk.dieObj = null;
     walk.die = null;
     doReturn(state);
@@ -975,7 +1059,7 @@
       (!state.settings.dice ||
         engine.availableDice(state).some((die) => die.k === DIE_KIND.ACTION));
     if (canUseRing) {
-      trail(state, { kind: "jump", text: label });
+      trail(state, { kind: TRAIL.JUMP, text: label });
       const entry = walk.entry;
       walk.done = true;
       state.walk = null;
@@ -986,21 +1070,21 @@
     if (state.ringUsedThisTurn) why = "a ring was already used this turn";
     else if (engine.ringsKnown(state) && !state.board.rings)
       why = "no Elven Ring";
-    trail(state, { kind: "skip", text: label, why });
+    trail(state, { kind: TRAIL.SKIP, text: label, why });
     exitJump(state);
   }
   // Grey boxes that do not name a page, by the `kind` of their JUMPS entry; a page name goes through jumpWithDie instead.
   const JUMP_KIND = {
     return: (state, walk, spec, label) => {
-      trail(state, { kind: "ret", text: label });
+      trail(state, { kind: TRAIL.RETURN, text: label });
       doReturn(state);
     },
     endPhase4: (state) =>
-      endWalk(state, "phase:Phase 5", "Phase 5 begins — you act first."),
+      endWalk(state, phaseResult("Phase 5"), "Phase 5 begins — you act first."),
     battleNext: (state) =>
       endWalk(
         state,
-        "battleNext",
+        WALK_RESULT.BATTLE_NEXT,
         "Another combat round: walk again from “Battle (next round)”.",
       ),
     switch: switchStrategy,
@@ -1028,7 +1112,7 @@
       walk.ringArmed = false;
       if (!dieResult)
         trail(state, {
-          kind: "skip",
+          kind: TRAIL.SKIP,
           text: label,
           why: "no " + DIE_REQUIREMENT_NAME[req] + " die",
         });
@@ -1044,14 +1128,14 @@
       die = engine.ringChange(state, req);
       if (die)
         trail(state, {
-          kind: "ring",
+          kind: TRAIL.RING,
           text: "Elven Ring: die changed to " + die.face,
         });
     }
     walk.ringArmed = false;
     if (!die) {
       trail(state, {
-        kind: "skip",
+        kind: TRAIL.SKIP,
         text: label,
         why: "no " + DIE_REQUIREMENT_NAME[req] + " die available",
       });
@@ -1064,7 +1148,7 @@
   function askForDie(state, walk, req, label) {
     if (walk.dieAns[req] === undefined) {
       setPrompt(state, {
-        type: "diecheck",
+        type: PROMPT.DIE_CHECK,
         req,
         label,
         text:
@@ -1085,7 +1169,7 @@
     if (ringPossible(state) && !walk.ringAsked) {
       walk.ringAsked = true;
       setPrompt(state, {
-        type: "ring",
+        type: PROMPT.RING,
         req,
         label,
         text:
@@ -1100,7 +1184,7 @@
     }
     walk.ringArmed = false;
     trail(state, {
-      kind: "skip",
+      kind: TRAIL.SKIP,
       text: label,
       why: "no " + DIE_REQUIREMENT_NAME[req] + " die",
     });
@@ -1123,7 +1207,7 @@
     });
     if (!engine.dieSatisfies(walk.die, spec.die)) walk.die = spec.die;
     trail(state, {
-      kind: "jump",
+      kind: TRAIL.JUMP,
       text: label,
       die: DIE_REQUIREMENT_NAME[walk.die],
     });
@@ -1155,14 +1239,14 @@
         );
         endWalk(
           state,
-          "action",
+          WALK_RESULT.ACTION,
           "Queller sets aside the Muster die it had kept for a minion — no action was possible with it.",
         );
         return;
       }
       endWalk(
         state,
-        "noaction",
+        WALK_RESULT.NO_ACTION,
         walk.page === "BA"
           ? "Nothing further from the Battle page this round."
           : "Queller has no action from this walk.",
@@ -1176,7 +1260,10 @@
     walk.dieUsed = frame.dieUsed;
     walk.cands = null;
     walk.chosen = null;
-    trail(state, { kind: "back", text: normalizeText(NODE.text(cur(state))) });
+    trail(state, {
+      kind: TRAIL.BACK,
+      text: normalizeText(NODE.text(cur(state))),
+    });
     exitJump(state);
   }
 
@@ -1196,14 +1283,14 @@
       isStep = NODE.kind(node) === NODE_KIND.STEP;
     if (!state.settings.cards)
       return setPrompt(state, {
-        type: isStep ? "step" : "action",
+        type: isStep ? PROMPT.STEP : PROMPT.ACTION,
         text: label,
         node: walk.node,
       });
     const deckKey = drawDeck(state, key);
     const id = engine.drawCard(state, deckKey);
     trail(state, {
-      kind: "note",
+      kind: TRAIL.NOTE,
       text:
         "Drew a " +
         engine.deckName(deckKey) +
@@ -1216,7 +1303,7 @@
     }
     const handCount = engine.handCounts(state);
     setPrompt(state, {
-      type: "action",
+      type: PROMPT.ACTION,
       text:
         label +
         " — done: Queller now holds " +
@@ -1251,13 +1338,21 @@
       case "M14.sogCorr":
         state.strategy = STRATEGY.CORRUPTION;
         engine.log(state, "Queller uses the corruption strategy.");
-        endWalk(state, "strategy", "Queller uses the corruption strategy.");
+        endWalk(
+          state,
+          WALK_RESULT.STRATEGY,
+          "Queller uses the corruption strategy.",
+        );
         return;
       case "C14.sogMil":
       case "M14.sogMil":
         state.strategy = STRATEGY.MILITARY;
         engine.log(state, "Queller uses the military strategy.");
-        endWalk(state, "strategy", "Queller uses the military strategy.");
+        endWalk(
+          state,
+          WALK_RESULT.STRATEGY,
+          "Queller uses the military strategy.",
+        );
         return;
       case "C5.discardDie":
       case "M5.discardDie":
@@ -1265,7 +1360,7 @@
           const available = engine.availableDice(state);
           if (!available.length) {
             trail(state, {
-              kind: "skip",
+              kind: TRAIL.SKIP,
               text: label,
               why: "no die left to discard",
             });
@@ -1280,7 +1375,7 @@
           );
           endWalk(
             state,
-            "action",
+            WALK_RESULT.ACTION,
             "Queller sets aside a " +
               die.face +
               " die it could not use (rule 32).",
@@ -1288,7 +1383,7 @@
           return;
         }
         return setPrompt(state, {
-          type: "action",
+          type: PROMPT.ACTION,
           text: "Discard unplayable die: set aside one Queller die that could not be used, chosen at random (rule 32).",
           node: walk.node,
         });
@@ -1299,13 +1394,13 @@
           : null;
         if (dice ? !reserved : !state.minionReserved) {
           trail(state, {
-            kind: "skip",
+            kind: TRAIL.SKIP,
             text: label,
             why: "no Muster die set aside",
           });
           endWalk(
             state,
-            "noaction",
+            WALK_RESULT.NO_ACTION,
             "Queller has no action — it has no die it can use.",
           );
           return;
@@ -1321,7 +1416,7 @@
         walk.fromReserve = true;
         walk.reserveDieObj = reservedIndex;
         trail(state, {
-          kind: "jump",
+          kind: TRAIL.JUMP,
           text: "Muster 2 (die set aside for the minion)",
         });
         walk.stack.push({
@@ -1340,7 +1435,7 @@
       case "C5.pass":
       case "M5.pass":
         return setPrompt(state, {
-          type: "action",
+          type: PROMPT.ACTION,
           text: "Pass",
           node: walk.node,
           pass: true,
@@ -1354,11 +1449,15 @@
       case "FA.discard": {
         if (cards && walk.discards) {
           if (walk.die) spendCurrentDie(state, "drew a card");
-          endWalk(state, "action", "Discarded down to the hand limit.");
+          endWalk(
+            state,
+            WALK_RESULT.ACTION,
+            "Discarded down to the hand limit.",
+          );
           return;
         }
         return setPrompt(state, {
-          type: "action",
+          type: PROMPT.ACTION,
           text: "Discard the card chosen by the priority list.",
           node: walk.node,
         });
@@ -1380,14 +1479,14 @@
         }
         if (cards && walk.chosen) {
           return setPrompt(state, {
-            type: "playcard",
+            type: PROMPT.PLAY_CARD,
             card: walk.chosen,
             text: label,
             node: walk.node,
           });
         }
         return setPrompt(state, {
-          type: "action",
+          type: PROMPT.ACTION,
           text: label,
           node: walk.node,
         });
@@ -1396,7 +1495,7 @@
       case "MU.musterEnd": {
         if (cards && walk.chosen) {
           return setPrompt(state, {
-            type: "playcard",
+            type: PROMPT.PLAY_CARD,
             card: walk.chosen,
             text: "Muster with the card",
             node: walk.node,
@@ -1407,7 +1506,7 @@
       case "MU.polTrack": {
         if (!walk.nationChoice || walk.nationChoice === "Faction") {
           trail(state, {
-            kind: "skip",
+            kind: TRAIL.SKIP,
             text: label,
             why: "no nation to advance",
           });
@@ -1417,7 +1516,7 @@
         const nationKey = SHADOW_NATION_KEY[walk.nationChoice];
         if (!state.settings.tracker)
           return setPrompt(state, {
-            type: "action",
+            type: PROMPT.ACTION,
             text:
               "Move " + walk.nationChoice + " down one on the Political Track.",
             node: walk.node,
@@ -1425,7 +1524,7 @@
         const now = state.board.nations[nationKey] ?? 0,
           next = Math.max(0, now - 1);
         return setPrompt(state, {
-          type: "action",
+          type: PROMPT.ACTION,
           text:
             "Move " +
             walk.nationChoice +
@@ -1441,7 +1540,7 @@
       case "MU.musterMinion":
         if (!walk.minionPick) {
           trail(state, {
-            kind: "skip",
+            kind: TRAIL.SKIP,
             text: label,
             why: "no minion can be mustered",
           });
@@ -1449,7 +1548,7 @@
           return;
         }
         return setPrompt(state, {
-          type: "action",
+          type: PROMPT.ACTION,
           text: "Muster " + walk.minionPick + ".",
           node: walk.node,
           minion: {
@@ -1461,14 +1560,14 @@
       case "FA.bringIn":
         if (walk.factionChoice)
           return setPrompt(state, {
-            type: "action",
+            type: PROMPT.ACTION,
             text: "Bring the " + walk.factionChoice + " into play.",
             node: walk.node,
             faction: walk.factionChoice.toLowerCase(),
           });
         if (cards || state.settings.tracker) {
           trail(state, {
-            kind: "skip",
+            kind: TRAIL.SKIP,
             text: label,
             why: "no faction to bring in",
           });
@@ -1480,14 +1579,14 @@
     if (/^End( action)?$/.test(label)) {
       endWalk(
         state,
-        walk.die ? "action" : "end",
+        walk.die ? WALK_RESULT.ACTION : WALK_RESULT.END,
         "End of " + (walk.die ? "action" : "walk") + ".",
       );
       if (walk.die) spendCurrentDie(state, "end of action");
       return;
     }
     setPrompt(state, {
-      type: "action",
+      type: PROMPT.ACTION,
       text: label,
       node: walk.node,
       help: nodeExtra.help,
@@ -1519,7 +1618,7 @@
   // ----- steps (orange) -----
   // A step the app performed itself: record it and move on.
   function continueStep(state, label, why) {
-    trail(state, { kind: "step", text: label, auto: true, why });
+    trail(state, { kind: TRAIL.STEP, text: label, auto: true, why });
     follow(state, null);
   }
   function handleStep(state, node) {
@@ -1538,7 +1637,7 @@
           return continueWith("pool: " + state.dice.pool.length + " dice");
         }
         return setPrompt(state, {
-          type: "step",
+          type: PROMPT.STEP,
           text:
             "Recover Queller’s action dice" +
             (state.settings.wome
@@ -1562,7 +1661,7 @@
           );
         }
         return setPrompt(state, {
-          type: "step",
+          type: PROMPT.STEP,
           text:
             "Draw one Character and one Strategy Event card for Queller" +
             (state.settings.wome ? ", and one Faction Event card" : "") +
@@ -1584,7 +1683,7 @@
           );
         }
         return setPrompt(state, {
-          type: "step",
+          type: PROMPT.STEP,
           text: label,
           items: nodeExtra.items,
           node: walk.node,
@@ -1603,7 +1702,7 @@
           );
         }
         return setPrompt(state, {
-          type: "step",
+          type: PROMPT.STEP,
           text: label,
           items: nodeExtra.items,
           node: walk.node,
@@ -1611,7 +1710,7 @@
       case "C14.rollHunt":
         if (dice) {
           const roll = engine.randomBelow(6) + 1;
-          const placed = roll <= 3 ? 0 : 1;
+          const placed = isLowRoll(roll) ? 0 : 1;
           engine.log(
             state,
             "Rolled " +
@@ -1625,7 +1724,11 @@
             "rolled " + roll + " → " + placed + " in the Hunt box",
           );
         }
-        return setPrompt(state, { type: "step", text: label, node: walk.node });
+        return setPrompt(state, {
+          type: PROMPT.STEP,
+          text: label,
+          node: walk.node,
+        });
       case "C14.huntMax":
       case "M14.huntMax":
         if (dice) {
@@ -1638,7 +1741,7 @@
           );
         }
         return setPrompt(state, {
-          type: "step",
+          type: PROMPT.STEP,
           text: label + " (up to the number of Companions, minimum 1).",
           node: walk.node,
         });
@@ -1679,7 +1782,7 @@
           return continueWith(faces.join(", "));
         }
         return setPrompt(state, {
-          type: "step",
+          type: PROMPT.STEP,
           text: "Roll Queller’s remaining action dice. Put every Eye in the Hunt box.",
           node: walk.node,
         });
@@ -1689,25 +1792,28 @@
           const roll = engine.randomBelow(6) + 1;
           engine.log(state, "Strategy roll: " + roll + ".");
           trail(state, {
-            kind: "step",
+            kind: TRAIL.STEP,
             text: "Roll a die",
             auto: true,
             why: "rolled " + roll,
           });
-          follow(state, roll <= 3 ? "1-3" : "4-6");
+          follow(
+            state,
+            isLowRoll(roll) ? STRATEGY_ROLL.LOW : STRATEGY_ROLL.HIGH,
+          );
           return;
         }
         return setPrompt(state, {
-          type: "roll",
+          type: PROMPT.ROLL,
           text: "Roll a die: 1-3 corruption strategy, 4-6 military strategy.",
           node: walk.node,
-          options: ["1-3", "4-6"],
+          options: [STRATEGY_ROLL.LOW, STRATEGY_ROLL.HIGH],
         });
       case "BA.playCard":
         if (cards) {
           if (walk.chosen) {
             return setPrompt(state, {
-              type: "playcard",
+              type: PROMPT.PLAY_CARD,
               card: walk.chosen,
               text: "Play combat card",
               node: walk.node,
@@ -1722,7 +1828,7 @@
         return drawStep(state, node, key);
     }
     setPrompt(state, {
-      type: "step",
+      type: PROMPT.STEP,
       text: label,
       items: nodeExtra.items,
       node: walk.node,
@@ -1734,7 +1840,7 @@
   // A priority list resolved without a card pick: record it and move on.
   function continuePriority(state, node, why) {
     trail(state, {
-      kind: "pri",
+      kind: TRAIL.PRIORITY,
       text: NODE.text(node),
       items: NODE.extra(node).items,
       auto: true,
@@ -1789,7 +1895,7 @@
         walk.chosen = picked.chosen;
         walk.steps = picked.steps;
         trail(state, {
-          kind: "pri",
+          kind: TRAIL.PRIORITY,
           text: label,
           items: nodeExtra.items,
           steps: picked.steps,
@@ -1819,7 +1925,7 @@
           );
         walk.discards = discarded;
         trail(state, {
-          kind: "pri",
+          kind: TRAIL.PRIORITY,
           text: label,
           items: nodeExtra.items,
           steps: discarded.length
@@ -1874,7 +1980,7 @@
         walk.factionChoice = best[0] || null;
         if (!best.length) steps.push("all factions already in play");
         trail(state, {
-          kind: "pri",
+          kind: TRAIL.PRIORITY,
           text: label,
           items: nodeExtra.items,
           steps,
@@ -1893,7 +1999,7 @@
       if (notInPlay.length <= 1) {
         walk.factionChoice = notInPlay[0] || null;
         trail(state, {
-          kind: "pri",
+          kind: TRAIL.PRIORITY,
           text: label,
           items: nodeExtra.items,
           steps: [
@@ -1908,7 +2014,7 @@
         return;
       }
       return setPrompt(state, {
-        type: "choice",
+        type: PROMPT.CHOICE,
         text: "Recruit priority: which faction has the most Faction Event cards in Queller’s hand and in play (preferred cards first)?",
         items: nodeExtra.items,
         options: notInPlay.map((name) => ({ value: name, label: name })),
@@ -1940,7 +2046,7 @@
           { value: "", label: "None of these" },
         );
         return setPrompt(state, {
-          type: "choice",
+          type: PROMPT.CHOICE,
           text: "Political Track priority: which is the first of these that applies?",
           items: nodeExtra.items,
           options,
@@ -1967,7 +2073,7 @@
         )
         .join(", ");
       trail(state, {
-        kind: "pri",
+        kind: TRAIL.PRIORITY,
         text: label,
         items: nodeExtra.items,
         steps: [
@@ -2005,7 +2111,7 @@
           });
         options.push({ value: "", label: "None can be mustered" });
         return setPrompt(state, {
-          type: "choice",
+          type: PROMPT.CHOICE,
           text: "Minion priority: which is the first of these that can be mustered (not already in play)?",
           items: nodeExtra.items,
           options,
@@ -2018,7 +2124,7 @@
       const minions = engine.minionsAvailable(state);
       walk.minionPick = minions.length ? minions[0].name : null;
       trail(state, {
-        kind: "pri",
+        kind: TRAIL.PRIORITY,
         text: label,
         items: nodeExtra.items,
         steps: minions.length
@@ -2031,7 +2137,7 @@
       return;
     }
     setPrompt(state, {
-      type: "priority",
+      type: PROMPT.PRIORITY,
       text: label,
       items: nodeExtra.items,
       node: walk.node,
@@ -2046,11 +2152,11 @@
     walk.prompt = null;
     const node = cur(state);
     switch (prompt.type) {
-      case "yesno": {
+      case PROMPT.YES_NO: {
         if (prompt.part) {
           walk.parts[prompt.part] = !!value;
           trail(state, {
-            kind: "q",
+            kind: TRAIL.QUESTION,
             text: prompt.text,
             answer: value ? "Yes" : "No",
           });
@@ -2066,7 +2172,11 @@
               auto: false,
             });
           } else {
-            trail(state, { kind: "q", text: prompt.text, answer: "No" });
+            trail(state, {
+              kind: TRAIL.QUESTION,
+              text: prompt.text,
+              answer: "No",
+            });
             walk.sub = 2;
           }
           break;
@@ -2088,19 +2198,23 @@
         });
         break;
       }
-      case "count": {
+      case PROMPT.COUNT: {
         const count = Math.max(
           prompt.min,
           Math.min(prompt.max, Number.parseInt(value, 10) || 0),
         );
         walk.parts[prompt.part] = count;
-        trail(state, { kind: "q", text: prompt.text, answer: String(count) });
+        trail(state, {
+          kind: TRAIL.QUESTION,
+          text: prompt.text,
+          answer: String(count),
+        });
         break;
       }
-      case "choice": {
+      case PROMPT.CHOICE: {
         walk[prompt.set] = value || null;
         trail(state, {
-          kind: "pri",
+          kind: TRAIL.PRIORITY,
           text: prompt.pri,
           items: prompt.items,
           steps: ["You chose: " + (value || "none")],
@@ -2109,35 +2223,35 @@
         follow(state, null);
         break;
       }
-      case "situ":
+      case PROMPT.SITUATIONAL:
         state.situ[prompt.key] = !!value;
         trail(state, {
-          kind: "q",
+          kind: TRAIL.QUESTION,
           text: prompt.text,
           answer: value ? "Yes" : "No",
           situ: true,
         });
         break;
-      case "confirm":
+      case PROMPT.CONFIRM:
         state.playable[(prompt.ctx === "combat" ? "B:" : "") + prompt.card] =
           !!value;
         trail(state, {
-          kind: "reveal",
+          kind: TRAIL.REVEAL,
           text: cardById[prompt.card].title,
           answer: value ? "playable" : "not playable",
           card: prompt.card,
         });
         break;
-      case "diecheck":
+      case PROMPT.DIE_CHECK:
         walk.dieAns[prompt.req] = !!value;
         walk.pendingDie = prompt.label;
         trail(state, {
-          kind: "q",
+          kind: TRAIL.QUESTION,
           text: prompt.text,
           answer: value ? "Yes" : "No",
         });
         break;
-      case "ring":
+      case PROMPT.RING:
         if (value) {
           state.board.rings = Math.max(0, state.board.rings - 1);
           state.ringUsedThisTurn = true;
@@ -2150,7 +2264,7 @@
               " die (rule 36).",
           );
           trail(state, {
-            kind: "ring",
+            kind: TRAIL.RING,
             text: "Elven Ring used for " + dieWithArticle(prompt.req) + " die",
           });
         } else {
@@ -2158,11 +2272,15 @@
           walk.pendingDie = prompt.label;
         }
         break;
-      case "action": {
+      case PROMPT.ACTION: {
         if (value === "done") {
-          trail(state, { kind: "act", text: prompt.text, answer: "done" });
+          trail(state, {
+            kind: TRAIL.ACTION,
+            text: prompt.text,
+            answer: "done",
+          });
           if (prompt.pass) {
-            endWalk(state, "pass", "Queller passes.");
+            endWalk(state, WALK_RESULT.PASS, "Queller passes.");
             engine.log(state, "Queller passes.");
             break;
           }
@@ -2197,25 +2315,25 @@
           }
           if (walk.die) spendCurrentDie(state, "“" + prompt.text + "”");
           else engine.log(state, "Queller: " + prompt.text);
-          endWalk(state, "action", prompt.text);
+          endWalk(state, WALK_RESULT.ACTION, prompt.text);
           break;
         }
         trail(state, {
-          kind: "act",
+          kind: TRAIL.ACTION,
           text: prompt.text,
           answer: "not possible",
         });
         exitAction(state);
         break;
       }
-      case "playcard": {
+      case PROMPT.PLAY_CARD: {
         const palantirBefore = state.cards.table.includes(CARD.PALANTIR),
           die = walk.die;
         const card = engine.playCard(state, prompt.card, {
           combat: prompt.combat,
         });
         trail(state, {
-          kind: "act",
+          kind: TRAIL.ACTION,
           text: "Played “" + card.title + "”",
           answer: "done",
           card: prompt.card,
@@ -2232,12 +2350,16 @@
           follow(state, null);
           break;
         }
-        endWalk(state, "action", "Queller plays “" + card.title + "”.");
+        endWalk(
+          state,
+          WALK_RESULT.ACTION,
+          "Queller plays “" + card.title + "”.",
+        );
         break;
       }
-      case "step": {
+      case PROMPT.STEP: {
         trail(state, {
-          kind: "step",
+          kind: TRAIL.STEP,
           text: prompt.text,
           answer: value === "no" ? "not possible" : "done",
         });
@@ -2245,14 +2367,14 @@
         follow(state, null);
         break;
       }
-      case "roll": {
-        trail(state, { kind: "step", text: prompt.text, answer: value });
+      case PROMPT.ROLL: {
+        trail(state, { kind: TRAIL.STEP, text: prompt.text, answer: value });
         follow(state, value);
         break;
       }
-      case "priority": {
+      case PROMPT.PRIORITY: {
         trail(state, {
-          kind: "pri",
+          kind: TRAIL.PRIORITY,
           text: prompt.text,
           items: prompt.items,
           steps: prompt.steps,
@@ -2262,14 +2384,14 @@
         follow(state, null);
         break;
       }
-      case "battleForm": {
+      case PROMPT.BATTLE_FORM: {
         state.battle = value;
         state.playable = Object.fromEntries(
           Object.entries(state.playable).filter(
             ([key]) => !key.startsWith("B:"),
           ),
         );
-        trail(state, { kind: "note", text: "Battle details recorded" });
+        trail(state, { kind: TRAIL.NOTE, text: "Battle details recorded" });
         break;
       }
     }
@@ -2323,7 +2445,7 @@
     });
     if (state.settings.cards) {
       state.walk.prompt = {
-        type: "battleForm",
+        type: PROMPT.BATTLE_FORM,
         round,
         text: "Battle details (used to judge which combat cards Queller can play)",
       };
@@ -2342,6 +2464,13 @@
   }
 
   Object.assign(window.QB, {
+    PROMPT,
+    YES_NO_PROMPTS,
+    WALK_RESULT,
+    phaseResult,
+    phaseFromResult,
+    STRATEGY_ROLL,
+    CARD_CRITERIA_NODES,
     startWalk,
     answer,
     run,

@@ -29,23 +29,7 @@ const state = engine.newState({
   tracker: true,
   wome: true,
 });
-const cardLists = [
-  "C14.disc14",
-  "C14.disc18",
-  "C14.discF",
-  "M14.disc",
-  "M14.discF",
-  "EV.prefPri",
-  "EV.anyPri",
-  "EV.discPri",
-  "FA.playPri",
-  "FA.discPri",
-  "BA.sortiePri",
-  "BA.wkPri",
-  "BA.atkPri",
-  "BA.defPri",
-];
-for (const nodeKey of cardLists) {
+for (const nodeKey of engine.CARD_CRITERIA_NODES) {
   const [pageKey, nodeId] = nodeKey.split(".");
   const node = FLOW[pageKey]?.nodes[nodeId];
   if (!node) {

@@ -20,14 +20,13 @@ debug.restore(storage);
 debug.reset();
 // The answer that moves a prompt on: No to every question, the minimum or first option otherwise.
 const ANSWERS = {
-  count: (prompt) => prompt.min,
-  choice: (prompt) => prompt.options[0].value,
-  roll: (prompt) => prompt.options[0],
-  priority: () => "ok",
+  [engine.PROMPT.COUNT]: (prompt) => prompt.min,
+  [engine.PROMPT.CHOICE]: (prompt) => prompt.options[0].value,
+  [engine.PROMPT.ROLL]: (prompt) => prompt.options[0],
+  [engine.PROMPT.PRIORITY]: () => "ok",
 };
 function defaultAnswer(prompt) {
-  if (["yesno", "situ", "confirm", "diecheck", "ring"].includes(prompt.type))
-    return false;
+  if (engine.YES_NO_PROMPTS.includes(prompt.type)) return false;
   const answerFor = ANSWERS[prompt.type];
   return answerFor ? answerFor(prompt) : "done";
 }

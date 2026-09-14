@@ -36,27 +36,27 @@ function cardTotals(state) {
 function randomAnswer(state) {
   const prompt = state.walk.prompt;
   switch (prompt.type) {
-    case "yesno":
-    case "situ":
-    case "confirm":
-    case "diecheck":
-    case "ring":
+    case engine.PROMPT.YES_NO:
+    case engine.PROMPT.SITUATIONAL:
+    case engine.PROMPT.CONFIRM:
+    case engine.PROMPT.DIE_CHECK:
+    case engine.PROMPT.RING:
       return rnd() < 0.5;
-    case "count":
+    case engine.PROMPT.COUNT:
       return Math.floor(prompt.min + rnd() * (prompt.max - prompt.min + 1));
-    case "choice":
+    case engine.PROMPT.CHOICE:
       return prompt.options[Math.floor(rnd() * prompt.options.length)].value;
-    case "action":
+    case engine.PROMPT.ACTION:
       return rnd() < 0.8 ? "done" : "no";
-    case "playcard":
+    case engine.PROMPT.PLAY_CARD:
       return "done";
-    case "step":
+    case engine.PROMPT.STEP:
       return rnd() < 0.85 ? "done" : "no";
-    case "roll":
+    case engine.PROMPT.ROLL:
       return prompt.options[Math.floor(rnd() * prompt.options.length)];
-    case "priority":
+    case engine.PROMPT.PRIORITY:
       return "ok";
-    case "battleForm":
+    case engine.PROMPT.BATTLE_FORM:
       return {
         nazLead: Math.floor(rnd() * 3),
         shadowElite: rnd() < 0.5,
@@ -198,7 +198,7 @@ function game(settings, gameNumber) {
       if (rnd() < 0.25) {
         engine.startBattle(state, 1);
         if (!finish(state, tag + " battle1")) return state;
-        if (state.walk.result === "battleNext") {
+        if (state.walk.result === engine.WALK_RESULT.BATTLE_NEXT) {
           engine.startBattle(state, 2);
           if (!finish(state, tag + " battle2")) return state;
         }
