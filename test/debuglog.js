@@ -21,7 +21,7 @@ DBG.reset();
 // The answer that moves a prompt on: No to every question, the minimum or first option otherwise.
 const ANSWERS = {
   count: (p) => p.min,
-  choice: (p) => p.options[0].v,
+  choice: (p) => p.options[0].value,
   roll: (p) => p.options[0],
   priority: () => "ok",
 };

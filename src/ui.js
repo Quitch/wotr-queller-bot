@@ -504,7 +504,7 @@
         "><summary>Walk trail — " +
         esc(F[w.entry.page].name) +
         " from “" +
-        esc(Q.norm(w.entry.start)) +
+        esc(Q.normalizeText(w.entry.start)) +
         "” (" +
         w.trail.length +
         " steps)</summary>" +
@@ -618,7 +618,7 @@
       esc(page.name) +
       " · " +
       (KIND_NAME[kind] || "") +
-      (w.die ? " · " + esc(Q.DIE_NAME[w.die]) + " die" : "") +
+      (w.die ? " · " + esc(Q.DIE_REQUIREMENT_NAME[w.die]) + " die" : "") +
       (w.mode === "ringAny" ? " · ring search" : "") +
       "</div>";
     let body = "",
@@ -669,9 +669,9 @@
           .map(
             (o) =>
               '<button class="btn" data-ans="' +
-              esc(o.v) +
+              esc(o.value) +
               '">' +
-              esc(o.l) +
+              esc(o.label) +
               "</button>",
           )
           .join("");
@@ -919,7 +919,9 @@
   function dieHelpText(w) {
     if (S.settings.dice && w.dieObj != null)
       return "Uses the " + esc(S.dice.pool[w.dieObj].face) + " die.";
-    return w.die ? "Uses a " + esc(Q.DIE_NAME[w.die]) + " die." : "";
+    return w.die
+      ? "Uses a " + esc(Q.DIE_REQUIREMENT_NAME[w.die]) + " die."
+      : "";
   }
   // The deck line above a card's title.
   function cardTag(c) {

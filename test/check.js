@@ -54,7 +54,15 @@ for (const p in F)
     const n = F[p].nodes[id];
     const outs = F[p].edges.filter((e) => e[0] === id);
     if (n[0] === "J" && !Q.jumpSpec(n[5]))
-      fail("no JUMPS entry for " + p + "." + id + ' "' + Q.norm(n[5]) + '"');
+      fail(
+        "no JUMPS entry for " +
+          p +
+          "." +
+          id +
+          ' "' +
+          Q.normalizeText(n[5]) +
+          '"',
+      );
     if ((n[0] === "D" || n[0] === "d") && outs.length !== 2)
       fail(p + "." + id + " has " + outs.length + " arrows");
     if (!outs.length && !["A", "J", "N"].includes(n[0]))

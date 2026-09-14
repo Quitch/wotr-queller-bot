@@ -1,24 +1,24 @@
 // ===== Flowchart walk engine =====
 (function () {
-  const Q = window.QB,
-    F = window.QB_FLOW,
-    byId = Q.cardById;
-  const SN_NAME = {
+  const engine = window.QB,
+    FLOW = window.QB_FLOW,
+    cardById = engine.cardById;
+  const SHADOW_NATION_NAME = {
       sauron: "Sauron",
       isengard: "Isengard",
       se: "Southrons and Easterlings",
     },
-    SN_KEY = {
+    SHADOW_NATION_KEY = {
       Sauron: "sauron",
       Isengard: "isengard",
       "Southrons and Easterlings": "se",
     };
   const PENDING = null; // returned by a step that has set a prompt and is waiting for the player
 
-  // flow.js node tuple: [kind, x, y, w, h, text, extra]
-  const kind = (n) => n[0],
-    text = (n) => n[5],
-    extra = (n) => n[6] || {};
+  // flow.js node tuple: [kind, nodeExtra, y, walk, h, text, extra]
+  const kind = (node) => node[0],
+    text = (node) => node[5],
+    extra = (node) => node[6] || {};
 
   const JUMPS = [
     [/^Army$/, { page: "AR", start: "Army", die: "Army" }],
@@ -91,7 +91,7 @@
     [/Strategy Phase 5$/, { kind: "endPhase4" }],
     [/^Battle \(next round\)$/, { kind: "battleNext" }],
   ];
-  const DIE_NAME = {
+  const DIE_REQUIREMENT_NAME = {
     Army: "Army",
     Muster: "Muster",
     Character: "Character",
@@ -101,43 +101,50 @@
     FPlay: "Faction (Play)",
     FDraw: "Faction (Draw)",
   };
-  function aDie(k) {
-    const n = DIE_NAME[k] || k;
-    return (/^[AEIOU]/.test(n) ? "an " : "a ") + n;
+  function dieWithArticle(requirement) {
+    const name = DIE_REQUIREMENT_NAME[requirement] || requirement;
+    return (/^[AEIOU]/.test(name) ? "an " : "a ") + name;
   }
-  function norm(t) {
-    return t.replaceAll("\n", " ").replaceAll(/\s+/g, " ").trim();
+  function normalizeText(text) {
+    return text.replaceAll("\n", " ").replaceAll(/\s+/g, " ").trim();
   }
-  function jumpSpec(t) {
-    t = norm(t);
-    for (const [re, spec] of JUMPS) if (re.test(t)) return spec;
+  function jumpSpec(boxText) {
+    const label = normalizeText(boxText);
+    for (const [pattern, spec] of JUMPS) if (pattern.test(label)) return spec;
     return null;
   }
   function outEdges(page, id) {
-    return F[page].edges.filter((e) => e[0] === id);
+    return FLOW[page].edges.filter((edge) => edge[0] === id);
   }
   function edgeFor(page, id, label) {
-    const es = outEdges(page, id);
-    let e = es.find((x) => x[2] === label);
-    if (!e) e = es.find((x) => x[2] == null);
-    return e;
+    const edges = outEdges(page, id);
+    let edge = edges.find((candidate) => candidate[2] === label);
+    if (!edge) edge = edges.find((candidate) => candidate[2] == null);
+    return edge;
   }
   function findStart(page, name) {
-    const ns = F[page].nodes;
-    for (const id in ns) {
-      if (kind(ns[id]) === "S" && norm(text(ns[id])) === norm(name)) return id;
+    const nodes = FLOW[page].nodes;
+    for (const id in nodes) {
+      if (
+        kind(nodes[id]) === "S" &&
+        normalizeText(text(nodes[id])) === normalizeText(name)
+      )
+        return id;
     }
     return null;
   }
 
-  function startWalk(S, page, startName, opts) {
-    opts = opts || {};
+  // Create the walk at a start point without stepping it; returns false when the start point does not exist.
+  function beginWalk(state, page, startName, options = {}) {
     const id = findStart(page, startName);
     if (!id) {
-      Q.log(S, "No start point “" + startName + "” on " + F[page].name);
-      return;
+      engine.log(
+        state,
+        "No start point “" + startName + "” on " + FLOW[page].name,
+      );
+      return false;
     }
-    S.walk = {
+    state.walk = {
       page,
       node: id,
       entry: { page, start: startName },
@@ -146,15 +153,15 @@
       prompt: null,
       done: false,
       result: null,
-      die: opts.die || null,
-      dieObj: opts.dieObj != null ? opts.dieObj : null,
+      die: options.die || null,
+      dieObj: options.dieObj != null ? options.dieObj : null,
       dieAns: {},
       dieUsed: false,
       pendingDie: null, // the die this walk holds; dieAns/pendingDie: the player's die answers when dice are not rolled
-      mode: opts.mode || null,
+      mode: options.mode || null,
       ringArmed: false,
       ringAsked: false, // Elven Ring state (rules 36–38)
-      battleRound: opts.battleRound || null,
+      battleRound: options.battleRound || null,
       fromReserve: false,
       reserveDieObj: null, // set when "Use Muster die set aside for minion" re-enters Muster 2
       cands: null,
@@ -168,76 +175,86 @@
       sub: 0,
       parts: {},
     }; // multi-part decisions and answers to board questions
-    trail(S, { kind: "start", text: startName, page });
-    Q.log(
-      S,
+    trail(state, { kind: "start", text: startName, page });
+    engine.log(
+      state,
       "Walk: " +
-        F[page].name +
+        FLOW[page].name +
         " from “" +
-        norm(startName) +
+        normalizeText(startName) +
         "”" +
-        (opts.mode === "ringAny" ? " (looking for a ring use, rule 37)" : "") +
+        (options.mode === "ringAny"
+          ? " (looking for a ring use, rule 37)"
+          : "") +
         ".",
     );
-    if (!opts.noRun) run(S);
-  }
-  function trail(S, e) {
-    e.page = e.page || S.walk.page;
-    e.node = e.node || S.walk.node;
-    S.walk.trail.push(e);
-  }
-  function cur(S) {
-    return F[S.walk.page].nodes[S.walk.node];
-  }
-  function goto(S, page, id) {
-    S.walk.page = page;
-    S.walk.node = id;
-  }
-  function follow(S, label) {
-    const w = S.walk;
-    const e = edgeFor(w.page, w.node, label);
-    if (!e) return false;
-    goto(S, w.page, e[1]);
     return true;
   }
-  function endWalk(S, result, txt) {
-    const w = S.walk;
-    w.done = true;
-    w.result = result;
-    w.prompt = null;
-    trail(S, { kind: "end", text: txt || result });
-    if (txt) Q.log(S, txt);
+  function startWalk(state, page, startName, options) {
+    if (beginWalk(state, page, startName, options)) run(state);
   }
-  function setPrompt(S, p) {
-    S.walk.prompt = p;
+  function trail(state, entry) {
+    entry.page = entry.page || state.walk.page;
+    entry.node = entry.node || state.walk.node;
+    state.walk.trail.push(entry);
+  }
+  function cur(state) {
+    return FLOW[state.walk.page].nodes[state.walk.node];
+  }
+  function goto(state, page, id) {
+    state.walk.page = page;
+    state.walk.node = id;
+  }
+  function follow(state, label) {
+    const walk = state.walk;
+    const edge = edgeFor(walk.page, walk.node, label);
+    if (!edge) return false;
+    goto(state, walk.page, edge[1]);
+    return true;
+  }
+  function endWalk(state, result, message) {
+    const walk = state.walk;
+    walk.done = true;
+    walk.result = result;
+    walk.prompt = null;
+    trail(state, { kind: "end", text: message || result });
+    if (message) engine.log(state, message);
+  }
+  function setPrompt(state, prompt) {
+    state.walk.prompt = prompt;
   }
 
   // --- main loop ---
   const RUN_GUARD = 300;
   // A start box: the walk's own start point is passed through; any other start point reached is where the walk ends (the next phase).
-  function atStart(S, w, n) {
-    const first = w.trail[0];
-    if (first.page === w.page && first.node === w.node) follow(S, null);
+  function atStart(state, walk, node) {
+    const first = walk.trail[0];
+    if (first.page === walk.page && first.node === walk.node)
+      follow(state, null);
     else
-      endWalk(S, "phase:" + norm(text(n)), "Reached “" + norm(text(n)) + "”.");
+      endWalk(
+        state,
+        "phase:" + normalizeText(text(node)),
+        "Reached “" + normalizeText(text(node)) + "”.",
+      );
   }
   // The handler for each box kind (see flow.js); notes are passed through.
   const STEP = {
     S: atStart,
-    N: (S) => follow(S, null),
-    D: (S, w, n) => handleDecision(S, n),
-    d: (S, w, n) => handleDecision(S, n),
-    J: (S, w, n) => handleJump(S, n),
-    A: (S, w, n) => handleAction(S, n),
-    T: (S, w, n) => handleStep(S, n),
-    P: (S, w, n) => handlePriority(S, n),
+    N: (state) => follow(state, null),
+    D: (state, walk, node) => handleDecision(state, node),
+    d: (state, walk, node) => handleDecision(state, node),
+    J: (state, walk, node) => handleJump(state, node),
+    A: (state, walk, node) => handleAction(state, node),
+    T: (state, walk, node) => handleStep(state, node),
+    P: (state, walk, node) => handlePriority(state, node),
   };
-  function run(S) {
+  function run(state) {
     let guard = 0;
-    while (S.walk && !S.walk.done && !S.walk.prompt) {
+    while (state.walk && !state.walk.done && !state.walk.prompt) {
       if (guard++ >= RUN_GUARD) {
         endWalk(
-          S,
+          state,
           "noaction",
           "The walk did not finish (more than " +
             RUN_GUARD +
@@ -245,622 +262,713 @@
         );
         break;
       }
-      const w = S.walk,
-        n = cur(S),
-        k = kind(n);
-      if (!STEP[k]) {
-        endWalk(S, "noaction", "Unknown box kind “" + k + "”.");
+      const walk = state.walk,
+        node = cur(state),
+        boxKind = kind(node);
+      if (!STEP[boxKind]) {
+        endWalk(state, "noaction", "Unknown box kind “" + boxKind + "”.");
         break;
       }
-      STEP[k](S, w, n);
+      STEP[boxKind](state, walk, node);
     }
   }
   // Board consequences of a decision the player answered (the tracker keeps up with what the flowchart just established).
   const DECIDE_HOOKS = {
-    "CH.musteredWK": (S, ans) => {
-      if (ans && !S.board.chars.witchKing) {
-        S.board.chars.witchKing = true;
-        S.playable = {};
-        Q.log(
-          S,
+    "CH.musteredWK": (state, answer) => {
+      if (answer && !state.board.chars.witchKing) {
+        state.board.chars.witchKing = true;
+        state.playable = {};
+        engine.log(
+          state,
           "Witch King is now in play (tracker updated; his die joins the pool next turn).",
         );
       }
     },
   };
-  // Record a decision (`txt` as shown, `bold` = Elven Ring condition) and follow its Yes/No arrow.
-  function decided(S, txt, bold, ans, auto, why) {
-    const w = S.walk;
-    trail(S, {
+  // Record a decision (`text` as shown; `ringCondition` when the question is an Elven Ring condition) and follow its Yes/No arrow.
+  function recordDecision(
+    state,
+    { text: question, ringCondition, answer, auto: automatic, why },
+  ) {
+    const walk = state.walk;
+    trail(state, {
       kind: "q",
-      text: txt,
-      answer: ans ? "Yes" : "No",
-      auto: !!auto,
+      text: question,
+      answer: answer ? "Yes" : "No",
+      auto: !!automatic,
       why,
-      ring: !!bold,
+      ring: !!ringCondition,
     });
-    if (ans && bold && !S.ringUsedThisTurn) w.ringArmed = true;
-    const hook = DECIDE_HOOKS[w.page + "." + w.node];
-    if (hook) hook(S, ans);
-    w.sub = 0;
-    w.parts = {};
-    if (!follow(S, ans ? "Yes" : "No")) {
-      endWalk(S, "noaction", "The flowchart has no arrow for that answer.");
+    if (answer && ringCondition && !state.ringUsedThisTurn)
+      walk.ringArmed = true;
+    const hook = DECIDE_HOOKS[walk.page + "." + walk.node];
+    if (hook) hook(state, answer);
+    walk.sub = 0;
+    walk.parts = {};
+    if (!follow(state, answer ? "Yes" : "No")) {
+      endWalk(state, "noaction", "The flowchart has no arrow for that answer.");
     }
   }
-  function ask(S, n, txt, opts) {
-    setPrompt(S, {
+  function ask(state, node, question, promptExtra) {
+    setPrompt(state, {
       type: "yesno",
-      text: txt || text(n),
-      node: S.walk.node,
-      page: S.walk.page,
-      kind: kind(n),
-      ...opts,
+      text: question || text(node),
+      node: state.walk.node,
+      page: state.walk.page,
+      kind: kind(node),
+      ...promptExtra,
     });
   }
-  // A board fact: from the tracker when it is on, otherwise asked of the player once per node (answers live in w.parts). Returns PENDING while the question is open.
-  function boardFact(S, k, question, trackerValue, range) {
-    if (S.settings.tracker) return trackerValue;
-    const w = S.walk,
-      pk = w.page + "." + w.node + "." + k;
-    if (pk in w.parts) return w.parts[pk];
-    setPrompt(
-      S,
-      range
-        ? {
-            type: "count",
-            text: question,
-            part: pk,
-            node: w.node,
-            page: w.page,
-            min: range.min,
-            max: range.max,
-            value: trackerValue,
-          }
-        : {
-            type: "yesno",
-            text: question,
-            part: pk,
-            node: w.node,
-            page: w.page,
-            kind: "d",
-            board: true,
-          },
-    );
+  // A yes/no board fact: from the tracker when it is on, otherwise asked of the player once per node (answers live in walk.parts). Returns PENDING while the question is open.
+  function boardFactYesNo(state, factKey, question, trackerValue) {
+    if (state.settings.tracker) return trackerValue;
+    const walk = state.walk,
+      partKey = walk.page + "." + walk.node + "." + factKey;
+    if (partKey in walk.parts) return walk.parts[partKey];
+    setPrompt(state, {
+      type: "yesno",
+      text: question,
+      part: partKey,
+      node: walk.node,
+      page: walk.page,
+      kind: "d",
+      board: true,
+    });
     return PENDING;
   }
 
   // ----- decisions -----
-  function handleDecision(S, n) {
-    const w = S.walk,
-      id = w.node,
-      page = w.page,
-      x = extra(n),
-      B = S.board,
-      cards = S.settings.cards,
-      dice = S.settings.dice;
-    if (x.wome && !S.settings.wome)
-      return decided(S, text(n), x.bold, false, true, "WoME not in play");
+  function handleDecision(state, node) {
+    const walk = state.walk,
+      id = walk.node,
+      page = walk.page,
+      nodeExtra = extra(node),
+      board = state.board,
+      cards = state.settings.cards,
+      dice = state.settings.dice;
+    if (nodeExtra.wome && !state.settings.wome)
+      return recordDecision(state, {
+        text: text(node),
+        ringCondition: nodeExtra.bold,
+        answer: false,
+        auto: true,
+        why: "WoME not in play",
+      });
     const key = page + "." + id,
-      T = S.settings.tracker,
-      facKnown = T || (cards && S.settings.wome);
-    const auto = (v, why) => decided(S, text(n), x.bold, v, true, why);
-    const bauto = (v, why) => (T ? auto(v, why) : ask(S, n));
-    const hc = Q.handCounts(S);
-    const handC = () => Q.handCardsOfDeck(S, "C"),
-      handS = () => Q.handCardsOfDeck(S, "S");
+      trackerOn = state.settings.tracker,
+      factionsKnown = trackerOn || (cards && state.settings.wome);
+    const answerAuto = (value, why) =>
+      recordDecision(state, {
+        text: text(node),
+        ringCondition: nodeExtra.bold,
+        answer: value,
+        auto: true,
+        why,
+      });
+    const answerFromTracker = (value, why) =>
+      trackerOn ? answerAuto(value, why) : ask(state, node);
+    const handCount = engine.handCounts(state);
+    const characterHand = () => engine.handCardsOfDeck(state, "C"),
+      strategyHand = () => engine.handCardsOfDeck(state, "S");
     // Evaluate which of `ids` are playable (asking the player as needed), keep them as this walk's candidates and answer "any playable?"
     const playableCount = (ids, ctx, noun) => {
-      const r = evalPlayable(S, ids, ctx);
-      if (r === PENDING) return;
-      w.cands = r;
-      auto(r.length > 0, r.length + " " + noun + (r.length === 1 ? "" : "s"));
+      const playable = evalPlayable(state, ids, ctx);
+      if (playable === PENDING) return;
+      walk.cands = playable;
+      answerAuto(
+        playable.length > 0,
+        playable.length + " " + noun + (playable.length === 1 ? "" : "s"),
+      );
     };
     switch (key) {
       // ---- Phases 1-4
       case "C14.more6":
       case "M14.more6":
-        if (cards) return auto(hc.total > 6, "hand: " + hc.total);
-        return ask(S, n);
+        if (cards)
+          return answerAuto(handCount.total > 6, "hand: " + handCount.total);
+        return ask(state, node);
       case "C14.strat1":
         if (cards)
-          return auto(hc.strategy > 1, "Strategy cards: " + hc.strategy);
-        return ask(S, n);
+          return answerAuto(
+            handCount.strategy > 1,
+            "Strategy cards: " + handCount.strategy,
+          );
+        return ask(state, node);
       case "C14.more4f":
       case "M14.more4f":
-        if (cards) return auto(hc.faction > 4, "Faction cards: " + hc.faction);
-        return ask(S, n);
+        if (cards)
+          return answerAuto(
+            handCount.faction > 4,
+            "Faction cards: " + handCount.faction,
+          );
+        return ask(state, node);
       case "C14.corrLow":
-        return bauto(
-          B.corruption < B.shadowVP,
-          "Corruption " + B.corruption + " vs Shadow VP " + B.shadowVP,
+        return answerFromTracker(
+          board.corruption < board.shadowVP,
+          "Corruption " + board.corruption + " vs Shadow VP " + board.shadowVP,
         );
       case "M14.vpLow":
-        return bauto(
-          B.shadowVP < B.corruption,
-          "Shadow VP " + B.shadowVP + " vs Corruption " + B.corruption,
+        return answerFromTracker(
+          board.shadowVP < board.corruption,
+          "Shadow VP " + board.shadowVP + " vs Corruption " + board.corruption,
         );
       case "C14.fsStart":
       case "M14.fsStart":
-        return bauto(B.fs.atStart && B.fs.progress === 0, "tracker");
+        return answerFromTracker(
+          board.fs.atStart && board.fs.progress === 0,
+          "tracker",
+        );
       case "C14.fsMordor":
       case "M14.fsMordor":
-        return bauto(B.fs.mordor, "tracker");
+        return answerFromTracker(board.fs.mordor, "tracker");
       case "C14.prog4":
-        return bauto(B.fs.progress > 4, "Progress " + B.fs.progress);
+        return answerFromTracker(
+          board.fs.progress > 4,
+          "Progress " + board.fs.progress,
+        );
       case "M14.prog5":
-        return bauto(B.fs.progress > 5, "Progress " + B.fs.progress);
+        return answerFromTracker(
+          board.fs.progress > 5,
+          "Progress " + board.fs.progress,
+        );
       case "C14.winOr7":
-        if (dice && Q.diceCount(S) === 7)
-          return auto(true, "Shadow has 7 dice");
+        if (dice && engine.diceCount(state) === 7)
+          return answerAuto(true, "Shadow has 7 dice");
         return ask(
-          S,
-          n,
+          state,
+          node,
           "*Mobile* army adjacent to *target* which would win the game" +
             (dice ? "" : " or Shadow only has 7 dice"),
         );
       // ---- Phase 5
       case "C5.charMordor":
       case "M5.charMordor":
-        if (!T && !cards) return ask(S, n);
+        if (!trackerOn && !cards) return ask(state, node);
         {
-          const m = boardFact(
-            S,
+          const onMordorOrRevealed = boardFactYesNo(
+            state,
             "mordor",
             "Is the Fellowship on the Mordor track or revealed?",
-            B.fs.mordor || B.fs.revealed,
+            board.fs.mordor || board.fs.revealed,
           );
-          if (m === PENDING) return;
-          if (!m)
-            return auto(
+          if (onMordorOrRevealed === PENDING) return;
+          if (!onMordorOrRevealed)
+            return answerAuto(
               false,
               "Fellowship not on the Mordor track or revealed",
             );
         }
         if (cards)
-          return auto(hc.character > 0, "Character cards: " + hc.character);
+          return answerAuto(
+            handCount.character > 0,
+            "Character cards: " + handCount.character,
+          );
         return ask(
-          S,
-          n,
+          state,
+          node,
           "Character cards > 0? (the Fellowship is on the Mordor track or revealed)",
         );
       case "C5.wkNotMob":
       case "M5.wkNotMob":
       case "CH.wkJoin":
-        if (T && !B.chars.witchKing)
-          return auto(false, "Witch King not in play");
-        return ask(S, n);
+        if (trackerOn && !board.chars.witchKing)
+          return answerAuto(false, "Witch King not in play");
+        return ask(state, node);
       case "C5.minion":
       case "M5.minion": {
         // bold part: a minion can be mustered; plain part: Muster 2 can still advance a nation or recruit a faction
-        if (!T) break;
-        if (w.sub === 0) {
-          const m = Q.minionsAvailable(S);
-          if (m.length)
-            return decided(
-              S,
-              text(n),
-              true,
-              true,
-              true,
-              m[0].name + ": " + m[0].why,
-            );
-          trail(S, {
+        if (!trackerOn) break;
+        if (walk.sub === 0) {
+          const minions = engine.minionsAvailable(state);
+          if (minions.length)
+            return recordDecision(state, {
+              text: text(node),
+              ringCondition: true,
+              answer: true,
+              auto: true,
+              why: minions[0].name + ": " + minions[0].why,
+            });
+          trail(state, {
             kind: "q",
-            text: text(n),
+            text: text(node),
             answer: "No",
             auto: true,
             why: "no minion can be mustered (tracker)",
           });
-          w.sub = 1;
+          walk.sub = 1;
         }
-        const seNot = !Q.shadowNationAtWar(S, "se"),
-          noFac = S.settings.wome && !Q.shadowFactionInPlay(S);
+        const seNotAtWar = !engine.shadowNationAtWar(state, "se"),
+          noFactionInPlay =
+            state.settings.wome && !engine.shadowFactionInPlay(state);
         let why =
-          "S&E at war" + (S.settings.wome ? ", a faction is in play" : "");
-        if (seNot) why = "Southrons & Easterlings not at war";
-        else if (noFac) why = "no faction recruited";
-        return decided(S, x.t2, false, seNot || noFac, true, why);
+          "S&E at war" + (state.settings.wome ? ", a faction is in play" : "");
+        if (seNotAtWar) why = "Southrons & Easterlings not at war";
+        else if (noFactionInPlay) why = "no faction recruited";
+        return recordDecision(state, {
+          text: nodeExtra.t2,
+          ringCondition: false,
+          answer: seNotAtWar || noFactionInPlay,
+          auto: true,
+          why,
+        });
       }
       case "C5.mordorWin": {
-        if (w.sub === 0) {
-          if (T && B.fs.mordor)
-            return decided(
-              S,
-              text(n),
-              true,
-              true,
-              true,
-              "Fellowship on the Mordor track",
-            );
-          return ask(S, n, "*Target* would win the game", {
+        if (walk.sub === 0) {
+          if (trackerOn && board.fs.mordor)
+            return recordDecision(state, {
+              text: text(node),
+              ringCondition: true,
+              answer: true,
+              auto: true,
+              why: "Fellowship on the Mordor track",
+            });
+          return ask(state, node, "*Target* would win the game", {
             sub: 1,
             bold: true,
           });
         }
-        return ask(S, n, x.t2, { sub: 2 });
+        return ask(state, node, nodeExtra.t2, { sub: 2 });
       }
       case "C5.playChar":
         if (cards)
-          return playableCount(handC(), "event", "playable Character card");
-        return ask(S, n);
+          return playableCount(
+            characterHand(),
+            "event",
+            "playable Character card",
+          );
+        return ask(state, node);
       case "C5.allFac":
-        if (facKnown) return auto(Q.allShadowFactionsInPlay(S), "tracker");
-        return ask(S, n);
+        if (factionsKnown)
+          return answerAuto(engine.allShadowFactionsInPlay(state), "tracker");
+        return ask(state, node);
       case "M5.revCard":
         if (cards)
           return playableCount(
-            handC().filter((i) => byId[i].revealed),
+            characterHand().filter((i) => cardById[i].revealed),
             "event",
             "playable “Fellowship revealed” card",
           );
-        return ask(S, n);
+        return ask(state, node);
       case "M5.playMuster":
       case "MU.musterCard":
         if (cards)
           return playableCount(
-            handS().filter((i) => byId[i].type === "Muster"),
+            strategyHand().filter((i) => cardById[i].type === "Muster"),
             "event",
             "playable Muster card",
           );
-        return ask(S, n);
+        return ask(state, node);
       case "M5.anyCond":
-        if (T && B.fs.mordor) return auto(true, "Fellowship is in Mordor");
-        return ask(S, n, null, { items: x.items, any: true });
+        if (trackerOn && board.fs.mordor)
+          return answerAuto(true, "Fellowship is in Mordor");
+        return ask(state, node, null, { items: nodeExtra.items, any: true });
       // ---- Character
       case "CH.nazInPlay":
-        return bauto(
-          B.chars.witchKing || B.nazgul > 0,
+        return answerFromTracker(
+          board.chars.witchKing || board.nazgul > 0,
           "tracker: " +
-            B.nazgul +
+            board.nazgul +
             " Nazgûl" +
-            (B.chars.witchKing ? ", Witch King in play" : ""),
+            (board.chars.witchKing ? ", Witch King in play" : ""),
         );
       // CH.wkJoin shares the Witch King check with C5/M5.wkNotMob above.
       case "CH.nazFs":
       case "CH.nazJoin":
-        if (T && B.nazgul === 0) return auto(false, "no Nazgûl on the map");
-        return ask(S, n);
+        if (trackerOn && board.nazgul === 0)
+          return answerAuto(false, "no Nazgûl on the map");
+        return ask(state, node);
       case "CH.mosMob":
-        if (T && !B.chars.mouth)
-          return auto(false, "Mouth of Sauron not in play");
-        return ask(S, n);
+        if (trackerOn && !board.chars.mouth)
+          return answerAuto(false, "Mouth of Sauron not in play");
+        return ask(state, node);
       case "CH.dieUsed":
-        return auto(w.dieUsed, w.dieUsed ? "a move was made" : "nothing moved");
+        return answerAuto(
+          walk.dieUsed,
+          walk.dieUsed ? "a move was made" : "nothing moved",
+        );
       // ---- Army
       case "AR.huntDice":
-        if (dice && S.dice.hunt === 0)
-          return auto(false, "no dice in the Hunt box");
-        if (T && B.fs.mordor) return auto(false, "Fellowship in Mordor");
-        return ask(S, n);
+        if (dice && state.dice.hunt === 0)
+          return answerAuto(false, "no dice in the Hunt box");
+        if (trackerOn && board.fs.mordor)
+          return answerAuto(false, "Fellowship in Mordor");
+        return ask(state, node);
       // ---- Muster
       case "MU.minion": {
-        const m = Q.minionsAvailable(S);
-        return bauto(
-          m.length > 0,
-          m.length
-            ? m[0].name + ": " + m[0].why
+        const minions = engine.minionsAvailable(state);
+        return answerFromTracker(
+          minions.length > 0,
+          minions.length
+            ? minions[0].name + ": " + minions[0].why
             : "no minion can be mustered (tracker)",
         );
       }
       case "MU.wotw":
-        if (w.fromReserve)
-          return auto(
+        if (walk.fromReserve)
+          return answerAuto(
             false,
             "the die set aside for the minion must be used now (Rulings)",
           );
         if (
-          T &&
-          (B.chars.gandalfWhite ||
-            B.chars.saruman ||
-            B.chars.witchKing ||
-            B.chars.mouth)
+          trackerOn &&
+          (board.chars.gandalfWhite ||
+            board.chars.saruman ||
+            board.chars.witchKing ||
+            board.chars.mouth)
         )
-          return auto(
+          return answerAuto(
             false,
-            B.chars.gandalfWhite
+            board.chars.gandalfWhite
               ? "Gandalf the White is in play"
               : "a minion is already in play",
           );
-        return ask(S, n);
+        return ask(state, node);
       case "MU.notWar": {
-        if (!T) return ask(S, n);
-        const nw = !Q.allShadowNationsAtWar(S);
-        const nf = S.settings.wome && !Q.shadowFactionInPlay(S);
-        let why = "all at war" + (S.settings.wome ? ", faction in play" : "");
-        if (nw) why = "a Shadow nation is not at war";
-        else if (nf) why = "no faction in play";
-        return auto(nw || nf, why);
+        if (!trackerOn) return ask(state, node);
+        const nationNotAtWar = !engine.allShadowNationsAtWar(state);
+        const noFactionInPlay =
+          state.settings.wome && !engine.shadowFactionInPlay(state);
+        let why =
+          "all at war" + (state.settings.wome ? ", faction in play" : "");
+        if (nationNotAtWar) why = "a Shadow nation is not at war";
+        else if (noFactionInPlay) why = "no faction in play";
+        return answerAuto(nationNotAtWar || noFactionInPlay, why);
       }
       case "MU.facTop":
-        return auto(
-          w.nationChoice === "Faction",
-          "priority chose " + (w.nationChoice || "nothing"),
+        return answerAuto(
+          walk.nationChoice === "Faction",
+          "priority chose " + (walk.nationChoice || "nothing"),
         );
       // MU.musterCard shares the playable Muster card count with M5.playMuster above.
       case "MU.cardChoice":
-        if (cards && w.chosen)
-          return auto(
-            !!Q.MUSTER_CHOICE[w.chosen],
-            "card: " + byId[w.chosen].title,
+        if (cards && walk.chosen)
+          return answerAuto(
+            !!engine.MUSTER_CHOICE[walk.chosen],
+            "card: " + cardById[walk.chosen].title,
           );
-        return ask(S, n);
+        return ask(state, node);
       case "MU.sixNaz":
-        return bauto(B.nazgul < 6, B.nazgul + " Nazgûl on the map");
+        return answerFromTracker(
+          board.nazgul < 6,
+          board.nazgul + " Nazgûl on the map",
+        );
       // ---- Event
       case "EV.prefPlay":
         if (cards)
           return playableCount(
-            S.cards.hand
-              .concat(S.cards.factionHand)
-              .filter((i) => Q.cardFlags(byId[i], S).preferred),
+            state.cards.hand
+              .concat(state.cards.factionHand)
+              .filter((i) => engine.cardFlags(cardById[i], state).preferred),
             "event",
             "playable *preferred* card",
           );
-        return ask(S, n);
+        return ask(state, node);
       case "EV.eventDie":
-        if (w.die)
-          return auto(w.die === "Event", "using a " + DIE_NAME[w.die] + " die");
-        return ask(S, n);
+        if (walk.die)
+          return answerAuto(
+            walk.die === "Event",
+            "using a " + DIE_REQUIREMENT_NAME[walk.die] + " die",
+          );
+        return ask(state, node);
       case "EV.less4":
       case "EV.less4b":
         if (cards)
-          return auto(hc.total < 4, "Event cards in hand: " + hc.total);
-        return ask(S, n);
+          return answerAuto(
+            handCount.total < 4,
+            "Event cards in hand: " + handCount.total,
+          );
+        return ask(state, node);
       case "EV.less3f":
-        if (cards) return auto(hc.faction < 3, "Faction cards: " + hc.faction);
-        return ask(S, n);
+        if (cards)
+          return answerAuto(
+            handCount.faction < 3,
+            "Faction cards: " + handCount.faction,
+          );
+        return ask(state, node);
       case "EV.anyPlay":
         if (cards)
           return playableCount(
-            S.cards.hand.concat(S.cards.factionHand),
+            state.cards.hand.concat(state.cards.factionHand),
             "event",
             "playable card",
           );
-        return ask(S, n);
+        return ask(state, node);
       case "EV.aboveFull":
         if (cards)
-          return auto(
-            hc.total > 6 || hc.faction > 4,
+          return answerAuto(
+            handCount.total > 6 || handCount.faction > 4,
             "hand " +
-              hc.total +
+              handCount.total +
               "/6" +
-              (S.settings.wome ? ", faction " + hc.faction + "/4" : ""),
+              (state.settings.wome
+                ? ", faction " + handCount.faction + "/4"
+                : ""),
           );
-        return ask(S, n);
+        return ask(state, node);
       case "EV.revCard":
         if (cards)
           return playableCount(
-            handC().filter((i) => byId[i].revealed),
+            characterHand().filter((i) => cardById[i].revealed),
             "event",
             "card",
           );
-        return ask(S, n);
+        return ask(state, node);
       case "EV.corrCard":
         if (cards)
           return playableCount(
-            S.cards.hand.filter((i) => byId[i].corruption || byId[i].tile),
+            state.cards.hand.filter(
+              (i) => cardById[i].corruption || cardById[i].tile,
+            ),
             "event",
             "card",
           );
-        return ask(S, n);
+        return ask(state, node);
       // ---- Faction
       case "FA.playable":
         if (cards)
           return playableCount(
-            S.cards.factionHand,
+            state.cards.factionHand,
             "event",
             "playable Faction Event card",
           );
-        return ask(S, n);
+        return ask(state, node);
       case "FA.blackSails":
         if (cards)
-          return auto(
-            S.cards.factionTable.includes("sa_Faction03") &&
-              B.factions.corsairs,
+          return answerAuto(
+            state.cards.factionTable.includes("sa_Faction03") &&
+              board.factions.corsairs,
             "table",
           );
-        return ask(S, n);
+        return ask(state, node);
       case "FA.playDie":
-        if (w.die) return auto(w.die === "FPlay", "using " + DIE_NAME[w.die]);
-        return ask(S, n);
+        if (walk.die)
+          return answerAuto(
+            walk.die === "FPlay",
+            "using " + DIE_REQUIREMENT_NAME[walk.die],
+          );
+        return ask(state, node);
       case "FA.aboveFull":
         if (cards)
-          return auto(hc.faction > 4, "faction hand " + hc.faction + "/4");
-        return ask(S, n);
-      case "FA.eligible":
-        if (w.factionChoice)
-          return ask(
-            S,
-            n,
-            "Are the " + w.factionChoice + " eligible to be brought into play?",
+          return answerAuto(
+            handCount.faction > 4,
+            "faction hand " + handCount.faction + "/4",
           );
-        if (cards || T) return auto(false, "every faction is already in play");
-        return ask(S, n);
+        return ask(state, node);
+      case "FA.eligible":
+        if (walk.factionChoice)
+          return ask(
+            state,
+            node,
+            "Are the " +
+              walk.factionChoice +
+              " eligible to be brought into play?",
+          );
+        if (cards || trackerOn)
+          return answerAuto(false, "every faction is already in play");
+        return ask(state, node);
       // ---- Battle
       case "BA.playChar":
         if (cards)
           return playableCount(
-            Q.combatCandidates(S).filter((i) => byId[i].deck === "C"),
+            engine
+              .combatCandidates(state)
+              .filter((i) => cardById[i].deck === "C"),
             "combat",
             "usable Character card",
           );
-        return ask(S, n);
+        return ask(state, node);
       case "BA.wkFirst":
-        if (w.battleRound !== 1) return auto(false, "not the first round");
-        if (T && !B.chars.witchKing)
-          return auto(false, "Witch King not in play");
+        if (walk.battleRound !== 1)
+          return answerAuto(false, "not the first round");
+        if (trackerOn && !board.chars.witchKing)
+          return answerAuto(false, "Witch King not in play");
         return ask(
-          S,
-          n,
+          state,
+          node,
           "Army includes the Witch King (this is the first round)",
         );
       case "BA.more4":
         if (cards)
-          return auto(hc.total > 4, "Event cards in hand: " + hc.total);
-        return ask(S, n);
+          return answerAuto(
+            handCount.total > 4,
+            "Event cards in hand: " + handCount.total,
+          );
+        return ask(state, node);
       case "BA.ctb":
-        if (!S.settings.wome) return auto(false, "WoME not in play");
+        if (!state.settings.wome) return answerAuto(false, "WoME not in play");
         if (cards) {
-          const r = evalPlayable(S, Q.callToBattleCards(S), "combat");
-          if (r === PENDING) return;
-          w.ctb = r;
-          return auto(
-            r.length > 0,
-            r.length +
+          const usable = evalPlayable(
+            state,
+            engine.callToBattleCards(state),
+            "combat",
+          );
+          if (usable === PENDING) return;
+          walk.ctb = usable;
+          return answerAuto(
+            usable.length > 0,
+            usable.length +
               " usable Call to Battle card" +
-              (r.length === 1 ? "" : "s"),
+              (usable.length === 1 ? "" : "s"),
           );
         }
-        return ask(S, n);
+        return ask(state, node);
       case "BA.round1":
-        return auto(w.battleRound === 1, "round " + w.battleRound);
+        return answerAuto(walk.battleRound === 1, "round " + walk.battleRound);
       case "BA.fieldOrMil":
-        if (S.strategy === "military") return auto(true, "military strategy");
-        if (T && B.fs.mordor)
-          return auto(true, "Fellowship on the Mordor track");
+        if (state.strategy === "military")
+          return answerAuto(true, "military strategy");
+        if (trackerOn && board.fs.mordor)
+          return answerAuto(true, "Fellowship on the Mordor track");
         return ask(
-          S,
-          n,
+          state,
+          node,
           "Field battle? (not military strategy; Fellowship not on the Mordor track)",
         );
       case "BA.aggrCont":
-        if (T && B.fs.mordor)
-          return auto(true, "Fellowship on the Mordor track");
-        return ask(S, n);
+        if (trackerOn && board.fs.mordor)
+          return answerAuto(true, "Fellowship on the Mordor track");
+        return ask(state, node);
       case "BA.anyCond":
-        return ask(S, n, null, { items: x.items, any: true });
+        return ask(state, node, null, { items: nodeExtra.items, any: true });
     }
-    if (x.t2 && !x.any) {
+    if (nodeExtra.t2 && !nodeExtra.any) {
       // two-part decision: the bold (ring) part first, then the plain part
-      if (w.sub === 0) return ask(S, n, text(n), { sub: 1, bold: true });
-      return ask(S, n, x.t2, { sub: 2 });
+      if (walk.sub === 0)
+        return ask(state, node, text(node), { sub: 1, bold: true });
+      return ask(state, node, nodeExtra.t2, { sub: 2 });
     }
-    return ask(S, n, null, x.any ? { items: x.items, any: true } : null);
+    return ask(
+      state,
+      node,
+      null,
+      nodeExtra.any ? { items: nodeExtra.items, any: true } : null,
+    );
   }
 
   // ----- playability evaluation with lazy prompts -----
   // A card's precondition in this context: the combat test in a battle, the board test when the tracker is on, otherwise taken as met.
-  function playablePre(S, c, id, ctx) {
-    if (ctx === "combat") return Q.combatPrecondition(S, c);
-    return S.settings.tracker ? Q.precondition(S, id) : true;
+  function playablePre(state, card, id, ctx) {
+    if (ctx === "combat") return engine.combatPrecondition(state, card);
+    return state.settings.tracker ? engine.precondition(state, id) : true;
   }
-  function evalPlayable(S, ids, ctx) {
+  function evalPlayable(state, ids, ctx) {
     const out = [];
     for (const id of ids) {
-      const c = byId[id];
+      const card = cardById[id];
       const cacheKey = (ctx === "combat" ? "B:" : "") + id;
-      if (S.playable[cacheKey] !== undefined) {
-        if (S.playable[cacheKey]) out.push(id);
+      if (state.playable[cacheKey] !== undefined) {
+        if (state.playable[cacheKey]) out.push(id);
         continue;
       }
-      let pre = playablePre(S, c, id, ctx);
-      if (pre && typeof pre === "object") {
-        setPrompt(S, { type: "situ", key: pre.situ, text: pre.q });
+      const met = playablePre(state, card, id, ctx);
+      if (met && typeof met === "object") {
+        setPrompt(state, { type: "situ", key: met.situ, text: met.q });
         return PENDING;
       }
-      if (!pre) {
-        S.playable[cacheKey] = false;
+      if (!met) {
+        state.playable[cacheKey] = false;
         continue;
       }
-      setPrompt(S, { type: "confirm", card: id, ctx });
+      setPrompt(state, { type: "confirm", card: id, ctx });
       return PENDING;
     }
     return out;
   }
 
   // ----- jumps -----
-  function handleJump(S, n) {
-    const w = S.walk,
-      spec = jumpSpec(text(n)),
-      label = norm(text(n));
+  function handleJump(state, node) {
+    const walk = state.walk,
+      spec = jumpSpec(text(node)),
+      label = normalizeText(text(node));
     if (!spec) {
-      trail(S, { kind: "skip", text: label, why: "unknown box" });
-      exitJump(S);
+      trail(state, { kind: "skip", text: label, why: "unknown box" });
+      exitJump(state);
       return;
     }
-    if (extra(n).wome && !S.settings.wome) {
-      trail(S, { kind: "skip", text: label, why: "WoME not in play" });
-      exitJump(S);
+    if (extra(node).wome && !state.settings.wome) {
+      trail(state, { kind: "skip", text: label, why: "WoME not in play" });
+      exitJump(state);
       return;
     }
     const handler = JUMP_KIND[spec.kind];
-    if (handler) handler(S, w, spec, label);
-    else jumpWithDie(S, spec, label);
+    if (handler) handler(state, walk, spec, label);
+    else jumpWithDie(state, spec, label);
   }
   // "Switch to military/Corruption": change strategy and either end the walk or restart it on the other strategy's page (rule 40).
-  function switchStrategy(S, w, spec, label) {
-    S.strategy = spec.strategy;
-    Q.log(S, "Strategy changed to " + spec.strategy + " (rule 40).");
-    trail(S, { kind: "jump", text: label });
+  function switchStrategy(state, walk, spec, label) {
+    state.strategy = spec.strategy;
+    engine.log(state, "Strategy changed to " + spec.strategy + " (rule 40).");
+    trail(state, { kind: "jump", text: label });
     if (spec.endWalk) {
-      endWalk(S, "phase:" + spec.endWalk, spec.text);
+      endWalk(state, "phase:" + spec.endWalk, spec.text);
       return;
     }
-    goto(S, spec.page, findStart(spec.page, spec.start));
-    w.trail[0] = {
+    goto(state, spec.page, findStart(spec.page, spec.start));
+    walk.trail[0] = {
       kind: "start",
       text: spec.start,
       page: spec.page,
-      node: w.node,
+      node: walk.node,
     };
-    follow(S, null);
+    follow(state, null);
   }
   // "Save muster die for minion": set the die aside and return to the calling page.
-  function reserveDie(S, w, spec, label) {
+  function reserveDie(state, walk, spec, label) {
     // A die already set aside and brought back by "Use Muster die set aside for minion" must be used now (Rulings), not set aside again.
-    if (w.fromReserve) {
-      trail(S, {
+    if (walk.fromReserve) {
+      trail(state, {
         kind: "skip",
         text: label,
         why: "this die was already set aside — it must be used now",
       });
-      exitJump(S);
+      exitJump(state);
       return;
     }
-    S.minionReserved = true;
-    if (w.dieObj != null && S.settings.dice) {
-      S.dice.pool[w.dieObj].st = Q.DIE_STATE.RESERVED;
+    state.minionReserved = true;
+    if (walk.dieObj != null && state.settings.dice) {
+      state.dice.pool[walk.dieObj].st = engine.DIE_STATE.RESERVED;
     }
-    delete w.dieAns.Muster;
-    delete w.dieAns.CharOrMuster; // the die the player said Queller had is no longer available
-    Q.log(S, "Muster die set aside for a minion (Rulings).");
-    trail(S, { kind: "note", text: "Muster die set aside for a minion" });
-    w.dieObj = null;
-    w.die = null;
-    doReturn(S);
+    delete walk.dieAns.Muster;
+    delete walk.dieAns.CharOrMuster; // the die the player said Queller had is no longer available
+    engine.log(state, "Muster die set aside for a minion (Rulings).");
+    trail(state, { kind: "note", text: "Muster die set aside for a minion" });
+    walk.dieObj = null;
+    walk.die = null;
+    doReturn(state);
   }
   // "Phase 5 (use a ring)": restart the walk looking for a ring use (rule 37) when a ring and a die to change are available.
-  function ringAnyJump(S, w, spec, label) {
-    const can =
-      w.mode !== "ringAny" &&
-      Q.ringAvailable(S) &&
-      (!S.settings.dice || Q.availableDice(S).some((d) => d.k === "A"));
-    if (can) {
-      trail(S, { kind: "jump", text: label });
-      const entry = w.entry;
-      w.done = true;
-      S.walk = null;
-      startWalk(S, entry.page, entry.start, { mode: "ringAny" });
+  function ringAnyJump(state, walk, spec, label) {
+    const canUseRing =
+      walk.mode !== "ringAny" &&
+      engine.ringAvailable(state) &&
+      (!state.settings.dice ||
+        engine.availableDice(state).some((die) => die.k === "A"));
+    if (canUseRing) {
+      trail(state, { kind: "jump", text: label });
+      const entry = walk.entry;
+      walk.done = true;
+      state.walk = null;
+      startWalk(state, entry.page, entry.start, { mode: "ringAny" });
       return;
     }
     let why = "no die to change";
-    if (S.ringUsedThisTurn) why = "a ring was already used this turn";
-    else if (Q.ringsKnown(S) && !S.board.rings) why = "no Elven Ring";
-    trail(S, { kind: "skip", text: label, why });
-    exitJump(S);
+    if (state.ringUsedThisTurn) why = "a ring was already used this turn";
+    else if (engine.ringsKnown(state) && !state.board.rings)
+      why = "no Elven Ring";
+    trail(state, { kind: "skip", text: label, why });
+    exitJump(state);
   }
   // Grey boxes that do not name a page, by the `kind` of their JUMPS entry; a page name goes through jumpWithDie instead.
   const JUMP_KIND = {
-    return: (S, w, spec, label) => {
-      trail(S, { kind: "ret", text: label });
-      doReturn(S);
+    return: (state, walk, spec, label) => {
+      trail(state, { kind: "ret", text: label });
+      doReturn(state);
     },
-    endPhase4: (S) =>
-      endWalk(S, "phase:Phase 5", "Phase 5 begins — you act first."),
-    battleNext: (S) =>
+    endPhase4: (state) =>
+      endWalk(state, "phase:Phase 5", "Phase 5 begins — you act first."),
+    battleNext: (state) =>
       endWalk(
-        S,
+        state,
         "battleNext",
         "Another combat round: walk again from “Battle (next round)”.",
       ),
@@ -869,68 +977,68 @@
     ringAny: ringAnyJump,
   };
   // Grey box naming a page: enter it with the die it needs (or the die already held), or skip it.
-  function jumpWithDie(S, spec, label) {
-    const w = S.walk;
-    if (Q.dieSatisfies(w.die, spec.die)) {
-      enterPage(S, spec, label);
+  function jumpWithDie(state, spec, label) {
+    const walk = state.walk;
+    if (engine.dieSatisfies(walk.die, spec.die)) {
+      enterPage(state, spec, label);
       return;
     }
-    const ok = ensureDie(S, spec.die, label);
-    if (ok === PENDING) return;
-    if (ok) enterPage(S, spec, label);
-    else exitJump(S);
+    const dieResult = ensureDie(state, spec.die, label);
+    if (dieResult === PENDING) return;
+    if (dieResult) enterPage(state, spec, label);
+    else exitJump(state);
   }
   // Make sure Queller has a die of type `req` for the step `label`. Returns true (use it), false (skipped, trail written), or PENDING (prompt open).
-  function ensureDie(S, req, label) {
-    const w = S.walk;
-    if (w.pendingDie === label) {
-      w.pendingDie = null;
-      const ok = w.dieAns[req];
-      w.ringArmed = false;
-      if (!ok)
-        trail(S, {
+  function ensureDie(state, req, label) {
+    const walk = state.walk;
+    if (walk.pendingDie === label) {
+      walk.pendingDie = null;
+      const dieResult = walk.dieAns[req];
+      walk.ringArmed = false;
+      if (!dieResult)
+        trail(state, {
           kind: "skip",
           text: label,
-          why: "no " + DIE_NAME[req] + " die",
+          why: "no " + DIE_REQUIREMENT_NAME[req] + " die",
         });
-      return !!ok;
+      return !!dieResult;
     }
-    if (S.settings.dice) return ensureDieFromPool(S, w, req, label);
-    return askForDie(S, w, req, label);
+    if (state.settings.dice) return ensureDieFromPool(state, walk, req, label);
+    return askForDie(state, walk, req, label);
   }
   // With dice rolled by the app: take a matching die from the pool, changing one with an Elven Ring when that is armed.
-  function ensureDieFromPool(S, w, req, label) {
-    let d = Q.findDie(S, req);
-    if (!d && ringPossible(S)) {
-      d = Q.ringChange(S, req);
-      if (d)
-        trail(S, {
+  function ensureDieFromPool(state, walk, req, label) {
+    let die = engine.findDie(state, req);
+    if (!die && ringPossible(state)) {
+      die = engine.ringChange(state, req);
+      if (die)
+        trail(state, {
           kind: "ring",
-          text: "Elven Ring: die changed to " + d.face,
+          text: "Elven Ring: die changed to " + die.face,
         });
     }
-    w.ringArmed = false;
-    if (!d) {
-      trail(S, {
+    walk.ringArmed = false;
+    if (!die) {
+      trail(state, {
         kind: "skip",
         text: label,
-        why: "no " + DIE_NAME[req] + " die available",
+        why: "no " + DIE_REQUIREMENT_NAME[req] + " die available",
       });
       return false;
     }
-    w.dieObj = S.dice.pool.indexOf(d);
+    walk.dieObj = state.dice.pool.indexOf(die);
     return true;
   }
   // Without dice: ask the player whether Queller has the die (once per type per walk), then offer an Elven Ring before giving up.
-  function askForDie(S, w, req, label) {
-    if (w.dieAns[req] === undefined) {
-      setPrompt(S, {
+  function askForDie(state, walk, req, label) {
+    if (walk.dieAns[req] === undefined) {
+      setPrompt(state, {
         type: "diecheck",
         req,
         label,
         text:
           "Does Queller have " +
-          aDie(req) +
+          dieWithArticle(req) +
           " die available" +
           (req === "Army" || req === "Muster"
             ? " (an Army/Muster die counts)"
@@ -939,270 +1047,287 @@
       });
       return PENDING;
     }
-    if (w.dieAns[req]) {
-      w.ringArmed = false;
+    if (walk.dieAns[req]) {
+      walk.ringArmed = false;
       return true;
     }
-    if (ringPossible(S) && !w.ringAsked) {
-      w.ringAsked = true;
-      setPrompt(S, {
+    if (ringPossible(state) && !walk.ringAsked) {
+      walk.ringAsked = true;
+      setPrompt(state, {
         type: "ring",
         req,
         label,
         text:
-          (Q.ringsKnown(S) ? "" : "If the Shadow holds an Elven Ring: ") +
+          (engine.ringsKnown(state)
+            ? ""
+            : "If the Shadow holds an Elven Ring: ") +
           "Use an Elven Ring (rule 36): change one Queller die that does not show a *preferred* result into " +
-          aDie(req) +
+          dieWithArticle(req) +
           " result. Choose the die at random.",
       });
       return PENDING;
     }
-    w.ringArmed = false;
-    trail(S, {
+    walk.ringArmed = false;
+    trail(state, {
       kind: "skip",
       text: label,
-      why: "no " + DIE_NAME[req] + " die",
+      why: "no " + DIE_REQUIREMENT_NAME[req] + " die",
     });
     return false;
   }
-  function ringPossible(S) {
-    const w = S.walk;
-    return Q.ringAvailable(S) && (w.ringArmed || w.mode === "ringAny");
+  function ringPossible(state) {
+    const walk = state.walk;
+    return (
+      engine.ringAvailable(state) && (walk.ringArmed || walk.mode === "ringAny")
+    );
   }
-  function enterPage(S, spec, label) {
-    const w = S.walk;
-    w.stack.push({
-      page: w.page,
-      node: w.node,
-      die: w.die,
-      dieObj: w.dieObj,
-      dieUsed: w.dieUsed,
+  function enterPage(state, spec, label) {
+    const walk = state.walk;
+    walk.stack.push({
+      page: walk.page,
+      node: walk.node,
+      die: walk.die,
+      dieObj: walk.dieObj,
+      dieUsed: walk.dieUsed,
     });
-    if (!Q.dieSatisfies(w.die, spec.die)) w.die = spec.die;
-    trail(S, { kind: "jump", text: label, die: DIE_NAME[w.die] });
-    w.ringAsked = false;
-    w.cands = null;
-    w.chosen = null;
-    w.steps = null;
-    goto(S, spec.page, findStart(spec.page, spec.start));
-    follow(S, null);
+    if (!engine.dieSatisfies(walk.die, spec.die)) walk.die = spec.die;
+    trail(state, {
+      kind: "jump",
+      text: label,
+      die: DIE_REQUIREMENT_NAME[walk.die],
+    });
+    walk.ringAsked = false;
+    walk.cands = null;
+    walk.chosen = null;
+    walk.steps = null;
+    goto(state, spec.page, findStart(spec.page, spec.start));
+    follow(state, null);
   }
-  function exitJump(S) {
+  function exitJump(state) {
     // follow the arrow out of the current grey box; if none, return further
-    if (!follow(S, null)) doReturn(S);
+    if (!follow(state, null)) doReturn(state);
   }
-  function doReturn(S) {
-    const w = S.walk;
-    if (!w.stack.length) {
+  function doReturn(state) {
+    const walk = state.walk;
+    if (!walk.stack.length) {
       // A die brought back from "set aside for a minion" that found no action is spent, not set aside again (Rulings: it cannot be used for anything else).
       if (
-        w.fromReserve &&
-        S.settings.dice &&
-        w.reserveDieObj != null &&
-        S.dice.pool[w.reserveDieObj].st === Q.DIE_STATE.AVAIL
+        walk.fromReserve &&
+        state.settings.dice &&
+        walk.reserveDieObj != null &&
+        state.dice.pool[walk.reserveDieObj].st === engine.DIE_STATE.AVAIL
       ) {
-        Q.spendDie(
-          S,
-          S.dice.pool[w.reserveDieObj],
+        engine.spendDie(
+          state,
+          state.dice.pool[walk.reserveDieObj],
           "set aside for a minion, no action possible",
         );
         endWalk(
-          S,
+          state,
           "action",
           "Queller sets aside the Muster die it had kept for a minion — no action was possible with it.",
         );
         return;
       }
       endWalk(
-        S,
+        state,
         "noaction",
-        w.page === "BA"
+        walk.page === "BA"
           ? "Nothing further from the Battle page this round."
           : "Queller has no action from this walk.",
       );
       return;
     }
-    const fr = w.stack.pop();
-    goto(S, fr.page, fr.node);
-    w.die = fr.die;
-    w.dieObj = fr.dieObj;
-    w.dieUsed = fr.dieUsed;
-    w.cands = null;
-    w.chosen = null;
-    trail(S, { kind: "back", text: norm(text(cur(S))) });
-    exitJump(S);
+    const frame = walk.stack.pop();
+    goto(state, frame.page, frame.node);
+    walk.die = frame.die;
+    walk.dieObj = frame.dieObj;
+    walk.dieUsed = frame.dieUsed;
+    walk.cands = null;
+    walk.chosen = null;
+    trail(state, { kind: "back", text: normalizeText(text(cur(state))) });
+    exitJump(state);
   }
 
   // ----- actions -----
   // Draw steps and actions on the Event/Faction pages: the deck depends on the box; with cards off the player draws.
   // The deck a draw node draws from: Character or Faction Event where the node says so, otherwise the strategy's preferred deck.
-  function drawDeck(S, key) {
+  function drawDeck(state, key) {
     if (key === "EV.drawChar") return "C";
     if (key === "EV.drawFac" || key === "FA.drawT") return "F";
-    return S.strategy === "corruption" ? "C" : "S";
+    return state.strategy === "corruption" ? "C" : "S";
   }
-  function drawStep(S, n, key) {
-    const w = S.walk,
-      txt = norm(text(n)),
-      isStep = kind(n) === "T";
-    if (!S.settings.cards)
-      return setPrompt(S, {
+  function drawStep(state, node, key) {
+    const walk = state.walk,
+      label = normalizeText(text(node)),
+      isStep = kind(node) === "T";
+    if (!state.settings.cards)
+      return setPrompt(state, {
         type: isStep ? "step" : "action",
-        text: txt,
-        node: w.node,
+        text: label,
+        node: walk.node,
       });
-    const deck = drawDeck(S, key);
-    const id = Q.drawCard(S, deck);
-    trail(S, {
+    const deckKey = drawDeck(state, key);
+    const id = engine.drawCard(state, deckKey);
+    trail(state, {
       kind: "note",
       text:
-        "Drew a " + Q.deckName(deck) + " card" + (id ? "" : " — deck empty"),
+        "Drew a " +
+        engine.deckName(deckKey) +
+        " card" +
+        (id ? "" : " — deck empty"),
     });
     if (isStep) {
-      follow(S, null);
+      follow(state, null);
       return;
     }
-    const hc = Q.handCounts(S);
-    setPrompt(S, {
+    const handCount = engine.handCounts(state);
+    setPrompt(state, {
       type: "action",
       text:
-        txt +
+        label +
         " — done: Queller now holds " +
-        hc.total +
+        handCount.total +
         " Event card" +
-        (S.settings.wome ? "s and " + hc.faction + " Faction Event card" : "") +
+        (state.settings.wome
+          ? "s and " + handCount.faction + " Faction Event card"
+          : "") +
         "s.",
-      node: w.node,
+      node: walk.node,
       auto: true,
     });
   }
-  function handleAction(S, n) {
-    const w = S.walk,
-      key = w.page + "." + w.node,
-      txt = norm(text(n)),
-      x = extra(n),
-      cards = S.settings.cards,
-      dice = S.settings.dice;
-    if (x.die && !(w.die === x.die && w.dieObj != null)) {
-      const ok = ensureDie(S, x.die, txt);
-      if (ok === PENDING) return;
-      if (!ok) {
-        exitAction(S);
+  function handleAction(state, node) {
+    const walk = state.walk,
+      key = walk.page + "." + walk.node,
+      label = normalizeText(text(node)),
+      nodeExtra = extra(node),
+      cards = state.settings.cards,
+      dice = state.settings.dice;
+    if (nodeExtra.die && !(walk.die === nodeExtra.die && walk.dieObj != null)) {
+      const dieResult = ensureDie(state, nodeExtra.die, label);
+      if (dieResult === PENDING) return;
+      if (!dieResult) {
+        exitAction(state);
         return;
       }
-      w.die = x.die;
+      walk.die = nodeExtra.die;
     }
     switch (key) {
       case "C14.sogCorr":
       case "M14.sogCorr":
-        S.strategy = "corruption";
-        Q.log(S, "Queller uses the corruption strategy.");
-        endWalk(S, "strategy", "Queller uses the corruption strategy.");
+        state.strategy = "corruption";
+        engine.log(state, "Queller uses the corruption strategy.");
+        endWalk(state, "strategy", "Queller uses the corruption strategy.");
         return;
       case "C14.sogMil":
       case "M14.sogMil":
-        S.strategy = "military";
-        Q.log(S, "Queller uses the military strategy.");
-        endWalk(S, "strategy", "Queller uses the military strategy.");
+        state.strategy = "military";
+        engine.log(state, "Queller uses the military strategy.");
+        endWalk(state, "strategy", "Queller uses the military strategy.");
         return;
       case "C5.discardDie":
       case "M5.discardDie":
         if (dice) {
-          const av = Q.availableDice(S);
-          if (!av.length) {
-            trail(S, {
+          const available = engine.availableDice(state);
+          if (!available.length) {
+            trail(state, {
               kind: "skip",
-              text: txt,
+              text: label,
               why: "no die left to discard",
             });
-            exitAction(S);
+            exitAction(state);
             return;
           }
-          const d = Q.pick(av);
-          d.st = Q.DIE_STATE.USED;
-          Q.log(
-            S,
-            "Discarded an unplayable " + d.face + " die at random (rule 32).",
+          const die = engine.pick(available);
+          die.st = engine.DIE_STATE.USED;
+          engine.log(
+            state,
+            "Discarded an unplayable " + die.face + " die at random (rule 32).",
           );
           endWalk(
-            S,
+            state,
             "action",
             "Queller sets aside a " +
-              d.face +
+              die.face +
               " die it could not use (rule 32).",
           );
           return;
         }
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "action",
           text: "Discard unplayable die: set aside one Queller die that could not be used, chosen at random (rule 32).",
-          node: w.node,
+          node: walk.node,
         });
       case "C5.minionDie":
       case "M5.minionDie": {
         const reserved = dice
-          ? S.dice.pool.find((z) => z.st === Q.DIE_STATE.RESERVED)
+          ? state.dice.pool.find((die) => die.st === engine.DIE_STATE.RESERVED)
           : null;
-        if (dice ? !reserved : !S.minionReserved) {
-          trail(S, { kind: "skip", text: txt, why: "no Muster die set aside" });
+        if (dice ? !reserved : !state.minionReserved) {
+          trail(state, {
+            kind: "skip",
+            text: label,
+            why: "no Muster die set aside",
+          });
           endWalk(
-            S,
+            state,
             "noaction",
             "Queller has no action — it has no die it can use.",
           );
           return;
         }
-        let obj = null;
+        let reservedIndex = null;
         if (dice) {
-          reserved.st = Q.DIE_STATE.AVAIL;
-          obj = S.dice.pool.indexOf(reserved);
-          S.minionReserved = S.dice.pool.some(
-            (z) => z.st === Q.DIE_STATE.RESERVED,
+          reserved.st = engine.DIE_STATE.AVAIL;
+          reservedIndex = state.dice.pool.indexOf(reserved);
+          state.minionReserved = state.dice.pool.some(
+            (die) => die.st === engine.DIE_STATE.RESERVED,
           );
-        } else S.minionReserved = false;
-        w.fromReserve = true;
-        w.reserveDieObj = obj;
-        trail(S, {
+        } else state.minionReserved = false;
+        walk.fromReserve = true;
+        walk.reserveDieObj = reservedIndex;
+        trail(state, {
           kind: "jump",
           text: "Muster 2 (die set aside for the minion)",
         });
-        w.stack.push({
-          page: w.page,
-          node: w.node,
+        walk.stack.push({
+          page: walk.page,
+          node: walk.node,
           die: null,
           dieObj: null,
           dieUsed: false,
         });
-        w.die = "Muster";
-        w.dieObj = obj;
-        goto(S, "MU", findStart("MU", "Muster 2"));
-        follow(S, null);
+        walk.die = "Muster";
+        walk.dieObj = reservedIndex;
+        goto(state, "MU", findStart("MU", "Muster 2"));
+        follow(state, null);
         return;
       }
       case "C5.pass":
       case "M5.pass":
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "action",
           text: "Pass",
-          node: w.node,
+          node: walk.node,
           pass: true,
           help: "Only if the game rules permit a pass (Rulings). If Queller cannot pass, follow the arrow out.",
         });
       case "EV.drawPref":
       case "EV.drawChar":
       case "EV.drawFac":
-        return drawStep(S, n, key);
+        return drawStep(state, node, key);
       case "EV.discard":
       case "FA.discard": {
-        if (cards && w.discards) {
-          if (w.die) spendCurrentDie(S, "drew a card");
-          endWalk(S, "action", "Discarded down to the hand limit.");
+        if (cards && walk.discards) {
+          if (walk.die) spendCurrentDie(state, "drew a card");
+          endWalk(state, "action", "Discarded down to the hand limit.");
           return;
         }
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "action",
           text: "Discard the card chosen by the priority list.",
-          node: w.node,
+          node: walk.node,
         });
       }
       case "EV.playA":
@@ -1213,258 +1338,288 @@
       case "MU.musterCardA":
       case "M5.playCharDie":
       case "M5.playEventDie": {
-        if (cards && !w.chosen && w.cands?.length) {
-          const r = Q.applyPriority(S, w.cands, [
+        if (cards && !walk.chosen && walk.cands?.length) {
+          const picked = engine.applyPriority(state, walk.cands, [
             "Ascending order of initiative",
           ]);
-          w.chosen = r.chosen;
-          w.steps = r.steps;
+          walk.chosen = picked.chosen;
+          walk.steps = picked.steps;
         }
-        if (cards && w.chosen) {
-          return setPrompt(S, {
+        if (cards && walk.chosen) {
+          return setPrompt(state, {
             type: "playcard",
-            card: w.chosen,
-            text: txt,
-            node: w.node,
+            card: walk.chosen,
+            text: label,
+            node: walk.node,
           });
         }
-        return setPrompt(S, { type: "action", text: txt, node: w.node });
+        return setPrompt(state, {
+          type: "action",
+          text: label,
+          node: walk.node,
+        });
       }
       case "MU.musterE":
       case "MU.musterEnd": {
-        if (cards && w.chosen) {
-          return setPrompt(S, {
+        if (cards && walk.chosen) {
+          return setPrompt(state, {
             type: "playcard",
-            card: w.chosen,
+            card: walk.chosen,
             text: "Muster with the card",
-            node: w.node,
+            node: walk.node,
           });
         }
         break;
       }
       case "MU.polTrack": {
-        if (!w.nationChoice || w.nationChoice === "Faction") {
-          trail(S, { kind: "skip", text: txt, why: "no nation to advance" });
-          exitAction(S);
+        if (!walk.nationChoice || walk.nationChoice === "Faction") {
+          trail(state, {
+            kind: "skip",
+            text: label,
+            why: "no nation to advance",
+          });
+          exitAction(state);
           return;
         }
-        const k = SN_KEY[w.nationChoice];
-        if (!S.settings.tracker)
-          return setPrompt(S, {
+        const nationKey = SHADOW_NATION_KEY[walk.nationChoice];
+        if (!state.settings.tracker)
+          return setPrompt(state, {
             type: "action",
             text:
-              "Move " + w.nationChoice + " down one on the Political Track.",
-            node: w.node,
+              "Move " + walk.nationChoice + " down one on the Political Track.",
+            node: walk.node,
           });
-        const now = S.board.nations[k] | 0,
+        const now = state.board.nations[nationKey] | 0,
           next = Math.max(0, now - 1);
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "action",
           text:
             "Move " +
-            w.nationChoice +
+            walk.nationChoice +
             " down one on the Political Track (" +
-            Q.politicalTrackLabel(now) +
+            engine.politicalTrackLabel(now) +
             " → " +
-            Q.politicalTrackLabel(next) +
+            engine.politicalTrackLabel(next) +
             ").",
-          node: w.node,
-          nation: k,
+          node: walk.node,
+          nation: nationKey,
         });
       }
       case "MU.musterMinion":
-        if (!w.minionPick) {
-          trail(S, {
+        if (!walk.minionPick) {
+          trail(state, {
             kind: "skip",
-            text: txt,
+            text: label,
             why: "no minion can be mustered",
           });
-          exitAction(S);
+          exitAction(state);
           return;
         }
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "action",
-          text: "Muster " + w.minionPick + ".",
-          node: w.node,
+          text: "Muster " + walk.minionPick + ".",
+          node: walk.node,
           minion: {
             Saruman: "saruman",
             "Witch King": "witchKing",
             "Mouth of Sauron": "mouth",
-          }[w.minionPick],
+          }[walk.minionPick],
         });
       case "FA.bringIn":
-        if (w.factionChoice)
-          return setPrompt(S, {
+        if (walk.factionChoice)
+          return setPrompt(state, {
             type: "action",
-            text: "Bring the " + w.factionChoice + " into play.",
-            node: w.node,
-            faction: w.factionChoice.toLowerCase(),
+            text: "Bring the " + walk.factionChoice + " into play.",
+            node: walk.node,
+            faction: walk.factionChoice.toLowerCase(),
           });
-        if (cards || S.settings.tracker) {
-          trail(S, { kind: "skip", text: txt, why: "no faction to bring in" });
-          exitAction(S);
+        if (cards || state.settings.tracker) {
+          trail(state, {
+            kind: "skip",
+            text: label,
+            why: "no faction to bring in",
+          });
+          exitAction(state);
           return;
         }
         break;
     }
-    if (/^End( action)?$/.test(txt)) {
+    if (/^End( action)?$/.test(label)) {
       endWalk(
-        S,
-        w.die ? "action" : "end",
-        "End of " + (w.die ? "action" : "walk") + ".",
+        state,
+        walk.die ? "action" : "end",
+        "End of " + (walk.die ? "action" : "walk") + ".",
       );
-      if (w.die) spendCurrentDie(S, "end of action");
+      if (walk.die) spendCurrentDie(state, "end of action");
       return;
     }
-    setPrompt(S, { type: "action", text: txt, node: w.node, help: x.help });
+    setPrompt(state, {
+      type: "action",
+      text: label,
+      node: walk.node,
+      help: nodeExtra.help,
+    });
   }
-  function spendCurrentDie(S, why) {
-    const w = S.walk;
-    if (!w?.die) return;
-    if (S.settings.dice && w.dieObj != null) {
-      Q.spendDie(S, S.dice.pool[w.dieObj], why);
+  function spendCurrentDie(state, why) {
+    const walk = state.walk;
+    if (!walk?.die) return;
+    if (state.settings.dice && walk.dieObj != null) {
+      engine.spendDie(state, state.dice.pool[walk.dieObj], why);
     } else
-      Q.log(
-        S,
+      engine.log(
+        state,
         "Queller used a " +
-          DIE_NAME[w.die] +
+          DIE_REQUIREMENT_NAME[walk.die] +
           " die" +
           (why ? " — " + why : "") +
           ".",
       );
-    w.die = null;
-    w.dieObj = null;
+    walk.die = null;
+    walk.dieObj = null;
   }
-  function exitAction(S) {
+  function exitAction(state) {
     // rule 29
-    if (follow(S, null)) return;
-    doReturn(S);
+    if (follow(state, null)) return;
+    doReturn(state);
   }
 
   // ----- steps (orange) -----
-  function handleStep(S, n) {
-    const w = S.walk,
-      key = w.page + "." + w.node,
-      txt = norm(text(n)),
-      x = extra(n),
-      dice = S.settings.dice,
-      cards = S.settings.cards;
-    const cont = (note) => {
-      trail(S, { kind: "step", text: txt, auto: true, why: note });
-      follow(S, null);
-    };
+  // A step the app performed itself: record it and move on.
+  function continueStep(state, label, why) {
+    trail(state, { kind: "step", text: label, auto: true, why });
+    follow(state, null);
+  }
+  function handleStep(state, node) {
+    const walk = state.walk,
+      key = walk.page + "." + walk.node,
+      label = normalizeText(text(node)),
+      nodeExtra = extra(node),
+      dice = state.settings.dice,
+      cards = state.settings.cards;
+    const continueWith = (why) => continueStep(state, label, why);
     switch (key) {
       case "C14.rec":
       case "M14.rec":
         if (dice) {
-          Q.recoverDice(S);
-          return cont("pool: " + S.dice.pool.length + " dice");
+          engine.recoverDice(state);
+          return continueWith("pool: " + state.dice.pool.length + " dice");
         }
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "step",
           text:
             "Recover Queller’s action dice" +
-            (S.settings.wome
+            (state.settings.wome
               ? " (and the Faction die if a Shadow faction is in play)"
               : "") +
             ".",
-          node: w.node,
+          node: walk.node,
         });
       case "C14.draw":
       case "M14.draw":
         if (cards) {
-          Q.drawCard(S, "C");
-          Q.drawCard(S, "S");
-          if (S.settings.wome) Q.drawCard(S, "F");
-          return cont(
+          engine.drawCard(state, "C");
+          engine.drawCard(state, "S");
+          if (state.settings.wome) engine.drawCard(state, "F");
+          return continueWith(
             "hand: " +
-              Q.handCounts(S).total +
-              (S.settings.wome
-                ? " + " + Q.handCounts(S).faction + " faction"
+              engine.handCounts(state).total +
+              (state.settings.wome
+                ? " + " + engine.handCounts(state).faction + " faction"
                 : ""),
           );
         }
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "step",
           text:
             "Draw one Character and one Strategy Event card for Queller" +
-            (S.settings.wome ? ", and one Faction Event card" : "") +
+            (state.settings.wome ? ", and one Faction Event card" : "") +
             ".",
-          node: w.node,
+          node: walk.node,
         });
       case "C14.disc14":
       case "C14.disc18":
       case "M14.disc":
         if (cards) {
-          const d = Q.autoDiscard(S, x.items, "E");
-          return cont(
-            "discarded " + d.map((i) => "“" + byId[i].title + "”").join(", "),
+          const discarded = engine.autoDiscard(state, nodeExtra.items, "E");
+          return continueWith(
+            "discarded " +
+              discarded.map((i) => "“" + cardById[i].title + "”").join(", "),
           );
         }
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "step",
-          text: txt,
-          items: x.items,
-          node: w.node,
+          text: label,
+          items: nodeExtra.items,
+          node: walk.node,
         });
       case "C14.discF":
       case "M14.discF":
         if (cards) {
-          const d = Q.autoDiscard(S, x.items, "F");
-          return cont(
-            "discarded " + d.map((i) => "“" + byId[i].title + "”").join(", "),
+          const discarded = engine.autoDiscard(state, nodeExtra.items, "F");
+          return continueWith(
+            "discarded " +
+              discarded.map((i) => "“" + cardById[i].title + "”").join(", "),
           );
         }
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "step",
-          text: txt,
-          items: x.items,
-          node: w.node,
+          text: label,
+          items: nodeExtra.items,
+          node: walk.node,
         });
       case "C14.rollHunt":
         if (dice) {
-          const r = Q.randomBelow(6) + 1;
-          const k = r <= 3 ? 0 : 1;
-          Q.log(
-            S,
-            "Rolled " + r + " for the hunt allocation → " + k + " dice.",
+          const roll = engine.randomBelow(6) + 1;
+          const placed = roll <= 3 ? 0 : 1;
+          engine.log(
+            state,
+            "Rolled " +
+              roll +
+              " for the hunt allocation → " +
+              placed +
+              " dice.",
           );
-          Q.assignHunt(S, k);
-          return cont("rolled " + r + " → " + k + " in the Hunt box");
+          engine.assignHunt(state, placed);
+          return continueWith(
+            "rolled " + roll + " → " + placed + " in the Hunt box",
+          );
         }
-        return setPrompt(S, { type: "step", text: txt, node: w.node });
+        return setPrompt(state, { type: "step", text: label, node: walk.node });
       case "C14.huntMax":
       case "M14.huntMax":
         if (dice) {
-          const k = Q.assignHunt(S, Q.huntCap(S));
-          return cont(
-            k + " dice (Companions: " + (S.board.fs.companions | 0) + ")",
+          const placed = engine.assignHunt(state, engine.huntCap(state));
+          return continueWith(
+            placed +
+              " dice (Companions: " +
+              (state.board.fs.companions | 0) +
+              ")",
           );
         }
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "step",
-          text: txt + " (up to the number of Companions, minimum 1).",
-          node: w.node,
+          text: label + " (up to the number of Companions, minimum 1).",
+          node: walk.node,
         });
       case "C14.hunt1a":
       case "C14.hunt1b":
       case "M14.hunt1":
         if (dice) {
-          Q.assignHunt(S, 1);
-          return cont();
+          engine.assignHunt(state, 1);
+          return continueWith();
         }
         break;
       case "C14.hunt2a":
       case "C14.hunt2b":
       case "M14.hunt2":
         if (dice) {
-          const k = Q.assignHunt(S, 2);
-          return cont(
-            k < 2
+          const placed = engine.assignHunt(state, 2);
+          return continueWith(
+            placed < 2
               ? "capped at " +
-                  k +
+                  placed +
                   " (rule 34: " +
-                  (S.board.fs.companions | 0) +
+                  (state.board.fs.companions | 0) +
                   " Companions)"
               : undefined,
           );
@@ -1472,81 +1627,89 @@
         break;
       case "M14.hunt0":
         if (dice) {
-          Q.log(S, "No dice placed in the Hunt box before rolling.");
-          return cont();
+          engine.log(state, "No dice placed in the Hunt box before rolling.");
+          return continueWith();
         }
         break;
       case "C14.rollRest":
       case "M14.rollRest":
         if (dice) {
-          const r = Q.rollRemaining(S);
-          return cont(r.join(", "));
+          const faces = engine.rollRemaining(state);
+          return continueWith(faces.join(", "));
         }
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "step",
           text: "Roll Queller’s remaining action dice. Put every Eye in the Hunt box.",
-          node: w.node,
+          node: walk.node,
         });
       case "C14.sogRoll":
       case "M14.sogRoll":
         if (dice) {
-          const r = Q.randomBelow(6) + 1;
-          Q.log(S, "Strategy roll: " + r + ".");
-          trail(S, {
+          const roll = engine.randomBelow(6) + 1;
+          engine.log(state, "Strategy roll: " + roll + ".");
+          trail(state, {
             kind: "step",
             text: "Roll a die",
             auto: true,
-            why: "rolled " + r,
+            why: "rolled " + roll,
           });
-          follow(S, r <= 3 ? "1-3" : "4-6");
+          follow(state, roll <= 3 ? "1-3" : "4-6");
           return;
         }
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "roll",
           text: "Roll a die: 1-3 corruption strategy, 4-6 military strategy.",
-          node: w.node,
+          node: walk.node,
           options: ["1-3", "4-6"],
         });
       case "BA.playCard":
         if (cards) {
-          if (w.chosen) {
-            return setPrompt(S, {
+          if (walk.chosen) {
+            return setPrompt(state, {
               type: "playcard",
-              card: w.chosen,
+              card: walk.chosen,
               text: "Play combat card",
-              node: w.node,
+              node: walk.node,
               combat: true,
             });
           }
-          return cont("no card to play");
+          return continueWith("no card to play");
         }
         break;
       case "FA.drawT":
       case "EV.drawPrefT":
-        return drawStep(S, n, key);
+        return drawStep(state, node, key);
     }
-    setPrompt(S, {
+    setPrompt(state, {
       type: "step",
-      text: txt,
-      items: x.items,
-      node: w.node,
-      move: txt.startsWith("Move"),
+      text: label,
+      items: nodeExtra.items,
+      node: walk.node,
+      move: label.startsWith("Move"),
     });
   }
 
   // ----- priority lists -----
-  function handlePriority(S, n) {
-    const w = S.walk,
-      key = w.page + "." + w.node,
-      x = extra(n),
-      cards = S.settings.cards,
-      txt = text(n);
-    const cont = (why) => {
-      trail(S, { kind: "pri", text: txt, items: x.items, auto: true, why });
-      follow(S, null);
-    };
+  // A priority list resolved without a card pick: record it and move on.
+  function continuePriority(state, node, why) {
+    trail(state, {
+      kind: "pri",
+      text: text(node),
+      items: extra(node).items,
+      auto: true,
+      why,
+    });
+    follow(state, null);
+  }
+  function handlePriority(state, node) {
+    const walk = state.walk,
+      key = walk.page + "." + walk.node,
+      nodeExtra = extra(node),
+      cards = state.settings.cards,
+      label = text(node);
+    const continueWith = (why) => continuePriority(state, node, why);
     if (cards) {
-      const cardPri = [
+      const cardPriorityNodes = [
         "EV.prefPri",
         "EV.anyPri",
         "FA.playPri",
@@ -1555,499 +1718,581 @@
         "BA.atkPri",
         "BA.defPri",
       ];
-      if (cardPri.includes(key)) {
+      if (cardPriorityNodes.includes(key)) {
         if (key === "BA.wkPri" || key === "BA.atkPri" || key === "BA.defPri") {
           // every card Queller could use as a combat card, plus Call to Battle cards
-          const r = evalPlayable(S, Q.combatCandidates(S), "combat");
-          if (r === PENDING) return;
-          w.cands = r;
-          if (S.settings.wome) {
-            const b = evalPlayable(S, Q.callToBattleCards(S), "combat");
-            if (b === PENDING) return;
-            w.ctb = b;
-          } else w.ctb = [];
+          const playable = evalPlayable(
+            state,
+            engine.combatCandidates(state),
+            "combat",
+          );
+          if (playable === PENDING) return;
+          walk.cands = playable;
+          if (state.settings.wome) {
+            const callToBattle = evalPlayable(
+              state,
+              engine.callToBattleCards(state),
+              "combat",
+            );
+            if (callToBattle === PENDING) return;
+            walk.ctb = callToBattle;
+          } else walk.ctb = [];
         }
-        let cands = (w.cands || []).slice();
-        if (key === "BA.atkPri") cands = cands.concat(w.ctb || []);
-        if (!cands.length) {
-          w.chosen = null;
-          return cont("no candidate card");
+        let candidates = (walk.cands || []).slice();
+        if (key === "BA.atkPri") candidates = candidates.concat(walk.ctb || []);
+        if (!candidates.length) {
+          walk.chosen = null;
+          return continueWith("no candidate card");
         }
-        const r = Q.applyPriority(S, cands, x.items);
-        w.chosen = r.chosen;
-        w.steps = r.steps;
-        trail(S, {
+        const picked = engine.applyPriority(state, candidates, nodeExtra.items);
+        walk.chosen = picked.chosen;
+        walk.steps = picked.steps;
+        trail(state, {
           kind: "pri",
-          text: txt,
-          items: x.items,
-          steps: r.steps,
-          card: r.chosen,
+          text: label,
+          items: nodeExtra.items,
+          steps: picked.steps,
+          card: picked.chosen,
           auto: true,
         });
-        follow(S, null);
+        follow(state, null);
         return;
       }
       if (key === "EV.discPri" || key === "FA.discPri") {
-        const ds = [];
+        const discarded = [];
         if (key === "EV.discPri") {
-          ds.push(...Q.autoDiscard(S, x.items, "E"));
-          if (S.settings.wome)
-            ds.push(...Q.autoDiscard(S, extra(F.FA.nodes.discPri).items, "F"));
-        } else ds.push(...Q.autoDiscard(S, x.items, "F"));
-        w.discards = ds;
-        trail(S, {
+          discarded.push(...engine.autoDiscard(state, nodeExtra.items, "E"));
+          if (state.settings.wome)
+            discarded.push(
+              ...engine.autoDiscard(
+                state,
+                extra(FLOW.FA.nodes.discPri).items,
+                "F",
+              ),
+            );
+        } else
+          discarded.push(...engine.autoDiscard(state, nodeExtra.items, "F"));
+        walk.discards = discarded;
+        trail(state, {
           kind: "pri",
-          text: txt,
-          items: x.items,
-          steps: ds.length
-            ? ds.map((i) => "Discarded “" + byId[i].title + "”")
+          text: label,
+          items: nodeExtra.items,
+          steps: discarded.length
+            ? discarded.map((i) => "Discarded “" + cardById[i].title + "”")
             : ["Nothing to discard"],
           auto: true,
         });
-        follow(S, null);
+        follow(state, null);
         return;
       }
       if (key === "FA.recruitPri") {
-        const B = S.board.factions;
+        const inPlay = state.board.factions;
         const counts = {};
-        for (const id of S.cards.factionHand.concat(S.cards.factionTable)) {
-          const c = byId[id];
-          if (!c.faction) continue;
-          const k = c.faction;
-          counts[k] = counts[k] || { p: 0, n: 0 };
-          counts[k].n++;
-          if (Q.cardFlags(c, S).preferred) counts[k].p++;
+        for (const id of state.cards.factionHand.concat(
+          state.cards.factionTable,
+        )) {
+          const card = cardById[id];
+          if (!card.faction) continue;
+          const factionName = card.faction;
+          counts[factionName] = counts[factionName] || {
+            preferred: 0,
+            total: 0,
+          };
+          counts[factionName].total++;
+          if (engine.cardFlags(card, state).preferred)
+            counts[factionName].preferred++;
         }
-        const facs = ["Corsairs", "Dunlendings", "Spiders"].filter(
-          (f) => !B[f.toLowerCase()],
+        const notInPlay = ["Corsairs", "Dunlendings", "Spiders"].filter(
+          (name) => !inPlay[name.toLowerCase()],
         );
-        let best = facs.slice(),
+        const preferredOf = (name) =>
+            (counts[name] || { preferred: 0 }).preferred,
+          totalOf = (name) => (counts[name] || { total: 0 }).total;
+        let best = notInPlay.slice(),
           steps = [];
         if (best.length > 1) {
-          const m = Math.max(...best.map((f) => (counts[f] || { p: 0 }).p));
-          best = best.filter((f) => (counts[f] || { p: 0 }).p === m);
+          const most = Math.max(...best.map(preferredOf));
+          best = best.filter((name) => preferredOf(name) === most);
           steps.push(
             "most *preferred* Faction Event cards → " + best.join(", "),
           );
         }
         if (best.length > 1) {
-          const m = Math.max(...best.map((f) => (counts[f] || { n: 0 }).n));
-          best = best.filter((f) => (counts[f] || { n: 0 }).n === m);
+          const most = Math.max(...best.map(totalOf));
+          best = best.filter((name) => totalOf(name) === most);
           steps.push("most Faction Event cards → " + best.join(", "));
         }
         if (best.length > 1) {
-          best = [Q.pick(best)];
+          best = [engine.pick(best)];
           steps.push("tie — chosen at random (rule 3)");
         }
-        w.factionChoice = best[0] || null;
+        walk.factionChoice = best[0] || null;
         if (!best.length) steps.push("all factions already in play");
-        trail(S, {
+        trail(state, {
           kind: "pri",
-          text: txt,
-          items: x.items,
+          text: label,
+          items: nodeExtra.items,
           steps,
-          choice: w.factionChoice || "none",
+          choice: walk.factionChoice || "none",
           auto: true,
         });
-        follow(S, null);
+        follow(state, null);
         return;
       }
     }
-    if (key === "FA.recruitPri" && S.settings.tracker) {
+    if (key === "FA.recruitPri" && state.settings.tracker) {
       // without cards the tracker still knows which factions are left; the player picks among them
-      const facs = ["Corsairs", "Dunlendings", "Spiders"].filter(
-        (f) => !S.board.factions[f.toLowerCase()],
+      const notInPlay = ["Corsairs", "Dunlendings", "Spiders"].filter(
+        (name) => !state.board.factions[name.toLowerCase()],
       );
-      if (facs.length <= 1) {
-        w.factionChoice = facs[0] || null;
-        trail(S, {
+      if (notInPlay.length <= 1) {
+        walk.factionChoice = notInPlay[0] || null;
+        trail(state, {
           kind: "pri",
-          text: txt,
-          items: x.items,
+          text: label,
+          items: nodeExtra.items,
           steps: [
-            facs.length
-              ? "Only the " + facs[0] + " are not yet in play"
+            notInPlay.length
+              ? "Only the " + notInPlay[0] + " are not yet in play"
               : "all factions already in play",
           ],
-          choice: w.factionChoice || "none",
+          choice: walk.factionChoice || "none",
           auto: true,
         });
-        follow(S, null);
+        follow(state, null);
         return;
       }
-      return setPrompt(S, {
+      return setPrompt(state, {
         type: "choice",
         text: "Recruit priority: which faction has the most Faction Event cards in Queller’s hand and in play (preferred cards first)?",
-        items: x.items,
-        options: facs.map((f) => ({ v: f, l: f })),
+        items: nodeExtra.items,
+        options: notInPlay.map((name) => ({ value: name, label: name })),
         set: "factionChoice",
-        node: w.node,
-        page: w.page,
-        pri: txt,
+        node: walk.node,
+        page: walk.page,
+        pri: label,
       });
     }
     if (key === "MU.nationPri") {
-      const N = S.board.nations,
-        allFac = Q.allShadowFactionsInPlay(S);
-      if (!S.settings.tracker) {
-        const fk = S.settings.cards && S.settings.wome;
-        const o = [{ v: "Isengard", l: "Isengard (not yet At War)" }];
-        if (S.settings.wome && !(fk && allFac))
-          o.push({
-            v: "Faction",
-            l: "Faction (a Shadow faction can still be recruited)",
+      const nations = state.board.nations,
+        allFactionsInPlay = engine.allShadowFactionsInPlay(state);
+      if (!state.settings.tracker) {
+        const factionsKnown = state.settings.cards && state.settings.wome;
+        const options = [
+          { value: "Isengard", label: "Isengard (not yet At War)" },
+        ];
+        if (state.settings.wome && !(factionsKnown && allFactionsInPlay))
+          options.push({
+            value: "Faction",
+            label: "Faction (a Shadow faction can still be recruited)",
           });
-        o.push(
-          { v: "Sauron", l: "Sauron (not yet At War)" },
+        options.push(
+          { value: "Sauron", label: "Sauron (not yet At War)" },
           {
-            v: "Southrons and Easterlings",
-            l: "Southrons and Easterlings (not yet At War)",
+            value: "Southrons and Easterlings",
+            label: "Southrons and Easterlings (not yet At War)",
           },
-          { v: "", l: "None of these" },
+          { value: "", label: "None of these" },
         );
-        return setPrompt(S, {
+        return setPrompt(state, {
           type: "choice",
           text: "Political Track priority: which is the first of these that applies?",
-          items: x.items,
-          options: o,
+          items: nodeExtra.items,
+          options,
           set: "nationChoice",
-          node: w.node,
-          page: w.page,
-          pri: txt,
+          node: walk.node,
+          page: walk.page,
+          pri: label,
         });
       }
-      const opts = [];
-      if (!Q.shadowNationAtWar(S, "isengard")) opts.push("Isengard");
-      if (S.settings.wome && !allFac) opts.push("Faction");
-      if (!Q.shadowNationAtWar(S, "sauron")) opts.push("Sauron");
-      if (!Q.shadowNationAtWar(S, "se")) opts.push("Southrons and Easterlings");
-      w.nationChoice = opts[0] || null;
-      const pos = ["sauron", "isengard", "se"]
-        .map((k) => SN_NAME[k] + ": " + Q.politicalTrackLabel(N[k] | 0))
+      const eligible = [];
+      if (!engine.shadowNationAtWar(state, "isengard"))
+        eligible.push("Isengard");
+      if (state.settings.wome && !allFactionsInPlay) eligible.push("Faction");
+      if (!engine.shadowNationAtWar(state, "sauron")) eligible.push("Sauron");
+      if (!engine.shadowNationAtWar(state, "se"))
+        eligible.push("Southrons and Easterlings");
+      walk.nationChoice = eligible[0] || null;
+      const trackPositions = ["sauron", "isengard", "se"]
+        .map(
+          (nationKey) =>
+            SHADOW_NATION_NAME[nationKey] +
+            ": " +
+            engine.politicalTrackLabel(nations[nationKey] | 0),
+        )
         .join(", ");
-      trail(S, {
+      trail(state, {
         kind: "pri",
-        text: txt,
-        items: x.items,
+        text: label,
+        items: nodeExtra.items,
         steps: [
-          "Political Track — " + pos,
-          opts.length
-            ? "Eligible: " + opts.join(", ")
+          "Political Track — " + trackPositions,
+          eligible.length
+            ? "Eligible: " + eligible.join(", ")
             : "Every Shadow nation is at war",
         ],
-        choice: w.nationChoice || "none",
+        choice: walk.nationChoice || "none",
         auto: true,
       });
-      follow(S, null);
+      follow(state, null);
       return;
     }
     if (key === "MU.minionPri") {
-      const c = S.board.chars;
-      if (!S.settings.tracker) {
-        const mk = S.settings.dice;
-        const o = [];
-        if (!(mk && c.saruman))
-          o.push({ v: "Saruman", l: "Saruman (Isengard At War)" });
-        if (!(mk && c.witchKing))
-          o.push({
-            v: "Witch King",
-            l: "Witch King (Sauron At War and a Free Peoples nation At War)",
+      const chars = state.board.chars;
+      if (!state.settings.tracker) {
+        const minionsKnown = state.settings.dice;
+        const options = [];
+        if (!(minionsKnown && chars.saruman))
+          options.push({
+            value: "Saruman",
+            label: "Saruman (Isengard At War)",
           });
-        if (!(mk && c.mouth))
-          o.push({
-            v: "Mouth of Sauron",
-            l: "Mouth of Sauron (all Shadow nations At War)",
+        if (!(minionsKnown && chars.witchKing))
+          options.push({
+            value: "Witch King",
+            label:
+              "Witch King (Sauron At War and a Free Peoples nation At War)",
           });
-        o.push({ v: "", l: "None can be mustered" });
-        return setPrompt(S, {
+        if (!(minionsKnown && chars.mouth))
+          options.push({
+            value: "Mouth of Sauron",
+            label: "Mouth of Sauron (all Shadow nations At War)",
+          });
+        options.push({ value: "", label: "None can be mustered" });
+        return setPrompt(state, {
           type: "choice",
           text: "Minion priority: which is the first of these that can be mustered (not already in play)?",
-          items: x.items,
-          options: o,
+          items: nodeExtra.items,
+          options,
           set: "minionPick",
-          node: w.node,
-          page: w.page,
-          pri: txt,
+          node: walk.node,
+          page: walk.page,
+          pri: label,
         });
       }
-      const m = Q.minionsAvailable(S);
-      w.minionPick = m.length ? m[0].name : null;
-      trail(S, {
+      const minions = engine.minionsAvailable(state);
+      walk.minionPick = minions.length ? minions[0].name : null;
+      trail(state, {
         kind: "pri",
-        text: txt,
-        items: x.items,
-        steps: m.length
-          ? ["Eligible: " + m.map((z) => z.name).join(", ")]
+        text: label,
+        items: nodeExtra.items,
+        steps: minions.length
+          ? ["Eligible: " + minions.map((minion) => minion.name).join(", ")]
           : ["No minion can be mustered"],
-        choice: w.minionPick || "none",
+        choice: walk.minionPick || "none",
         auto: true,
       });
-      follow(S, null);
+      follow(state, null);
       return;
     }
-    setPrompt(S, { type: "priority", text: txt, items: x.items, node: w.node });
+    setPrompt(state, {
+      type: "priority",
+      text: label,
+      items: nodeExtra.items,
+      node: walk.node,
+    });
   }
 
   // ----- answers from the UI -----
-  function answer(S, v) {
-    const w = S.walk;
-    if (!w?.prompt) return;
-    const p = w.prompt;
-    w.prompt = null;
-    const n = cur(S);
-    switch (p.type) {
+  function answer(state, value) {
+    const walk = state.walk;
+    if (!walk?.prompt) return;
+    const prompt = walk.prompt;
+    walk.prompt = null;
+    const node = cur(state);
+    switch (prompt.type) {
       case "yesno": {
-        if (p.part) {
-          w.parts[p.part] = !!v;
-          trail(S, { kind: "q", text: p.text, answer: v ? "Yes" : "No" });
+        if (prompt.part) {
+          walk.parts[prompt.part] = !!value;
+          trail(state, {
+            kind: "q",
+            text: prompt.text,
+            answer: value ? "Yes" : "No",
+          });
           break;
         }
-        if (p.sub === 1) {
+        if (prompt.sub === 1) {
           // bold part of a two-part decision
-          if (v) {
-            decided(S, p.text, true, true, false);
+          if (value) {
+            recordDecision(state, {
+              text: prompt.text,
+              ringCondition: true,
+              answer: true,
+              auto: false,
+            });
           } else {
-            trail(S, { kind: "q", text: p.text, answer: "No" });
-            w.sub = 2;
+            trail(state, { kind: "q", text: prompt.text, answer: "No" });
+            walk.sub = 2;
           }
           break;
         }
-        if (p.sub === 2) {
-          decided(S, p.text, false, v, false);
+        if (prompt.sub === 2) {
+          recordDecision(state, {
+            text: prompt.text,
+            ringCondition: false,
+            answer: value,
+            auto: false,
+          });
           break;
         }
-        decided(S, text(n), extra(n).bold, v, false);
+        recordDecision(state, {
+          text: text(node),
+          ringCondition: extra(node).bold,
+          answer: value,
+          auto: false,
+        });
         break;
       }
       case "count": {
-        const c = Math.max(p.min, Math.min(p.max, Number.parseInt(v, 10) || 0));
-        w.parts[p.part] = c;
-        trail(S, { kind: "q", text: p.text, answer: String(c) });
+        const count = Math.max(
+          prompt.min,
+          Math.min(prompt.max, Number.parseInt(value, 10) || 0),
+        );
+        walk.parts[prompt.part] = count;
+        trail(state, { kind: "q", text: prompt.text, answer: String(count) });
         break;
       }
       case "choice": {
-        w[p.set] = v || null;
-        trail(S, {
+        walk[prompt.set] = value || null;
+        trail(state, {
           kind: "pri",
-          text: p.pri,
-          items: p.items,
-          steps: ["You chose: " + (v || "none")],
-          choice: v || "none",
+          text: prompt.pri,
+          items: prompt.items,
+          steps: ["You chose: " + (value || "none")],
+          choice: value || "none",
         });
-        follow(S, null);
+        follow(state, null);
         break;
       }
       case "situ":
-        S.situ[p.key] = !!v;
-        trail(S, {
+        state.situ[prompt.key] = !!value;
+        trail(state, {
           kind: "q",
-          text: p.text,
-          answer: v ? "Yes" : "No",
+          text: prompt.text,
+          answer: value ? "Yes" : "No",
           situ: true,
         });
         break;
       case "confirm":
-        S.playable[(p.ctx === "combat" ? "B:" : "") + p.card] = !!v;
-        trail(S, {
+        state.playable[(prompt.ctx === "combat" ? "B:" : "") + prompt.card] =
+          !!value;
+        trail(state, {
           kind: "reveal",
-          text: byId[p.card].title,
-          answer: v ? "playable" : "not playable",
-          card: p.card,
+          text: cardById[prompt.card].title,
+          answer: value ? "playable" : "not playable",
+          card: prompt.card,
         });
         break;
       case "diecheck":
-        w.dieAns[p.req] = !!v;
-        w.pendingDie = p.label;
-        trail(S, { kind: "q", text: p.text, answer: v ? "Yes" : "No" });
+        walk.dieAns[prompt.req] = !!value;
+        walk.pendingDie = prompt.label;
+        trail(state, {
+          kind: "q",
+          text: prompt.text,
+          answer: value ? "Yes" : "No",
+        });
         break;
       case "ring":
-        if (v) {
-          S.board.rings = Math.max(0, S.board.rings - 1);
-          S.ringUsedThisTurn = true;
-          w.dieAns[p.req] = true;
-          w.pendingDie = p.label;
-          Q.log(
-            S,
-            "Elven Ring used to create " + aDie(p.req) + " die (rule 36).",
+        if (value) {
+          state.board.rings = Math.max(0, state.board.rings - 1);
+          state.ringUsedThisTurn = true;
+          walk.dieAns[prompt.req] = true;
+          walk.pendingDie = prompt.label;
+          engine.log(
+            state,
+            "Elven Ring used to create " +
+              dieWithArticle(prompt.req) +
+              " die (rule 36).",
           );
-          trail(S, {
+          trail(state, {
             kind: "ring",
-            text: "Elven Ring used for " + aDie(p.req) + " die",
+            text: "Elven Ring used for " + dieWithArticle(prompt.req) + " die",
           });
         } else {
-          w.dieAns[p.req] = false;
-          w.pendingDie = p.label;
+          walk.dieAns[prompt.req] = false;
+          walk.pendingDie = prompt.label;
         }
         break;
       case "action": {
-        if (v === "done") {
-          trail(S, { kind: "act", text: p.text, answer: "done" });
-          if (p.pass) {
-            endWalk(S, "pass", "Queller passes.");
-            Q.log(S, "Queller passes.");
+        if (value === "done") {
+          trail(state, { kind: "act", text: prompt.text, answer: "done" });
+          if (prompt.pass) {
+            endWalk(state, "pass", "Queller passes.");
+            engine.log(state, "Queller passes.");
             break;
           }
-          if (p.minion) {
-            S.board.chars[p.minion] = true;
-            S.playable = {};
-            Q.log(S, w.minionPick + " is now in play (tracker updated).");
+          if (prompt.minion) {
+            state.board.chars[prompt.minion] = true;
+            state.playable = {};
+            engine.log(
+              state,
+              walk.minionPick + " is now in play (tracker updated).",
+            );
           }
-          if (p.nation) {
-            const now = S.board.nations[p.nation] | 0;
-            S.board.nations[p.nation] = Math.max(0, now - 1);
-            S.playable = {};
-            Q.log(
-              S,
-              SN_NAME[p.nation] +
+          if (prompt.nation) {
+            const now = state.board.nations[prompt.nation] | 0;
+            state.board.nations[prompt.nation] = Math.max(0, now - 1);
+            state.playable = {};
+            engine.log(
+              state,
+              SHADOW_NATION_NAME[prompt.nation] +
                 " is now " +
-                Q.politicalTrackLabel(S.board.nations[p.nation]) +
+                engine.politicalTrackLabel(state.board.nations[prompt.nation]) +
                 ".",
             );
           }
-          if (p.faction) {
-            S.board.factions[p.faction] = true;
-            S.playable = {};
-            Q.log(
-              S,
-              w.factionChoice +
+          if (prompt.faction) {
+            state.board.factions[prompt.faction] = true;
+            state.playable = {};
+            engine.log(
+              state,
+              walk.factionChoice +
                 " are now in play (tracker updated; the Faction die joins the pool next turn).",
             );
           }
-          if (w.die) spendCurrentDie(S, "“" + p.text + "”");
-          else Q.log(S, "Queller: " + p.text);
-          endWalk(S, "action", p.text);
+          if (walk.die) spendCurrentDie(state, "“" + prompt.text + "”");
+          else engine.log(state, "Queller: " + prompt.text);
+          endWalk(state, "action", prompt.text);
           break;
         }
-        trail(S, { kind: "act", text: p.text, answer: "not possible" });
-        exitAction(S);
+        trail(state, {
+          kind: "act",
+          text: prompt.text,
+          answer: "not possible",
+        });
+        exitAction(state);
         break;
       }
       case "playcard": {
-        const palantirBefore = S.cards.table.includes(Q.PALANTIR),
-          die = w.die;
-        const c = Q.playCard(S, p.card, { combat: p.combat });
-        trail(S, {
-          kind: "act",
-          text: "Played “" + c.title + "”",
-          answer: "done",
-          card: p.card,
+        const palantirBefore = state.cards.table.includes(engine.PALANTIR),
+          die = walk.die;
+        const card = engine.playCard(state, prompt.card, {
+          combat: prompt.combat,
         });
-        if (!p.combat && w.die) spendCurrentDie(S, "played “" + c.title + "”"); // spent first so a card effect on the dice never touches the die that played it
-        for (const e of Q.resolveCardEffects(S, p.card, {
-          combat: p.combat,
+        trail(state, {
+          kind: "act",
+          text: "Played “" + card.title + "”",
+          answer: "done",
+          card: prompt.card,
+        });
+        if (!prompt.combat && walk.die)
+          spendCurrentDie(state, "played “" + card.title + "”"); // spent first so a card effect on the dice never touches the die that played it
+        for (const entry of engine.resolveCardEffects(state, prompt.card, {
+          combat: prompt.combat,
           die,
           palantirBefore,
         }))
-          trail(S, e);
-        if (p.combat) {
-          follow(S, null);
+          trail(state, entry);
+        if (prompt.combat) {
+          follow(state, null);
           break;
         }
-        endWalk(S, "action", "Queller plays “" + c.title + "”.");
+        endWalk(state, "action", "Queller plays “" + card.title + "”.");
         break;
       }
       case "step": {
-        trail(S, {
+        trail(state, {
           kind: "step",
-          text: p.text,
-          answer: v === "no" ? "not possible" : "done",
+          text: prompt.text,
+          answer: value === "no" ? "not possible" : "done",
         });
-        if (p.move && v !== "no") w.dieUsed = true;
-        follow(S, null);
+        if (prompt.move && value !== "no") walk.dieUsed = true;
+        follow(state, null);
         break;
       }
       case "roll": {
-        trail(S, { kind: "step", text: p.text, answer: v });
-        follow(S, v);
+        trail(state, { kind: "step", text: prompt.text, answer: value });
+        follow(state, value);
         break;
       }
       case "priority": {
-        trail(S, {
+        trail(state, {
           kind: "pri",
-          text: p.text,
-          items: p.items,
-          steps: p.steps,
-          card: p.card,
-          choice: p.choice,
+          text: prompt.text,
+          items: prompt.items,
+          steps: prompt.steps,
+          card: prompt.card,
+          choice: prompt.choice,
         });
-        follow(S, null);
+        follow(state, null);
         break;
       }
       case "battleForm": {
-        S.battle = v;
-        S.playable = Object.fromEntries(
-          Object.entries(S.playable).filter(([k]) => !k.startsWith("B:")),
+        state.battle = value;
+        state.playable = Object.fromEntries(
+          Object.entries(state.playable).filter(
+            ([key]) => !key.startsWith("B:"),
+          ),
         );
-        trail(S, { kind: "note", text: "Battle details recorded" });
+        trail(state, { kind: "note", text: "Battle details recorded" });
         break;
       }
     }
-    run(S);
+    run(state);
   }
 
   // ----- phase driver helpers -----
-  function phasePage(S) {
-    return S.strategy === "military" ? "M14" : "C14";
+  function phasePage(state) {
+    return state.strategy === "military" ? "M14" : "C14";
   }
-  function p5Page(S) {
-    return S.strategy === "military" ? "M5" : "C5";
+  function phase5Page(state) {
+    return state.strategy === "military" ? "M5" : "C5";
   }
-  function startPhase(S, phase) {
-    const P = phasePage(S);
+  function startPhase(state, phase) {
+    const page = phasePage(state);
     if (phase === "setup") {
-      S.walk = null;
-      startWalk(S, "C14", "Start of game");
+      state.walk = null;
+      startWalk(state, "C14", "Start of game");
       return;
     }
     if (phase === "p1") {
-      S.phase = "p1";
-      startWalk(S, P, "Phase 1");
+      state.phase = "p1";
+      startWalk(state, page, "Phase 1");
       return;
     }
     if (phase === "p2") {
-      S.phase = "p2";
-      if (S.strategy === "corruption") startWalk(S, "C14", "Phase 2");
+      state.phase = "p2";
+      if (state.strategy === "corruption") startWalk(state, "C14", "Phase 2");
       return;
     }
     if (phase === "p3") {
-      S.phase = "p3";
-      startWalk(S, P, "Phase 3");
+      state.phase = "p3";
+      startWalk(state, page, "Phase 3");
       return;
     }
     if (phase === "p4") {
-      S.phase = "p4";
-      startWalk(S, P, "Phase 4");
+      state.phase = "p4";
+      startWalk(state, page, "Phase 4");
       return;
     }
     if (phase === "p5") {
-      S.phase = "p5";
-      startWalk(S, p5Page(S), "Phase 5");
+      state.phase = "p5";
+      startWalk(state, phase5Page(state), "Phase 5");
     }
   }
-  function startBattle(S, round) {
-    S.walk = null;
-    startWalk(S, "BA", round === 1 ? "Battle" : "Battle (next round)", {
+  function startBattle(state, round) {
+    state.walk = null;
+    beginWalk(state, "BA", round === 1 ? "Battle" : "Battle (next round)", {
       battleRound: round,
-      noRun: true,
     });
-    if (S.settings.cards) {
-      S.walk.prompt = {
+    if (state.settings.cards) {
+      state.walk.prompt = {
         type: "battleForm",
         round,
         text: "Battle details (used to judge which combat cards Queller can play)",
       };
-    } else run(S);
+    } else run(state);
   }
-  function nextTurn(S) {
-    S.turn++;
-    S.phase = "p1";
-    S.walk = null;
-    S.situ = {};
-    S.playable = {};
-    S.battle = null;
-    S.battleOpen = false;
-    S.ringUsedThisTurn = false;
-    Q.log(S, "— Turn " + S.turn + " —");
+  function nextTurn(state) {
+    state.turn++;
+    state.phase = "p1";
+    state.walk = null;
+    state.situ = {};
+    state.playable = {};
+    state.battle = null;
+    state.battleOpen = false;
+    state.ringUsedThisTurn = false;
+    engine.log(state, "— Turn " + state.turn + " —");
   }
 
   Object.assign(window.QB, {
@@ -2058,10 +2303,10 @@
     startBattle,
     nextTurn,
     jumpSpec,
-    norm,
-    DIE_NAME,
+    normalizeText,
+    DIE_REQUIREMENT_NAME,
     findStart,
-    p5Page,
+    phase5Page,
     phasePage,
   });
 })();

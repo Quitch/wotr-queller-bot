@@ -537,7 +537,7 @@
     };
     const name = (id) => {
       const n = P.nodes[id];
-      return n ? Q.norm(n[5]).replaceAll("*", "") : id;
+      return n ? Q.normalizeText(n[5]).replaceAll("*", "") : id;
     };
     let h =
       '<div class="flowtext"><p class="notice">Text version of ' +
@@ -1245,16 +1245,20 @@
             '">' +
             esc(F[k].name) +
             " — " +
-            esc(Q.norm(n[5])) +
+            esc(Q.normalizeText(n[5])) +
             "</option>";
       }
     }
     h +=
       '</select><select id="jumpDie" aria-label="Die to use"><option value="">No die</option>' +
-      Object.keys(Q.DIE_NAME)
+      Object.keys(Q.DIE_REQUIREMENT_NAME)
         .map(
           (k) =>
-            '<option value="' + k + '">' + esc(Q.DIE_NAME[k]) + " die</option>",
+            '<option value="' +
+            k +
+            '">' +
+            esc(Q.DIE_REQUIREMENT_NAME[k]) +
+            " die</option>",
         )
         .join("") +
       '</select></div><div style="margin-top:12px"><button class="btn primary" id="jumpGo">Walk</button></div></div>';

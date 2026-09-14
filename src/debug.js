@@ -220,7 +220,7 @@
           "Walk: " +
             (F[w.entry.page] ? F[w.entry.page].name : w.entry.page) +
             " from “" +
-            Q.norm(w.entry.start) +
+            Q.normalizeText(w.entry.start) +
             "”, now at " +
             w.page +
             "." +

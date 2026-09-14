@@ -44,7 +44,7 @@ function randomAnswer(S) {
     case "count":
       return Math.floor(p.min + rnd() * (p.max - p.min + 1));
     case "choice":
-      return p.options[Math.floor(rnd() * p.options.length)].v;
+      return p.options[Math.floor(rnd() * p.options.length)].value;
     case "action":
       return rnd() < 0.8 ? "done" : "no";
     case "playcard":
