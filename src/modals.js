@@ -975,6 +975,7 @@
       a.click();
       note.textContent = "If nothing downloaded, use " + alt + ".";
     } catch (e) {
+      // The browser blocked the download; the note points the user at the alternative.
       note.textContent = "Downloads are not available here — use " + alt + ".";
     }
   }
@@ -983,6 +984,7 @@
       await navigator.clipboard.writeText(data);
       note.textContent = what + " copied to the clipboard.";
     } catch (e) {
+      // Clipboard access was refused; select the text so the user can copy it by hand.
       if (ta) {
         ta.value = data;
         ta.focus();

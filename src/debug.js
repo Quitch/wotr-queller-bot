@@ -43,7 +43,9 @@
         D.errors = (o.errors || []).slice(-LIMITS.errors);
         D.walks = (o.walks || []).slice(-LIMITS.walks);
       }
-    } catch (e) {}
+    } catch (e) {
+      // Storage unavailable or the saved log is corrupt: start with an empty log.
+    }
   }
 
   // A one-line picture of the game after an action: enough to follow the timeline without opening the full state.
