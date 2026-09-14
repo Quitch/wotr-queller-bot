@@ -18,7 +18,7 @@
     sortie: false,
   };
   let flowPage = "C14",
-    calc = Object.assign({}, CALC_DEFAULTS);
+    calc = { ...CALC_DEFAULTS };
 
   let opener = null,
     flowText = false;

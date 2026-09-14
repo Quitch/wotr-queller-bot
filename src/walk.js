@@ -305,19 +305,14 @@
     }
   }
   function ask(S, n, txt, opts) {
-    setPrompt(
-      S,
-      Object.assign(
-        {
-          type: "yesno",
-          text: txt || text(n),
-          node: S.walk.node,
-          page: S.walk.page,
-          kind: kind(n),
-        },
-        opts || {},
-      ),
-    );
+    setPrompt(S, {
+      type: "yesno",
+      text: txt || text(n),
+      node: S.walk.node,
+      page: S.walk.page,
+      kind: kind(n),
+      ...opts,
+    });
   }
   // A board fact: from the tracker when it is on, otherwise asked of the player once per node (answers live in w.parts). Returns PENDING while the question is open.
   function boardFact(S, k, question, trackerValue, range) {

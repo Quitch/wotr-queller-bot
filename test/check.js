@@ -71,7 +71,7 @@ for (const c of W.QB_CARDS) {
   }
   if (c.cpre) {
     try {
-      Q.combatPre(c, Object.assign({}, S, { battle: { figures: {} } }));
+      Q.combatPre(c, { ...S, battle: { figures: {} } });
     } catch (e) {
       fail(c.id + ' cpre "' + c.cpre + '": ' + e.message);
     }

@@ -246,10 +246,13 @@
     const S = {
       appVersion: VERSION,
       createdVersion: VERSION, // the version that last saved this game, and the one that created it
-      settings: Object.assign(
-        { dice: true, cards: true, tracker: true, wome: true },
-        settings || {},
-      ),
+      settings: {
+        dice: true,
+        cards: true,
+        tracker: true,
+        wome: true,
+        ...settings,
+      },
       turn: 1,
       strategy: null,
       phase: "setup",
@@ -905,7 +908,7 @@
   }
 
   function log(S, text, extra) {
-    S.log.push(Object.assign({ t: text, turn: S.turn }, extra || {}));
+    S.log.push({ t: text, turn: S.turn, ...extra });
     if (S.log.length > 400) S.log.shift();
   }
 

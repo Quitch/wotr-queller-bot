@@ -136,7 +136,7 @@
 
   // begin/end bracket a state-changing action (ui.js act()); action() records something that changed no game state.
   function begin(info, S) {
-    D.inflight = Object.assign({ t: Date.now() }, info || { a: "act" });
+    D.inflight = { t: Date.now(), ...(info || { a: "act" }) };
     D.preWalk = S ? S.walk : null;
     if (S) D.inflight.before = safeDigest(S);
   }
@@ -166,7 +166,7 @@
     return end(S);
   }
   function error(err, info, S) {
-    const e = Object.assign({ t: Date.now() }, info || {});
+    const e = { t: Date.now(), ...info };
     if (err && typeof err === "object") {
       e.message = String(err.message || err);
       e.name = err.name;
@@ -189,8 +189,7 @@
       return String(t);
     }
   };
-  const withTimes = (list) =>
-    list.map((e) => Object.assign({ when: iso(e.t) }, e));
+  const withTimes = (list) => list.map((e) => ({ when: iso(e.t), ...e }));
   function summary(S, env, errors) {
     const s = [];
     s.push(
@@ -285,7 +284,7 @@
       errors,
       actions: withTimes(D.actions),
       walks: withTimes(D.walks).map((w) => {
-        const o = Object.assign({}, w);
+        const o = { ...w };
         delete o.key;
         return o;
       }),
