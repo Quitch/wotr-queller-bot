@@ -438,6 +438,7 @@
           '"/>';
       if (vis && !isCur && k !== "N") {
         const sh = 'fill="#3a332c" fill-opacity=".22" stroke="none"';
+        const rx = k === "T" || k === "J" ? 0 : 8;
         shape +=
           k === "S" || k === "A"
             ? '<ellipse cx="' +
@@ -460,7 +461,7 @@
               '" height="' +
               ht +
               '" rx="' +
-              (k === "T" || k === "J" ? 0 : 8) +
+              rx +
               '" ' +
               sh +
               "/>";
@@ -479,20 +480,7 @@
       let inner;
       const bold = ex?.bold;
       const pad = k === "N" ? 0 : 4;
-      const txt =
-        k === "N" && id !== "grp" && /title/.test(id)
-          ? '<div style="font-size:16px;font-weight:700;text-align:right">' +
-            esc(t) +
-            "</div>"
-          : id === "ringNote"
-            ? '<div style="font-weight:700;text-align:left;line-height:1.1;padding-left:22px">' +
-              esc(t) +
-              "</div>"
-            : id === "grp"
-              ? '<div style="text-align:left;padding:5px 8px;color:#555">' +
-                esc(t) +
-                "</div>"
-              : nodeInner(n);
+      const txt = nodeLabel(k, id, t, n);
       const extra = id === "ringNote" ? 14 : 0;
       inner =
         '<foreignObject x="' +
@@ -600,6 +588,28 @@
     }
     return h + "</ol></div>";
   }
+  // The HTML inside a node box: page titles, the ring note and group labels have their own styling; everything else is the node text.
+  function nodeLabel(k, id, t, n) {
+    if (k === "N" && id !== "grp" && /title/.test(id))
+      return (
+        '<div style="font-size:16px;font-weight:700;text-align:right">' +
+        esc(t) +
+        "</div>"
+      );
+    if (id === "ringNote")
+      return (
+        '<div style="font-weight:700;text-align:left;line-height:1.1;padding-left:22px">' +
+        esc(t) +
+        "</div>"
+      );
+    if (id === "grp")
+      return (
+        '<div style="text-align:left;padding:5px 8px;color:#555">' +
+        esc(t) +
+        "</div>"
+      );
+    return nodeInner(n);
+  }
   function nodeInner(n) {
     const [, , , , , t, ex] = n;
     let s = esc(t)
@@ -689,13 +699,45 @@
   const JOG = 20; // how far an arrow steps out of a box before turning
   const onTopOrBottomEdge = (n, p) =>
     Math.abs(p[1] - n[2]) < 0.5 || Math.abs(p[1] - n[2] - n[4]) < 0.5; // an anchor there means a vertical exit/entry
+  // A point on a box from a draw.io anchor (fractions of the width and height).
+  const anchorAt = (box, frac) => [
+    box[1] + box[3] * frac[0],
+    box[2] + box[4] * frac[1],
+  ];
+  // The point the edge heads for at one end: the first/last waypoint, else the other box's explicit anchor, else its centre.
+  function towards(wp, frac, box, centre) {
+    if (wp) return wp;
+    return frac ? anchorAt(box, frac) : centre;
+  }
+  // Where the edge meets a box: its explicit anchor when draw.io gives one, else the nearest point facing pt (a waypoint or the other end).
+  function edgeEnd(box, frac, hasWp, pt) {
+    if (frac) return anchorAt(box, frac);
+    return hasWp ? wpAnchor(box, pt[0], pt[1]) : anchor(box, pt[0], pt[1]);
+  }
+  // Which way an edge leaves a box: -1 from the top (vertical) or left edge, +1 from the bottom or right.
+  function edgeDir(box, p, vertical) {
+    const nearStart = vertical
+      ? Math.abs(p[1] - box[2]) < 0.5
+      : Math.abs(p[0] - box[1]) < 0.5;
+    return nearStart ? -1 : 1;
+  }
+  // A lane for a detour between two boxes along one axis (i, s = the box tuple's position and size indexes for that axis): midway through
+  // the gap between them when there is one, otherwise just outside both boxes on the side the edge is heading (towardsStart = towards 0).
+  function lane(a, b, i, s, towardsStart, J) {
+    if (towardsStart) {
+      if (b[i] + b[s] <= a[i]) return (b[i] + b[s] + a[i]) / 2;
+      return Math.min(a[i], b[i]) - J;
+    }
+    if (a[i] + a[s] <= b[i]) return (a[i] + a[s] + b[i]) / 2;
+    return Math.max(a[i] + a[s], b[i] + b[s]) + J;
+  }
   function route(a, b, wp, an, elbow) {
     const ac = [a[1] + a[3] / 2, a[2] + a[4] / 2],
       bc = [b[1] + b[3] / 2, b[2] + b[4] / 2];
     if (elbow && wp?.length && an?.ex && an.en) {
       // draw.io elbowEdgeStyle: one elbow positioned by the first waypoint
-      const p0 = [a[1] + a[3] * an.ex[0], a[2] + a[4] * an.ex[1]],
-        pn = [b[1] + b[3] * an.en[0], b[2] + b[4] * an.en[1]];
+      const p0 = anchorAt(a, an.ex),
+        pn = anchorAt(b, an.en);
       const exV = an.ex[1] === 0 || an.ex[1] === 1;
       return exV
         ? [p0, [p0[0], wp[0][1]], [pn[0], wp[0][1]], pn]
@@ -703,26 +745,10 @@
     }
     if (an && (an.ex || an.en)) {
       // explicit draw.io exit/entry anchors (fractions of the box); a missing side falls back to the nearest-point heuristic
-      const first = wp?.length
-          ? wp[0]
-          : an.en
-            ? [b[1] + b[3] * an.en[0], b[2] + b[4] * an.en[1]]
-            : bc,
-        last = wp?.length
-          ? wp[wp.length - 1]
-          : an.ex
-            ? [a[1] + a[3] * an.ex[0], a[2] + a[4] * an.ex[1]]
-            : ac;
-      const p0 = an.ex
-        ? [a[1] + a[3] * an.ex[0], a[2] + a[4] * an.ex[1]]
-        : wp?.length
-          ? wpAnchor(a, first[0], first[1])
-          : anchor(a, first[0], first[1]);
-      const pn = an.en
-        ? [b[1] + b[3] * an.en[0], b[2] + b[4] * an.en[1]]
-        : wp?.length
-          ? wpAnchor(b, last[0], last[1])
-          : anchor(b, last[0], last[1]);
+      const first = towards(wp?.[0], an.en, b, bc),
+        last = towards(wp?.at(-1), an.ex, a, ac);
+      const p0 = edgeEnd(a, an.ex, wp?.length, first);
+      const pn = edgeEnd(b, an.en, wp?.length, last);
       const exV = onTopOrBottomEdge(a, p0),
         enV = onTopOrBottomEdge(b, pn);
       const pts = [p0];
@@ -737,20 +763,8 @@
       }
       if (Math.abs(pn[0] - prev[0]) > 1 && Math.abs(pn[1] - prev[1]) > 1) {
         const J = JOG;
-        const exDir = exV
-          ? Math.abs(p0[1] - a[2]) < 0.5
-            ? -1
-            : 1
-          : Math.abs(p0[0] - a[1]) < 0.5
-            ? -1
-            : 1;
-        const enDir = enV
-          ? Math.abs(pn[1] - b[2]) < 0.5
-            ? -1
-            : 1
-          : Math.abs(pn[0] - b[1]) < 0.5
-            ? -1
-            : 1;
+        const exDir = edgeDir(a, p0, exV),
+          enDir = edgeDir(b, pn, enV);
         if (!wp?.length && !exV && !enV && exDir === enDir) {
           const ox =
             exDir > 0
@@ -765,20 +779,7 @@
         ) {
           const ox = prev[0] + J * exDir,
             ix = pn[0] - J * exDir;
-          const gapY =
-            pn[1] < prev[1]
-              ? b[2] + b[4] <= a[2]
-                ? (b[2] + b[4] + a[2]) / 2
-                : null
-              : a[2] + a[4] <= b[2]
-                ? (a[2] + a[4] + b[2]) / 2
-                : null;
-          const ya =
-            gapY != null
-              ? gapY
-              : pn[1] < prev[1]
-                ? Math.min(a[2], b[2]) - J
-                : Math.max(a[2] + a[4], b[2] + b[4]) + J;
+          const ya = lane(a, b, 2, 4, pn[1] < prev[1], J);
           pts.push([ox, prev[1]], [ox, ya], [ix, ya], [ix, pn[1]]);
         } else if (!wp?.length && exV && enV && exDir === enDir) {
           const oy =
@@ -789,20 +790,7 @@
         } else if (!wp?.length && exV && enV && (pn[1] - prev[1]) * exDir < 0) {
           const oy = prev[1] + J * exDir,
             iy = pn[1] - J * exDir;
-          const gapX =
-            pn[0] < prev[0]
-              ? b[1] + b[3] <= a[1]
-                ? (b[1] + b[3] + a[1]) / 2
-                : null
-              : a[1] + a[3] <= b[1]
-                ? (a[1] + a[3] + b[1]) / 2
-                : null;
-          const xa =
-            gapX != null
-              ? gapX
-              : pn[0] < prev[0]
-                ? Math.min(a[1], b[1]) - J
-                : Math.max(a[1] + a[3], b[1] + b[3]) + J;
+          const xa = lane(a, b, 1, 3, pn[0] < prev[0], J);
           pts.push([prev[0], oy], [xa, oy], [xa, iy], [pn[0], iy]);
         } else if (exV && enV) {
           const my = (prev[1] + pn[1]) / 2;
@@ -1038,7 +1026,17 @@
       return e ? e.textContent.replace(/\s+/g, " ").trim().slice(0, 600) : null;
     };
     const m = U.getModal();
+    let modal = null;
+    if (m)
+      modal = m.name + (m.name === "ask" && m.arg ? ": " + m.arg.title : "");
     const ae = document.activeElement;
+    let active = null;
+    if (ae && ae !== document.body) {
+      const label = ae.textContent
+        ? " “" + ae.textContent.trim().slice(0, 40) + "”"
+        : "";
+      active = ae.tagName.toLowerCase() + (ae.id ? "#" + ae.id : "") + label;
+    }
     return {
       rendered: !!document.getElementById("app")?.children.length,
       prompt: t(".prompt"),
@@ -1046,18 +1044,9 @@
       phaseButtons: [...document.querySelectorAll("[data-phase]")].map(
         (b) => b.dataset.phase,
       ),
-      modal: m
-        ? m.name + (m.name === "ask" && m.arg ? ": " + m.arg.title : "")
-        : null,
+      modal,
       errorBar: !!document.getElementById("errbar"),
-      activeElement:
-        ae && ae !== document.body
-          ? ae.tagName.toLowerCase() +
-            (ae.id ? "#" + ae.id : "") +
-            (ae.textContent
-              ? " “" + ae.textContent.trim().slice(0, 40) + "”"
-              : "")
-          : null,
+      activeElement: active,
     };
   }
   function debugText() {

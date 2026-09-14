@@ -718,15 +718,7 @@
           fmt(p.text) +
           "</p>" +
           (p.help ? '<div class="help">' + fmt(p.help) + "</div>" : "") +
-          (p.pass
-            ? ""
-            : '<div class="help">' +
-              (S.settings.dice && w.dieObj != null
-                ? "Uses the " + esc(S.dice.pool[w.dieObj].face) + " die."
-                : w.die
-                  ? "Uses a " + esc(Q.DIE_NAME[w.die]) + " die."
-                  : "") +
-              "</div>");
+          (p.pass ? "" : '<div class="help">' + dieHelpText(w) + "</div>");
         answers =
           '<button class="btn yes" data-ans="done">Done</button>' +
           (p.auto
@@ -776,7 +768,8 @@
           )
           .join("");
         break;
-      case "priority":
+      case "priority": {
+        const half = w.page === "BA" ? "combat" : "event";
         body =
           '<p class="q">' +
           fmt(p.text) +
@@ -789,9 +782,7 @@
               "</ol>"
             : "") +
           (p.card
-            ? "<div><b>Chosen:</b> " +
-              cardHTML(byId[p.card], w.page === "BA" ? "combat" : "event") +
-              "</div>"
+            ? "<div><b>Chosen:</b> " + cardHTML(byId[p.card], half) + "</div>"
             : "") +
           (p.choice ? "<p><b>Result:</b> " + esc(p.choice) + "</p>" : "") +
           (!p.steps && !p.card
@@ -799,6 +790,7 @@
             : "");
         answers = '<button class="btn yes" data-ans="ok">Continue</button>';
         break;
+      }
       case "battleForm":
         body = battleFormHTML(p);
         answers = '<button class="btn yes" id="bfOk">Start the round</button>';
@@ -929,17 +921,26 @@
       attackingSiege: g("attackingSiege"),
     };
   }
+  // Which die the walk's current action uses, for the action prompt's help line.
+  function dieHelpText(w) {
+    if (S.settings.dice && w.dieObj != null)
+      return "Uses the " + esc(S.dice.pool[w.dieObj].face) + " die.";
+    return w.die ? "Uses a " + esc(Q.DIE_NAME[w.die]) + " die." : "";
+  }
+  // The deck line above a card's title.
+  function cardTag(c) {
+    if (c.deck === "F") return "Faction Event · " + (c.faction || "Sauron");
+    if (c.deck === "B") return "Call to Battle · " + c.faction;
+    return (
+      (c.deck === "C" ? "Character" : "Strategy") +
+      " · " +
+      (c.type || "") +
+      " symbol"
+    );
+  }
   function cardHTML(c, half) {
     // half: "event" (top half only), "combat" (bottom half only) or omitted for the whole card
-    const tag =
-      c.deck === "F"
-        ? "Faction Event · " + (c.faction || "Sauron")
-        : c.deck === "B"
-          ? "Call to Battle · " + c.faction
-          : (c.deck === "C" ? "Character" : "Strategy") +
-            " · " +
-            (c.type || "") +
-            " symbol";
+    const tag = cardTag(c);
     const showEvent = half !== "combat" || c.deck === "B",
       showCombat = half !== "event" && !!c.ct;
     let h =
@@ -1590,15 +1591,7 @@
       .querySelectorAll("[data-card]")
       .forEach((b) => (b.onclick = () => onCard(b.dataset.card, b.dataset.id)));
     document.querySelectorAll(".tracker [data-t]").forEach((el) => {
-      el.onchange = () =>
-        trackerChange(
-          el.dataset.t,
-          el.type === "checkbox"
-            ? el.checked
-            : el.dataset.num
-              ? +el.value
-              : el.value,
-        );
+      el.onchange = () => trackerChange(el.dataset.t, trackerValue(el));
     });
     document.querySelectorAll("[data-step]").forEach(
       (b) =>
@@ -1644,6 +1637,11 @@
         value: a,
       },
     );
+  }
+  // A tracker field's value: checkboxes give a boolean, numeric fields a number, the rest their text.
+  function trackerValue(el) {
+    if (el.type === "checkbox") return el.checked;
+    return el.dataset.num ? +el.value : el.value;
   }
   // The player marks an available die as used by hand (the [data-spend] buttons in the dice row).
   function spendDieClick(i) {

@@ -3,9 +3,14 @@
   const F = window.QB_FLOW,
     CARDS = window.QB_CARDS;
   const byId = {};
+  // Initiative as a number: "3-5" counts as 4, no initiative as 0.
+  function initN(c) {
+    if (typeof c.init === "number") return c.init;
+    return c.init === "3-5" ? 4 : 0;
+  }
   CARDS.forEach((c) => {
     byId[c.id] = c;
-    c.initN = typeof c.init === "number" ? c.init : c.init === "3-5" ? 4 : 0;
+    c.initN = initN(c);
   });
   const rnd = (n) => Math.floor(Math.random() * n);
   const pick = (a) => a[rnd(a.length)];
@@ -31,18 +36,20 @@
 
   // ---------- card flags ----------
   // Static flags come from cards.js; only `preferred` and `factionInPlay` depend on the game state.
+  // The strategy's preferred card type: Character cards under corruption, any other type under military.
+  function preferred(c, strat) {
+    if (!c.type) return false;
+    return strat === "corruption"
+      ? c.type === "Character"
+      : c.type !== "Character";
+  }
   function cardFlags(c, S) {
-    const strat = S.strategy;
     return {
       revealed: !!c.revealed,
       tile: !!c.tile,
       corruption: !!c.corruption,
       init: c.initN,
-      preferred: c.type
-        ? strat === "corruption"
-          ? c.type === "Character"
-          : c.type !== "Character"
-        : false,
+      preferred: preferred(c, S.strategy),
       factionInPlay: c.faction
         ? !!S.board.factions[c.faction.toLowerCase()]
         : false,
@@ -424,15 +431,10 @@
       } else d.st = DIE_STATE.AVAIL;
       out.push(d.face);
     }
-    log(
-      S,
-      "Rolled: " +
-        out.join(", ") +
-        (eyes
-          ? " — " + eyes + " Eye" + (eyes > 1 ? "s" : "") + " to the Hunt box"
-          : "") +
-        ".",
-    );
+    let hunt = "";
+    if (eyes)
+      hunt = " — " + eyes + " Eye" + (eyes > 1 ? "s" : "") + " to the Hunt box";
+    log(S, "Rolled: " + out.join(", ") + hunt + ".");
     return out;
   }
   function preferredFaces(S) {
@@ -495,8 +497,10 @@
     if (!av.length) return null;
     const d = nonPreferredFirst(S, av, 1)[0];
     const from = d.face;
-    d.face =
-      req === "CharOrMuster" ? "Character" : req.startsWith("F") ? "Wild" : req;
+    let face = req;
+    if (req === "CharOrMuster") face = "Character";
+    else if (req.startsWith("F")) face = "Wild";
+    d.face = face;
     S.board.rings = Math.max(0, S.board.rings - 1);
     S.ringUsedThisTurn = true;
     log(
@@ -539,7 +543,8 @@
     return id;
   }
   function deckName(d) {
-    return d === "C" ? "Character" : d === "S" ? "Strategy" : "Faction Event";
+    if (d === "C") return "Character";
+    return d === "S" ? "Strategy" : "Faction Event";
   }
   function handCounts(S) {
     return {
@@ -665,30 +670,26 @@
         d.st = DIE_STATE.HUNT;
         S.dice.hunt++;
       }
-      log(
-        S,
-        "The Lidless Eye: " +
-          (chosen.length
-            ? "changed " +
-              from.join(", ") +
-              " to Eye and placed " +
-              (chosen.length === 1 ? "it" : "them") +
-              " in the Hunt box."
-            : "no unused die to change."),
-      );
-      out.push({
-        kind: "note",
-        text:
-          "The Lidless Eye: " +
-          (chosen.length
-            ? chosen.length +
-              " " +
-              (chosen.length === 1 ? "die" : "dice") +
-              " (" +
-              from.join(", ") +
-              ") to the Hunt box, non-preferred results first (rule 23)"
-            : "no unused die to change"),
-      });
+      let logText = "no unused die to change.",
+        noteText = "no unused die to change";
+      if (chosen.length) {
+        const one = chosen.length === 1;
+        logText =
+          "changed " +
+          from.join(", ") +
+          " to Eye and placed " +
+          (one ? "it" : "them") +
+          " in the Hunt box.";
+        noteText =
+          chosen.length +
+          " " +
+          (one ? "die" : "dice") +
+          " (" +
+          from.join(", ") +
+          ") to the Hunt box, non-preferred results first (rule 23)";
+      }
+      log(S, "The Lidless Eye: " + logText);
+      out.push({ kind: "note", text: "The Lidless Eye: " + noteText });
     } else if (c.effect === "recruitFaction") {
       const k = c.faction.toLowerCase();
       if (!S.board.factions[k]) {
@@ -736,14 +737,16 @@
   const TABLE_TRIGGERS = [
     {
       id: "sa051",
-      check: (S, ch) =>
-        ch.key === "chars.saruman" && !ch.to
-          ? "Saruman eliminated"
-          : ch.key === "nations.rohan" &&
-              ch.from === "passive" &&
-              ch.to !== "passive"
-            ? "Rohan activated"
-            : false,
+      check: (S, ch) => {
+        if (ch.key === "chars.saruman" && !ch.to) return "Saruman eliminated";
+        if (
+          ch.key === "nations.rohan" &&
+          ch.from === "passive" &&
+          ch.to !== "passive"
+        )
+          return "Rohan activated";
+        return false;
+      },
     },
     {
       id: PALANTIR,

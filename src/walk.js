@@ -470,19 +470,11 @@
         }
         const seNot = !Q.snAtWar(S, "se"),
           noFac = S.settings.wome && !Q.shadowFactionInPlay(S);
-        return decided(
-          S,
-          x.t2,
-          false,
-          seNot || noFac,
-          true,
-          seNot
-            ? "Southrons & Easterlings not at war"
-            : noFac
-              ? "no faction recruited"
-              : "S&E at war" +
-                (S.settings.wome ? ", a faction is in play" : ""),
-        );
+        let why =
+          "S&E at war" + (S.settings.wome ? ", a faction is in play" : "");
+        if (seNot) why = "Southrons & Easterlings not at war";
+        else if (noFac) why = "no faction recruited";
+        return decided(S, x.t2, false, seNot || noFac, true, why);
       }
       case "C5.mordorWin": {
         if (w.sub === 0) {
@@ -589,14 +581,10 @@
         if (!T) return ask(S, n);
         const nw = !Q.snAllAtWar(S);
         const nf = S.settings.wome && !Q.shadowFactionInPlay(S);
-        return auto(
-          nw || nf,
-          nw
-            ? "a Shadow nation is not at war"
-            : nf
-              ? "no faction in play"
-              : "all at war" + (S.settings.wome ? ", faction in play" : ""),
-        );
+        let why = "all at war" + (S.settings.wome ? ", faction in play" : "");
+        if (nw) why = "a Shadow nation is not at war";
+        else if (nf) why = "no faction in play";
+        return auto(nw || nf, why);
       }
       case "MU.facTop":
         return auto(
@@ -765,6 +753,11 @@
   }
 
   // ----- playability evaluation with lazy prompts -----
+  // A card's precondition in this context: the combat test in a battle, the board test when the tracker is on, otherwise taken as met.
+  function playablePre(S, c, id, ctx) {
+    if (ctx === "combat") return Q.combatPre(c, S);
+    return S.settings.tracker ? Q.precondition(id, S) : true;
+  }
   function evalPlayable(S, ids, ctx) {
     const out = [];
     for (const id of ids) {
@@ -774,12 +767,7 @@
         if (S.playable[cacheKey]) out.push(id);
         continue;
       }
-      let pre =
-        ctx === "combat"
-          ? Q.combatPre(c, S)
-          : S.settings.tracker
-            ? Q.precondition(id, S)
-            : true;
+      let pre = playablePre(S, c, id, ctx);
       if (pre && typeof pre === "object") {
         setPrompt(S, { type: "situ", key: pre.situ, text: pre.q });
         return PENDING;
@@ -881,15 +869,10 @@
         startWalk(S, entry.page, entry.start, { mode: "ringAny" });
         return;
       }
-      trail(S, {
-        kind: "skip",
-        text: label,
-        why: S.ringUsedThisTurn
-          ? "a ring was already used this turn"
-          : Q.ringsKnown(S) && !S.board.rings
-            ? "no Elven Ring"
-            : "no die to change",
-      });
+      let why = "no die to change";
+      if (S.ringUsedThisTurn) why = "a ring was already used this turn";
+      else if (Q.ringsKnown(S) && !S.board.rings) why = "no Elven Ring";
+      trail(S, { kind: "skip", text: label, why });
       exitJump(S);
       return;
     }
@@ -1056,6 +1039,12 @@
 
   // ----- actions -----
   // Draw steps and actions on the Event/Faction pages: the deck depends on the box; with cards off the player draws.
+  // The deck a draw node draws from: Character or Faction Event where the node says so, otherwise the strategy's preferred deck.
+  function drawDeck(S, key) {
+    if (key === "EV.drawChar") return "C";
+    if (key === "EV.drawFac" || key === "FA.drawT") return "F";
+    return S.strategy === "corruption" ? "C" : "S";
+  }
   function drawStep(S, n, key) {
     const w = S.walk,
       txt = norm(text(n)),
@@ -1066,14 +1055,7 @@
         text: txt,
         node: w.node,
       });
-    const deck =
-      key === "EV.drawChar"
-        ? "C"
-        : key === "EV.drawFac" || key === "FA.drawT"
-          ? "F"
-          : S.strategy === "corruption"
-            ? "C"
-            : "S";
+    const deck = drawDeck(S, key);
     const id = Q.drawCard(S, deck);
     trail(S, {
       kind: "note",

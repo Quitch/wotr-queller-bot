@@ -18,6 +18,19 @@ const storage = {
 };
 DBG.restore(storage);
 DBG.reset();
+// The answer that moves a prompt on: No to every question, the minimum or first option otherwise.
+const ANSWERS = {
+  count: (p) => p.min,
+  choice: (p) => p.options[0].v,
+  roll: (p) => p.options[0],
+  priority: () => "ok",
+};
+function defaultAnswer(p) {
+  if (["yesno", "situ", "confirm", "diecheck", "ring"].includes(p.type))
+    return false;
+  const f = ANSWERS[p.type];
+  return f ? f(p) : "done";
+}
 function drive(S) {
   let g = 0;
   while (S.walk && !S.walk.done && g++ < 80) {
@@ -32,20 +45,7 @@ function drive(S) {
       },
       S,
     );
-    Q.answer(
-      S,
-      ["yesno", "situ", "confirm", "diecheck", "ring"].includes(p.type)
-        ? false
-        : p.type === "count"
-          ? p.min
-          : p.type === "choice"
-            ? p.options[0].v
-            : p.type === "roll"
-              ? p.options[0]
-              : p.type === "priority"
-                ? "ok"
-                : "done",
-    );
+    Q.answer(S, defaultAnswer(p));
     DBG.end(S);
   }
 }

@@ -10,6 +10,12 @@ const ok = (c, m) => {
   } else console.log("ok  ", m);
 };
 const die = (face, st) => ({ k: "A", face, st: st || D.AVAIL });
+// The answer a scenario gives when none of its rules match: No to every question, an empty battle form, "done" otherwise.
+function defaultAnswer(p) {
+  if (["yesno", "situ", "confirm", "diecheck", "ring"].includes(p.type))
+    return false;
+  return p.type === "battleForm" ? { nazLead: 0, figures: {} } : "done";
+}
 function drive(S, rules, max) {
   let g = 0;
   const seen = [];
@@ -23,12 +29,7 @@ function drive(S, rules, max) {
         break;
       }
     }
-    if (a === undefined)
-      a = ["yesno", "situ", "confirm", "diecheck", "ring"].includes(p.type)
-        ? false
-        : p.type === "battleForm"
-          ? { nazLead: 0, figures: {} }
-          : "done";
+    if (a === undefined) a = defaultAnswer(p);
     Q.answer(S, a);
   }
   return seen;
