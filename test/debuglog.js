@@ -1,86 +1,97 @@
 // Debug log module (src/debug.js) without a DOM: action history, walk trails, error capture, persistence, the built log. Exit 1 on any failure.
-const W = require("./load.js")();
-const Q = W.QB,
-  DBG = W.QB_DEBUG;
+const fakeWindow = require("./load.js")();
+const engine = fakeWindow.QB,
+  debug = fakeWindow.QB_DEBUG;
 let fails = 0;
-const ok = (c, m) => {
-  if (!c) {
+const ok = (condition, message) => {
+  if (!condition) {
     fails++;
-    console.log("FAIL", m);
-  } else console.log("ok  ", m);
+    console.log("FAIL", message);
+  } else console.log("ok  ", message);
 };
-const mem = { v: null };
+const stored = { text: null };
 const storage = {
-  get: () => mem.v,
-  set: (s) => {
-    mem.v = s;
+  get: () => stored.text,
+  set: (text) => {
+    stored.text = text;
   },
 };
-DBG.restore(storage);
-DBG.reset();
+debug.restore(storage);
+debug.reset();
 // The answer that moves a prompt on: No to every question, the minimum or first option otherwise.
 const ANSWERS = {
-  count: (p) => p.min,
-  choice: (p) => p.options[0].value,
-  roll: (p) => p.options[0],
+  count: (prompt) => prompt.min,
+  choice: (prompt) => prompt.options[0].value,
+  roll: (prompt) => prompt.options[0],
   priority: () => "ok",
 };
-function defaultAnswer(p) {
-  if (["yesno", "situ", "confirm", "diecheck", "ring"].includes(p.type))
+function defaultAnswer(prompt) {
+  if (["yesno", "situ", "confirm", "diecheck", "ring"].includes(prompt.type))
     return false;
-  const f = ANSWERS[p.type];
-  return f ? f(p) : "done";
+  const answerFor = ANSWERS[prompt.type];
+  return answerFor ? answerFor(prompt) : "done";
 }
-function drive(S) {
-  let g = 0;
-  while (S.walk && !S.walk.done && g++ < 80) {
-    const p = S.walk.prompt;
-    const value = defaultAnswer(p);
-    DBG.begin(
+function drive(state) {
+  let guard = 0;
+  while (state.walk && !state.walk.done && guard++ < 80) {
+    const prompt = state.walk.prompt;
+    const value = defaultAnswer(prompt);
+    debug.begin(
       {
         a: "answer",
-        prompt: p.type,
-        page: S.walk.page,
-        node: S.walk.node,
+        prompt: prompt.type,
+        page: state.walk.page,
+        node: state.walk.node,
         value,
       },
-      S,
+      state,
     );
-    Q.answer(S, value);
-    DBG.finishAction(S);
+    engine.answer(state, value);
+    debug.finishAction(state);
   }
 }
 
 // a short game with everything on, every action bracketed like ui.js act() does
-const S = Q.newState({ dice: true, cards: true, tracker: true, wome: true });
+const state = engine.newState({
+  dice: true,
+  cards: true,
+  tracker: true,
+  wome: true,
+});
 ok(
-  S.appVersion === Q.VERSION && S.createdVersion === Q.VERSION,
-  "new state stamped with the app version " + Q.VERSION,
+  state.appVersion === engine.VERSION &&
+    state.createdVersion === engine.VERSION,
+  "new state stamped with the app version " + engine.VERSION,
 );
-DBG.action({ a: "pageLoad", autosave: false }, null);
-DBG.begin({ a: "phase", id: "setup" }, S);
-Q.startPhase(S, "setup");
-DBG.finishAction(S);
-drive(S);
-for (const ph of ["p1", "p3", "p4", "p5"]) {
-  DBG.begin({ a: "phase", id: ph }, S);
-  Q.startPhase(S, ph);
-  DBG.finishAction(S);
-  drive(S);
+debug.action({ a: "pageLoad", autosave: false }, null);
+debug.begin({ a: "phase", id: "setup" }, state);
+engine.startPhase(state, "setup");
+debug.finishAction(state);
+drive(state);
+for (const phase of ["p1", "p3", "p4", "p5"]) {
+  debug.begin({ a: "phase", id: phase }, state);
+  engine.startPhase(state, phase);
+  debug.finishAction(state);
+  drive(state);
 }
-const acts = DBG.actions;
+const actions = debug.actions;
 ok(
-  acts.length > 5 && acts[0].a === "pageLoad" && acts[1].a === "phase",
-  "actions recorded in order (" + acts.length + ")",
+  actions.length > 5 && actions[0].a === "pageLoad" && actions[1].a === "phase",
+  "actions recorded in order (" + actions.length + ")",
 );
 ok(
-  acts.every((e) => typeof e.t === "number") &&
-    acts
+  actions.every((record) => typeof record.t === "number") &&
+    actions
       .slice(1)
-      .every((e) => e.before && e.after && typeof e.after.turn === "number"),
+      .every(
+        (record) =>
+          record.before &&
+          record.after &&
+          typeof record.after.turn === "number",
+      ),
   "every action carries a time and before/after digests",
 );
-const last = acts[acts.length - 1];
+const last = actions[actions.length - 1];
 ok(
   last.after.dice &&
     /\//.test(last.after.dice) &&
@@ -88,64 +99,67 @@ ok(
   "digest summarises dice and hand: " + last.after.dice,
 );
 ok(
-  DBG.walks.length >= 4 &&
-    DBG.walks.every(
-      (w) => w.trail.length > 0 && w.entry && w.result !== undefined,
+  debug.walks.length >= 4 &&
+    debug.walks.every(
+      (walk) =>
+        walk.trail.length > 0 && walk.entry && walk.result !== undefined,
     ),
-  "finished walks kept with their trails (" + DBG.walks.length + ")",
+  "finished walks kept with their trails (" + debug.walks.length + ")",
 );
 ok(
-  DBG.walks.every((w) => !w.trail.some((t) => Object.keys(t).length > 12)),
+  debug.walks.every(
+    (walk) => !walk.trail.some((entry) => Object.keys(entry).length > 12),
+  ),
   "walk trails stored compactly",
 );
 // the same finished walk is not recorded twice
-const n0 = DBG.walks.length;
-DBG.action({ a: "modal", name: "rules" }, S);
+const walksBefore = debug.walks.length;
+debug.action({ a: "modal", name: "rules" }, state);
 ok(
-  DBG.walks.length === n0,
+  debug.walks.length === walksBefore,
   "a finished walk is recorded once, not on every later action",
 );
 // abandoning a walk mid-way keeps its trail
-DBG.begin({ a: "phase", id: "p5" }, S);
-Q.startPhase(S, "p5");
-DBG.finishAction(S);
-if (S.walk && !S.walk.done) {
-  DBG.begin({ a: "phase", id: "abandon" }, S);
-  S.walk = null;
-  DBG.finishAction(S);
+debug.begin({ a: "phase", id: "p5" }, state);
+engine.startPhase(state, "p5");
+debug.finishAction(state);
+if (state.walk && !state.walk.done) {
+  debug.begin({ a: "phase", id: "abandon" }, state);
+  state.walk = null;
+  debug.finishAction(state);
   ok(
-    DBG.walks[DBG.walks.length - 1].note === "replaced or abandoned",
+    debug.walks[debug.walks.length - 1].note === "replaced or abandoned",
     "an abandoned walk is kept with a note",
   );
 }
 // persistence round trip
-const saved = mem.v;
+const saved = stored.text;
 ok(
-  saved && JSON.parse(saved).actions.length === DBG.actions.length,
+  saved && JSON.parse(saved).actions.length === debug.actions.length,
   "history persisted to storage on every action",
 );
-DBG.reset();
-ok(DBG.actions.length === 0, "reset clears the history");
-DBG.restore(storage);
-ok(DBG.actions.length === 0, "reset also cleared the stored copy");
-mem.v = saved;
-DBG.restore(storage);
+debug.reset();
+ok(debug.actions.length === 0, "reset clears the history");
+debug.restore(storage);
+ok(debug.actions.length === 0, "reset also cleared the stored copy");
+stored.text = saved;
+debug.restore(storage);
 ok(
-  DBG.actions.length === JSON.parse(saved).actions.length &&
-    DBG.walks.length === JSON.parse(saved).walks.length,
+  debug.actions.length === JSON.parse(saved).actions.length &&
+    debug.walks.length === JSON.parse(saved).walks.length,
   "history restored from storage after a reload",
 );
-mem.v = "{not json";
-DBG.restore(storage);
+stored.text = "{not json";
+debug.restore(storage);
 ok(true, "a corrupt stored history is ignored");
-mem.v = saved;
-DBG.restore(storage);
+stored.text = saved;
+debug.restore(storage);
 // errors: during an action, and uncaught between actions
-DBG.begin({ a: "answer", prompt: "yesno", value: true }, S);
-const err = DBG.error(
+debug.begin({ a: "answer", prompt: "yesno", value: true }, state);
+const err = debug.error(
   new TypeError("Cannot read properties of undefined (reading 'face')"),
   { rolledBack: true },
-  S,
+  state,
 );
 ok(
   err.message.startsWith("Cannot read") &&
@@ -153,39 +167,39 @@ ok(
     err.stack &&
     err.during?.a === "answer" &&
     err.state &&
-    err.state.turn === S.turn,
+    err.state.turn === state.turn,
   "an error during an action records the action, the stack and a state digest",
 );
-const err2 = DBG.error("Script error.", { a: "uncaught", line: 12 }, S);
+const err2 = debug.error("Script error.", { a: "uncaught", line: 12 }, state);
 ok(
   err2.message === "Script error." && err2.lastAction && !err2.during,
   "an uncaught error between actions points at the last action",
 );
 ok(
-  DBG.error({ message: "x" }, {}, { dice: undefined }).state.digestFailed,
+  debug.error({ message: "x" }, {}, { dice: undefined }).state.digestFailed,
   "a broken state cannot stop an error being recorded",
 );
 // ring-buffer limits
-for (let i = 0; i < DBG.LIMITS.actions + 50; i++)
-  DBG.action({ a: "modal", name: "x" + i }, S);
+for (let i = 0; i < debug.LIMITS.actions + 50; i++)
+  debug.action({ a: "modal", name: "x" + i }, state);
 ok(
-  DBG.actions.length === DBG.LIMITS.actions &&
-    DBG.actions[DBG.actions.length - 1].name ===
-      "x" + (DBG.LIMITS.actions + 49),
-  "action history capped at " + DBG.LIMITS.actions + ", newest kept",
+  debug.actions.length === debug.LIMITS.actions &&
+    debug.actions[debug.actions.length - 1].name ===
+      "x" + (debug.LIMITS.actions + 49),
+  "action history capped at " + debug.LIMITS.actions + ", newest kept",
 );
 // the built log
 const history = [
-  JSON.stringify(S),
-  JSON.stringify(S),
-  JSON.stringify(S),
-  JSON.stringify(S),
-  JSON.stringify(S),
-  JSON.stringify(S),
-  JSON.stringify(S),
+  JSON.stringify(state),
+  JSON.stringify(state),
+  JSON.stringify(state),
+  JSON.stringify(state),
+  JSON.stringify(state),
+  JSON.stringify(state),
+  JSON.stringify(state),
 ];
-const txt = DBG.text({
-  state: S,
+const logText = debug.text({
+  state: state,
   history,
   report: "the walk went wrong",
   env: { built: "test", userAgent: "node" },
@@ -194,96 +208,106 @@ const txt = DBG.text({
   brokenAutosave: '{"settings":{},"board":{}}',
   opts: { dice: true },
 });
-let L = null;
+let log = null;
 try {
-  L = JSON.parse(txt);
-} catch (e) {}
-ok(!!L, "the log is valid JSON (" + txt.length + " bytes)");
-if (L) {
+  log = JSON.parse(logText);
+} catch {}
+ok(!!log, "the log is valid JSON (" + logText.length + " bytes)");
+if (log) {
   ok(
-    L.format === DBG.FORMAT &&
-      L.app.version === Q.VERSION &&
-      L.app.built === "test" &&
-      /^\d{4}-/.test(L.exported),
+    log.format === debug.FORMAT &&
+      log.app.version === engine.VERSION &&
+      log.app.built === "test" &&
+      /^\d{4}-/.test(log.exported),
     "format, version, build and export time present",
   );
   ok(
-    L.report === "the walk went wrong" &&
-      Array.isArray(L.summary) &&
-      L.summary.some((s) => /Turn 1/.test(s)) &&
-      L.summary.some((s) => /errors? recorded/.test(s)),
-    "report and summary lines present: " + L.summary.join(" | "),
+    log.report === "the walk went wrong" &&
+      Array.isArray(log.summary) &&
+      log.summary.some((line) => /Turn 1/.test(line)) &&
+      log.summary.some((line) => /errors? recorded/.test(line)),
+    "report and summary lines present: " + log.summary.join(" | "),
   );
   ok(
-    L.state &&
-      L.state.turn === S.turn &&
-      L.state.log.length === S.log.length &&
-      L.state.cards.hand.length === S.cards.hand.length,
+    log.state &&
+      log.state.turn === state.turn &&
+      log.state.log.length === state.log.length &&
+      log.state.cards.hand.length === state.cards.hand.length,
     "full game state included (hand, log, dice)",
   );
   ok(
-    L.previousStates.length === DBG.LIMITS.states &&
-      L.undoDepth === history.length,
-    "last " + DBG.LIMITS.states + " undo snapshots and the undo depth included",
+    log.previousStates.length === debug.LIMITS.states &&
+      log.undoDepth === history.length,
+    "last " +
+      debug.LIMITS.states +
+      " undo snapshots and the undo depth included",
   );
   ok(
-    L.errors.length === 3 && L.errors[0].when && L.errors[0].during,
+    log.errors.length === 3 && log.errors[0].when && log.errors[0].during,
     "errors included with ISO times",
   );
   ok(
-    L.actions.length === DBG.LIMITS.actions && L.actions[0].when,
+    log.actions.length === debug.LIMITS.actions && log.actions[0].when,
     "actions included with ISO times",
   );
   ok(
-    L.walks.length > 0 && !("key" in L.walks[0]) && L.walks[0].trail.length,
+    log.walks.length > 0 &&
+      !("key" in log.walks[0]) &&
+      log.walks[0].trail.length,
     "recent walk trails included",
   );
-  ok(L.brokenAutosave?.settings, "the broken autosave is included, parsed");
+  ok(log.brokenAutosave?.settings, "the broken autosave is included, parsed");
   ok(
-    L.environment.userAgent === "node" &&
-      L.dom.prompt === "x" &&
-      L.storage["qb.autosave"] === 100 &&
-      L.options.dice === true,
+    log.environment.userAgent === "node" &&
+      log.dom.prompt === "x" &&
+      log.storage["qb.autosave"] === 100 &&
+      log.options.dice === true,
     "environment, DOM snapshot, storage overview and options included",
   );
   ok(
-    L.data.pages === 10 &&
-      L.data.cards === Q.CARDS.length &&
-      L.data.nodes > 100,
+    log.data.pages === 10 &&
+      log.data.cards === engine.CARDS.length &&
+      log.data.nodes > 100,
     "flowchart and card data counts included",
   );
 }
-const txt2 = DBG.text({ state: null, history: [] });
-const L2 = JSON.parse(txt2);
+const emptyLogText = debug.text({ state: null, history: [] });
+const emptyLog = JSON.parse(emptyLogText);
 ok(
-  L2.state === null && L2.summary.some((s) => /No game/.test(s)),
+  emptyLog.state === null &&
+    emptyLog.summary.some((line) => /No game/.test(line)),
   "a log can be built with no game in progress",
 );
 ok(
   /^queller-debug-turn1-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.json$/.test(
-    DBG.fileName(S),
-  ) && /^queller-debug-\d{4}/.test(DBG.fileName(null)),
-  "file names: " + DBG.fileName(S),
+    debug.fileName(state),
+  ) && /^queller-debug-\d{4}/.test(debug.fileName(null)),
+  "file names: " + debug.fileName(state),
 );
 // size: a long game stays exportable
-const S3 = Q.newState({ dice: true, cards: true, tracker: true, wome: true });
-S3.strategy = "corruption";
-S3.phase = "p1";
-for (let t = 0; t < 8; t++) {
-  for (const ph of ["p1", "p3", "p4", "p5", "p5", "p5"]) {
-    Q.startPhase(S3, ph);
-    drive(S3);
+const longGameState = engine.newState({
+  dice: true,
+  cards: true,
+  tracker: true,
+  wome: true,
+});
+longGameState.strategy = "corruption";
+longGameState.phase = "p1";
+for (let turn = 0; turn < 8; turn++) {
+  for (const phase of ["p1", "p3", "p4", "p5", "p5", "p5"]) {
+    engine.startPhase(longGameState, phase);
+    drive(longGameState);
   }
-  Q.nextTurn(S3);
+  engine.nextTurn(longGameState);
 }
-const big = DBG.text({
-  state: S3,
-  history: new Array(60).fill(JSON.stringify(S3)),
+const longGameText = debug.text({
+  state: longGameState,
+  history: new Array(60).fill(JSON.stringify(longGameState)),
 });
 ok(
-  big.length < 600000,
+  longGameText.length < 600000,
   "an 8-turn game with a full undo history exports under 600 KB (" +
-    Math.round(big.length / 1024) +
+    Math.round(longGameText.length / 1024) +
     " KB)",
 );
 console.log(fails ? fails + " failure(s)" : "all debug-log checks passed");

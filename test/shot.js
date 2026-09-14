@@ -8,35 +8,35 @@ const fs = require("node:fs"),
     '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"></head><body>' +
     fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8") +
     "</body></html>";
-  const server = http.createServer((q, r) => {
-    r.setHeader("content-type", "text/html; charset=utf-8");
-    r.end(html);
+  const server = http.createServer((request, response) => {
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(html);
   });
-  await new Promise((r) => server.listen(0, r));
+  await new Promise((resolve) => server.listen(0, resolve));
   const url = "http://127.0.0.1:" + server.address().port + "/";
   const browser = await chromium.launch();
   const page = await browser.newPage({
     viewport: { width: 1280, height: 900 },
   });
-  await page.route("https://fonts.googleapis.com/**", (r) =>
-    r.fulfill({ status: 200, body: "", contentType: "text/css" }),
+  await page.route("https://fonts.googleapis.com/**", (route) =>
+    route.fulfill({ status: 200, body: "", contentType: "text/css" }),
   );
   await page.goto(url);
-  for (const k of ["dice", "cards", "tracker", "wome"])
-    await page.check("#opt-" + k);
+  for (const option of ["dice", "cards", "tracker", "wome"])
+    await page.check("#opt-" + option);
   await page.click("#start");
   await page.evaluate(() => {
     window.QBUI.act(() => {
-      const S = window.QBUI.state,
-        Q = window.QB;
-      S.strategy = "corruption";
-      S.phase = "p5";
-      S.board.chars.saruman = true;
-      S.cards.table.push("sa009", "sa001b2", "sa051");
-      S.cards.discards.C = [];
-      Q.recoverDice(S);
-      Q.assignHunt(S, 2);
-      Q.rollRemaining(S);
+      const state = window.QBUI.state,
+        engine = window.QB;
+      state.strategy = "corruption";
+      state.phase = "p5";
+      state.board.chars.saruman = true;
+      state.cards.table.push("sa009", "sa001b2", "sa051");
+      state.cards.discards.C = [];
+      engine.recoverDice(state);
+      engine.assignHunt(state, 2);
+      engine.rollRemaining(state);
     });
   });
   await page.screenshot({

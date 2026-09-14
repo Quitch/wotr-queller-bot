@@ -1,138 +1,159 @@
 // Scripted scenarios for the behaviour fixed in version 52. Exit 1 on any failure.
-const W = require("./load.js")();
-const Q = W.QB,
-  D = Q.DIE_STATE;
+const fakeWindow = require("./load.js")();
+const engine = fakeWindow.QB,
+  DIE_STATE = engine.DIE_STATE;
 let fails = 0;
-const ok = (c, m) => {
-  if (!c) {
+const ok = (condition, message) => {
+  if (!condition) {
     fails++;
-    console.log("FAIL", m);
-  } else console.log("ok  ", m);
+    console.log("FAIL", message);
+  } else console.log("ok  ", message);
 };
-const die = (face, st) => ({ k: "A", face, st: st || D.AVAIL });
+const die = (face, status) => ({
+  k: "A",
+  face,
+  st: status || DIE_STATE.AVAIL,
+});
 // The answer a scenario gives when none of its rules match: No to every question, an empty battle form, "done" otherwise.
-function defaultAnswer(p) {
-  if (["yesno", "situ", "confirm", "diecheck", "ring"].includes(p.type))
+function defaultAnswer(prompt) {
+  if (["yesno", "situ", "confirm", "diecheck", "ring"].includes(prompt.type))
     return false;
-  return p.type === "battleForm" ? { nazLead: 0, figures: {} } : "done";
+  return prompt.type === "battleForm" ? { nazLead: 0, figures: {} } : "done";
 }
 // The scenario's answer to a prompt: the first rule whose pattern matches the prompt's text, type or card (a value, or a function of the prompt).
-function ruleAnswer(p, rules) {
-  for (const [re, v] of rules) {
-    if (re.test((p.text || "") + " " + p.type + " " + (p.card || "")))
-      return typeof v === "function" ? v(p) : v;
+function ruleAnswer(prompt, rules) {
+  for (const [pattern, answer] of rules) {
+    if (
+      pattern.test(
+        (prompt.text || "") + " " + prompt.type + " " + (prompt.card || ""),
+      )
+    )
+      return typeof answer === "function" ? answer(prompt) : answer;
   }
   return undefined;
 }
-function drive(S, rules, max) {
-  let g = 0;
+// Answer prompts by the rules until the walk finishes; returns the prompts seen.
+function driveWalk(state, rules, maxPrompts = 80) {
+  let guard = 0;
   const seen = [];
-  while (S.walk && !S.walk.done && g++ < (max || 80)) {
-    const p = S.walk.prompt;
-    seen.push(p);
-    let a = ruleAnswer(p, rules);
-    if (a === undefined) a = defaultAnswer(p);
-    Q.answer(S, a);
+  while (state.walk && !state.walk.done && guard++ < maxPrompts) {
+    const prompt = state.walk.prompt;
+    seen.push(prompt);
+    let answer = ruleAnswer(prompt, rules);
+    if (answer === undefined) answer = defaultAnswer(prompt);
+    engine.answer(state, answer);
   }
   return seen;
 }
-function base(st, strategy) {
-  const S = Q.newState(st);
-  S.strategy = strategy || "corruption";
-  S.phase = "p5";
-  S.cards.hand = [];
-  S.cards.factionHand = [];
-  return S;
+// A game at Phase 5 with the given settings and strategy; both hands start empty so a scenario deals exactly the cards it needs.
+function phase5State(settings, strategy = "corruption") {
+  const state = engine.newState(settings);
+  state.strategy = strategy;
+  state.phase = "p5";
+  state.cards.hand = [];
+  state.cards.factionHand = [];
+  return state;
 }
 
 // 7.1 the set-aside Muster die is used or spent, never re-reserved
 {
-  const S = base(
+  const reservedAndHuntState = phase5State(
     { dice: true, cards: false, tracker: true, wome: false },
     "military",
   );
-  S.board.nations.isengard = 0;
-  S.dice.pool = [die("Muster", D.RESERVED), die("Eye", D.HUNT)];
-  S.minionReserved = true;
-  Q.startPhase(S, "p5");
-  drive(S, [
+  reservedAndHuntState.board.nations.isengard = 0;
+  reservedAndHuntState.dice.pool = [
+    die("Muster", DIE_STATE.RESERVED),
+    die("Eye", DIE_STATE.HUNT),
+  ];
+  reservedAndHuntState.minionReserved = true;
+  engine.startPhase(reservedAndHuntState, "p5");
+  driveWalk(reservedAndHuntState, [
     [/Will of the West/, true],
     [/^Pass/, "no"],
     [/action/, "no"],
   ]);
   ok(
-    !S.dice.pool.some((d) => d.st === D.RESERVED || d.st === D.AVAIL) &&
-      S.walk.done,
+    !reservedAndHuntState.dice.pool.some(
+      (pooledDie) =>
+        pooledDie.st === DIE_STATE.RESERVED || pooledDie.st === DIE_STATE.AVAIL,
+    ) && reservedAndHuntState.walk.done,
     "7.1 set-aside die spent when Muster 2 finds no action (" +
-      S.walk.result +
+      reservedAndHuntState.walk.result +
       ")",
   );
-  const S2 = base(
+  const reservedOnlyState = phase5State(
     { dice: true, cards: false, tracker: true, wome: false },
     "military",
   );
-  S2.board.nations.isengard = 0;
-  S2.dice.pool = [die("Muster", D.RESERVED)];
-  S2.minionReserved = true;
-  Q.startPhase(S2, "p5");
-  drive(S2, [
+  reservedOnlyState.board.nations.isengard = 0;
+  reservedOnlyState.dice.pool = [die("Muster", DIE_STATE.RESERVED)];
+  reservedOnlyState.minionReserved = true;
+  engine.startPhase(reservedOnlyState, "p5");
+  driveWalk(reservedOnlyState, [
     [/Will of the West/, true],
     [/^Pass/, "no"],
   ]);
   ok(
-    S2.walk.result === "action" &&
-      S2.dice.pool[0].st === D.USED &&
-      S2.walk.trail.some(
-        (t) =>
-          t.kind === "q" &&
-          /Will of the West/.test(t.text) &&
-          t.auto &&
-          t.answer === "No",
+    reservedOnlyState.walk.result === "action" &&
+      reservedOnlyState.dice.pool[0].st === DIE_STATE.USED &&
+      reservedOnlyState.walk.trail.some(
+        (entry) =>
+          entry.kind === "q" &&
+          /Will of the West/.test(entry.text) &&
+          entry.auto &&
+          entry.answer === "No",
       ),
     "7.1 Will-of-the-West check auto-answered No for a die already set aside; minion mustered",
   );
   ok(
-    S2.board.chars.saruman === true,
+    reservedOnlyState.board.chars.saruman === true,
     "6.3 muster action updated the tracker (Saruman)",
   );
 }
 // two dice set aside in one walk are both used eventually
 {
-  const S = base(
+  const twoReservedState = phase5State(
     { dice: true, cards: false, tracker: true, wome: false },
     "military",
   );
-  S.board.nations.isengard = 0;
-  S.dice.pool = [die("Muster", D.RESERVED), die("Army/Muster", D.RESERVED)];
-  S.minionReserved = true;
+  twoReservedState.board.nations.isengard = 0;
+  twoReservedState.dice.pool = [
+    die("Muster", DIE_STATE.RESERVED),
+    die("Army/Muster", DIE_STATE.RESERVED),
+  ];
+  twoReservedState.minionReserved = true;
   for (let i = 0; i < 3; i++) {
-    Q.startPhase(S, "p5");
-    drive(S, [
+    engine.startPhase(twoReservedState, "p5");
+    driveWalk(twoReservedState, [
       [/Will of the West/, true],
       [/^Pass/, "no"],
     ]);
   }
   ok(
-    !S.dice.pool.some((d) => d.st === D.RESERVED || d.st === D.AVAIL),
+    !twoReservedState.dice.pool.some(
+      (pooledDie) =>
+        pooledDie.st === DIE_STATE.RESERVED || pooledDie.st === DIE_STATE.AVAIL,
+    ),
     "7.1 two set-aside dice both consumed within three walks",
   );
 }
 // 7.2 dice off: the cached "has a Muster die" answer is dropped when the die is set aside
 {
-  const S = base(
+  const diceOffState = phase5State(
     { dice: false, cards: false, tracker: true, wome: false },
     "military",
   );
-  S.board.nations.isengard = 0;
-  Q.startPhase(S, "p5");
-  const seen = drive(S, [
+  diceOffState.board.nations.isengard = 0;
+  engine.startPhase(diceOffState, "p5");
+  const seen = driveWalk(diceOffState, [
     [/Does Queller have a Muster die/, true],
     [/Will of the West/, true],
     [/^Pass/, "no"],
     [/threat\b.*muster/, false],
   ]);
   const asks = seen.filter(
-    (p) => p?.type === "diecheck" && /Muster/.test(p.text),
+    (prompt) => prompt?.type === "diecheck" && /Muster/.test(prompt.text),
   ).length;
   ok(
     asks >= 2,
@@ -141,75 +162,88 @@ function base(st, strategy) {
 }
 // Ring: dice on, tracker off — no ring without one in the minimal tracker; one ring used once
 {
-  const mk = () => {
-    const S = base({ dice: true, cards: false, tracker: false, wome: false });
-    S.dice.pool = [die("Event"), die("Muster")];
-    return S;
+  const stateWithEventAndMusterDice = () => {
+    const noRingState = phase5State({
+      dice: true,
+      cards: false,
+      tracker: false,
+      wome: false,
+    });
+    noRingState.dice.pool = [die("Event"), die("Muster")];
+    return noRingState;
   };
-  const S = mk();
-  S.board.rings = 0;
-  Q.startPhase(S, "p5");
-  drive(S, [
+  const noRingState = stateWithEventAndMusterDice();
+  noRingState.board.rings = 0;
+  engine.startPhase(noRingState, "p5");
+  driveWalk(noRingState, [
     [/under \*threat\*/, true],
     [/adjacent to \*threat\*/, true],
   ]);
   ok(
-    !S.ringUsedThisTurn && !S.log.some((l) => /Elven Ring/.test(l.t)),
+    !noRingState.ringUsedThisTurn &&
+      !noRingState.log.some((entry) => /Elven Ring/.test(entry.t)),
     "ring: no ring used when the Shadow holds none",
   );
-  const S2 = mk();
-  S2.board.rings = 1;
-  Q.startPhase(S2, "p5");
-  drive(S2, [
+  const oneRingState = stateWithEventAndMusterDice();
+  oneRingState.board.rings = 1;
+  engine.startPhase(oneRingState, "p5");
+  driveWalk(oneRingState, [
     [/under \*threat\*/, true],
     [/adjacent to \*threat\*/, true],
   ]);
   ok(
-    S2.ringUsedThisTurn &&
-      S2.board.rings === 0 &&
-      S2.dice.pool.some((d) => d.face === "Character"),
+    oneRingState.ringUsedThisTurn &&
+      oneRingState.board.rings === 0 &&
+      oneRingState.dice.pool.some(
+        (pooledDie) => pooledDie.face === "Character",
+      ),
     "ring: one ring used, count decremented",
   );
 }
 // 6.1 Military Phase 5 plays the revealed card, Palantír draws
 {
-  const S = base(
+  const militaryState = phase5State(
     { dice: true, cards: true, tracker: true, wome: false },
     "military",
   );
-  S.cards.hand = ["sa017", "sa002"];
-  S.cards.decks.S = ["sa019"];
-  S.board.fs.revealed = true;
-  S.cards.table.push("sa045");
-  S.board.chars.saruman = true;
-  S.dice.pool = [die("Event"), die("Army")]; // no Character die → "Play card using event die"
-  Q.startPhase(S, "p5");
-  const seen = drive(S, [[/confirm/, true]]);
-  const pc = seen.find((p) => p?.type === "playcard");
-  ok(pc?.card === "sa017", "6.1 playcard prompt raised for Lure of the Ring");
+  militaryState.cards.hand = ["sa017", "sa002"];
+  militaryState.cards.decks.S = ["sa019"];
+  militaryState.board.fs.revealed = true;
+  militaryState.cards.table.push("sa045");
+  militaryState.board.chars.saruman = true;
+  militaryState.dice.pool = [die("Event"), die("Army")]; // no Character die → "Play card using event die"
+  engine.startPhase(militaryState, "p5");
+  const seen = driveWalk(militaryState, [[/confirm/, true]]);
+  const playCardPrompt = seen.find((prompt) => prompt?.type === "playcard");
   ok(
-    !S.cards.hand.includes("sa017") && S.cards.discards.C.includes("sa017"),
+    playCardPrompt?.card === "sa017",
+    "6.1 playcard prompt raised for Lure of the Ring",
+  );
+  ok(
+    !militaryState.cards.hand.includes("sa017") &&
+      militaryState.cards.discards.C.includes("sa017"),
     "6.1 card left the hand",
   );
   ok(
-    S.cards.hand.includes("sa019"),
+    militaryState.cards.hand.includes("sa019"),
     "6.1 Palantír drew a Strategy card after the Event die play",
   );
   ok(
-    S.dice.pool.find((d) => d.face === "Event").st === D.USED,
+    militaryState.dice.pool.find((pooledDie) => pooledDie.face === "Event")
+      .st === DIE_STATE.USED,
     "6.1 Event die spent",
   );
 }
 // 6.2 Balrog on the table is offered as Durin's Bane
 {
-  const S = base(
+  const balrogState = phase5State(
     { dice: true, cards: true, tracker: true, wome: false },
     "military",
   );
-  S.cards.table = ["sa001b2"];
-  S.cards.hand = ["sa002"];
-  Q.startBattle(S, 1);
-  const seen = drive(S, [
+  balrogState.cards.table = ["sa001b2"];
+  balrogState.cards.hand = ["sa002"];
+  engine.startBattle(balrogState, 1);
+  const seen = driveWalk(balrogState, [
     [/battleForm/, { nazLead: 0, figures: {}, nearMoria: true }],
     [/confirm/, true],
     [/Shadow army attacking/, true],
@@ -217,144 +251,196 @@ function base(st, strategy) {
     [/Witch King/, false],
     [/laying siege/, true],
   ]);
-  const pc = seen.find((p) => p?.type === "playcard");
+  const playCardPrompt = seen.find((prompt) => prompt?.type === "playcard");
   ok(
-    pc?.card === "sa001b2" && pc.combat,
+    playCardPrompt?.card === "sa001b2" && playCardPrompt.combat,
     "6.2 Durin's Bane chosen from the table",
   );
   ok(
-    !S.cards.table.includes("sa001b2") &&
-      S.cards.discards.C.includes("sa001b2"),
+    !balrogState.cards.table.includes("sa001b2") &&
+      balrogState.cards.discards.C.includes("sa001b2"),
     "6.2 Balrog discarded from the table after combat use",
   );
 }
 // 6.3 Bring faction into play / Mustered Witch King update the tracker
 {
-  const S = base({ dice: true, cards: true, tracker: true, wome: true });
-  S.cards.factionHand = ["sa_Faction01"];
-  S.walk = null;
-  Q.startWalk(S, "FA", "Recruit Faction", { die: "FRecruit" });
-  drive(S, [[/eligible/, true]]);
+  const corsairsState = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  corsairsState.cards.factionHand = ["sa_Faction01"];
+  corsairsState.walk = null;
+  engine.startWalk(corsairsState, "FA", "Recruit Faction", { die: "FRecruit" });
+  driveWalk(corsairsState, [[/eligible/, true]]);
   ok(
-    S.board.factions.corsairs === true,
+    corsairsState.board.factions.corsairs === true,
     '6.3 Corsairs ticked after "Bring faction into play"',
   );
-  const S2 = base({ dice: true, cards: false, tracker: true, wome: false });
-  S2.walk = null;
-  Q.startWalk(S2, "CH", "Character 3 / Muster Witch King", { die: "Muster" });
-  drive(S2, [[/Mustered Witch King/, true]]);
+  const witchKingState = phase5State({
+    dice: true,
+    cards: false,
+    tracker: true,
+    wome: false,
+  });
+  witchKingState.walk = null;
+  engine.startWalk(witchKingState, "CH", "Character 3 / Muster Witch King", {
+    die: "Muster",
+  });
+  driveWalk(witchKingState, [[/Mustered Witch King/, true]]);
   ok(
-    S2.board.chars.witchKing === true,
+    witchKingState.board.chars.witchKing === true,
     '6.3 Witch King ticked after "Mustered Witch King"',
   );
-  const S3 = base({ dice: true, cards: true, tracker: true, wome: true });
-  S3.cards.factionHand = ["sa_Faction06"];
-  S3.walk = null;
-  Q.startWalk(S3, "FA", "Play Faction Event", { die: "FPlay" });
-  drive(S3, [[/confirm/, true]]);
+  const hillmenState = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  hillmenState.cards.factionHand = ["sa_Faction06"];
+  hillmenState.walk = null;
+  engine.startWalk(hillmenState, "FA", "Play Faction Event", { die: "FPlay" });
+  driveWalk(hillmenState, [[/confirm/, true]]);
   ok(
-    S3.board.factions.dunlendings === true,
+    hillmenState.board.factions.dunlendings === true,
     "6.3 Wild Hillmen brought the Dunlendings into play",
   );
 }
 // 6.4 The Lidless Eye moves dice to the Hunt box, never the die that played it
 {
-  const S = base(
+  const lidlessEyeState = phase5State(
     { dice: true, cards: true, tracker: true, wome: false },
     "corruption",
   );
-  S.cards.hand = ["sa043"];
-  S.dice.pool = [
+  lidlessEyeState.cards.hand = ["sa043"];
+  lidlessEyeState.dice.pool = [
     die("Character"),
     die("Army"),
     die("Muster"),
     die("Event"),
     die("Character"),
   ];
-  S.walk = null;
-  Q.startWalk(S, "EV", "Event", { die: "Event", dieObj: 3 });
-  drive(S, [[/confirm/, true]]);
-  const hunt = S.dice.pool.filter((d) => d.st === D.HUNT);
-  const ev = S.dice.pool[3];
+  lidlessEyeState.walk = null;
+  engine.startWalk(lidlessEyeState, "EV", "Event", { die: "Event", dieObj: 3 });
+  driveWalk(lidlessEyeState, [[/confirm/, true]]);
+  const huntDice = lidlessEyeState.dice.pool.filter(
+    (pooledDie) => pooledDie.st === DIE_STATE.HUNT,
+  );
+  const eventDie = lidlessEyeState.dice.pool[3];
   ok(
-    hunt.length === 2 &&
-      S.dice.hunt === 2 &&
-      hunt.every((d) => d.face === "Eye"),
+    huntDice.length === 2 &&
+      lidlessEyeState.dice.hunt === 2 &&
+      huntDice.every((pooledDie) => pooledDie.face === "Eye"),
     "6.4 the two non-preferred dice changed to Eye and placed in the Hunt box",
   );
   ok(
-    ev.st === D.USED,
+    eventDie.st === DIE_STATE.USED,
     "6.4 the Event die that played the card was spent, not changed",
   );
   ok(
-    S.dice.pool.filter((d) => d.face === "Character" && d.st === D.AVAIL)
-      .length === 2,
+    lidlessEyeState.dice.pool.filter(
+      (pooledDie) =>
+        pooledDie.face === "Character" && pooledDie.st === DIE_STATE.AVAIL,
+    ).length === 2,
     "6.4 preferred (Character) dice left alone while non-preferred ones existed",
   );
-  const S2 = base({ dice: true, cards: true, tracker: true, wome: false });
-  S2.cards.hand = ["sa043"];
-  S2.dice.pool = [die("Event")];
-  S2.walk = { dieObj: 0 };
+  const singleDieState = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  singleDieState.cards.hand = ["sa043"];
+  singleDieState.dice.pool = [die("Event")];
+  singleDieState.walk = { dieObj: 0 };
   ok(
-    Q.precondition(S2, "sa043") === false,
+    engine.precondition(singleDieState, "sa043") === false,
     "6.4 Lidless Eye unplayable when the only unused die is the one that would play it",
   );
-  S2.dice.pool.push(die("Army"));
+  singleDieState.dice.pool.push(die("Army"));
   ok(
-    Q.precondition(S2, "sa043") === true,
+    engine.precondition(singleDieState, "sa043") === true,
     "6.4 …and playable once another unused die exists",
   );
 }
 // 6.5 rule 34 caps the fixed allocations
 {
-  const S = base({ dice: true, cards: false, tracker: true, wome: false });
-  S.board.fs.companions = 1;
-  S.dice.pool = [die(null, D.POOL), die(null, D.POOL), die(null, D.POOL)];
+  const oneCompanionState = phase5State({
+    dice: true,
+    cards: false,
+    tracker: true,
+    wome: false,
+  });
+  oneCompanionState.board.fs.companions = 1;
+  oneCompanionState.dice.pool = [
+    die(null, DIE_STATE.POOL),
+    die(null, DIE_STATE.POOL),
+    die(null, DIE_STATE.POOL),
+  ];
   ok(
-    Q.assignHunt(S, 2) === 1 && S.dice.hunt === 1,
+    engine.assignHunt(oneCompanionState, 2) === 1 &&
+      oneCompanionState.dice.hunt === 1,
     '6.5 "Assign 2 dice" capped at 1 for one Companion',
   );
-  S.board.fs.companions = 0;
-  ok(Q.huntCap(S) === 1, "6.5 cap is at least 1 with no Companions");
+  oneCompanionState.board.fs.companions = 0;
+  ok(
+    engine.huntCap(oneCompanionState) === 1,
+    "6.5 cap is at least 1 with no Companions",
+  );
 }
 // 6.6 table triggers
 {
-  const S = base({ dice: true, cards: true, tracker: true, wome: false });
-  S.cards.table = ["sa051", "sa045", "sa050", "sa009"];
-  S.board.chars.saruman = true;
-  let asks = Q.tableTriggers(S, {
+  const tableState = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  tableState.cards.table = ["sa051", "sa045", "sa050", "sa009"];
+  tableState.board.chars.saruman = true;
+  let asks = engine.tableTriggers(tableState, {
     key: "nations.rohan",
     from: "passive",
     to: "active",
   });
   ok(
-    !S.cards.table.includes("sa051") && asks.length === 0,
+    !tableState.cards.table.includes("sa051") && asks.length === 0,
     "6.6 Wormtongue discarded when Rohan activates",
   );
   ok(
-    !S.cards.table.includes("sa050"),
+    !tableState.cards.table.includes("sa050"),
     "6.6 Threats and Promises discarded on a passive→active advance",
   );
-  S.cards.table.push("sa050");
-  asks = Q.tableTriggers(S, {
+  tableState.cards.table.push("sa050");
+  asks = engine.tableTriggers(tableState, {
     key: "nations.gondor",
     from: "active",
     to: "war",
   });
   ok(
-    S.cards.table.includes("sa050") &&
+    tableState.cards.table.includes("sa050") &&
       asks.length === 1 &&
       asks[0].card === "sa050",
     "6.6 Threats and Promises asked about on active→war",
   );
-  Q.tableTriggers(S, { key: "chars.saruman", from: true, to: false });
+  engine.tableTriggers(tableState, {
+    key: "chars.saruman",
+    from: true,
+    to: false,
+  });
   ok(
-    !S.cards.table.includes("sa045"),
+    !tableState.cards.table.includes("sa045"),
     "6.6 Palantír discarded when Saruman is eliminated",
   );
-  S.board.fs.revealed = true;
-  S.board.fs.inFPSettlement = true;
-  asks = Q.tableTriggers(S, { key: "fs.revealed", from: false, to: true });
+  tableState.board.fs.revealed = true;
+  tableState.board.fs.inFPSettlement = true;
+  asks = engine.tableTriggers(tableState, {
+    key: "fs.revealed",
+    from: false,
+    to: true,
+  });
   ok(
     asks.length === 1 && asks[0].card === "sa009",
     "6.6 Flocks of Crebain asked about when revealed in a Free Peoples settlement",
@@ -362,50 +448,67 @@ function base(st, strategy) {
 }
 // 6.7 rule 19: Call to Battle cards ignore initiative
 {
-  const S = base({ dice: true, cards: true, tracker: true, wome: true });
-  S.board.factions.corsairs = true;
+  const callToBattleState = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  callToBattleState.board.factions.corsairs = true;
   const seen = new Set();
   for (let i = 0; i < 60; i++) {
-    const r = Q.applyPriority(
-      S,
+    const picked = engine.applyPriority(
+      callToBattleState,
       ["sa_battle01", "sa_battle02"],
-      W.QB_FLOW.BA.nodes.atkPri[6].items,
+      fakeWindow.QB_FLOW.BA.nodes.atkPri[6].items,
     );
-    seen.add(r.chosen);
+    seen.add(picked.chosen);
   }
   ok(
     seen.size === 2,
     "6.7 two Corsairs Call to Battle cards chosen at random, not by initiative",
   );
-  const r = Q.applyPriority(
-    S,
+  const picked = engine.applyPriority(
+    callToBattleState,
     ["sa017", "sa002"],
     ["Ascending order of initiative on Character cards"],
   );
   ok(
-    ["sa017", "sa002"].includes(r.chosen) &&
-      r.steps.length === 1 &&
-      /Tie between 2 cards/.test(r.steps[0]),
+    ["sa017", "sa002"].includes(picked.chosen) &&
+      picked.steps.length === 1 &&
+      /Tie between 2 cards/.test(picked.steps[0]),
     '6.7 "on Character cards" ranks Character cards only; the Strategy card is kept alongside so the pick is a rule-3 tie',
   );
 }
 // 7.4 battleOpen reset each turn; 7.3 guard ends the walk
 {
-  const S = base({ dice: false, cards: false, tracker: false, wome: false });
-  S.battleOpen = true;
-  Q.nextTurn(S);
-  ok(S.battleOpen === false, "7.4 battleOpen cleared by nextTurn");
-  const S2 = base({ dice: true, cards: false, tracker: true, wome: false });
-  const E = W.QB_FLOW.C14.edges;
-  const saved = E.slice();
-  E.unshift(["p4", "title"], ["title", "title"]); // an artificial cycle through a note box
-  Q.startPhase(S2, "p4");
-  E.length = 0;
-  E.push(...saved);
+  const turnState = phase5State({
+    dice: false,
+    cards: false,
+    tracker: false,
+    wome: false,
+  });
+  turnState.battleOpen = true;
+  engine.nextTurn(turnState);
+  ok(turnState.battleOpen === false, "7.4 battleOpen cleared by nextTurn");
+  const cycleState = phase5State({
+    dice: true,
+    cards: false,
+    tracker: true,
+    wome: false,
+  });
+  const edges = fakeWindow.QB_FLOW.C14.edges;
+  const saved = edges.slice();
+  edges.unshift(["p4", "title"], ["title", "title"]); // an artificial cycle through a note box
+  engine.startPhase(cycleState, "p4");
+  edges.length = 0;
+  edges.push(...saved);
   ok(
-    S2.walk?.done &&
-      S2.walk.result === "noaction" &&
-      /did not finish/.test(S2.walk.trail[S2.walk.trail.length - 1].text),
+    cycleState.walk?.done &&
+      cycleState.walk.result === "noaction" &&
+      /did not finish/.test(
+        cycleState.walk.trail[cycleState.walk.trail.length - 1].text,
+      ),
     "7.3 run() ends a walk that never reaches a prompt instead of leaving it in limbo",
   );
 }

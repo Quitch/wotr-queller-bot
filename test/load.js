@@ -4,7 +4,7 @@ const fs = require("node:fs"),
 module.exports = function load() {
   const window = {};
   global.window = window;
-  for (const f of [
+  for (const file of [
     "flow.js",
     "anchors.js",
     "cards.js",
@@ -15,7 +15,7 @@ module.exports = function load() {
   ])
     new Function(
       "window",
-      fs.readFileSync(path.join(__dirname, "..", "src", f), "utf8"),
+      fs.readFileSync(path.join(__dirname, "..", "src", file), "utf8"),
     )(window);
   return window;
 };

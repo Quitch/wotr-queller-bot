@@ -1,6 +1,6 @@
 require("./load.js")();
 const crypto = require("node:crypto");
-const Q = window.QB;
+const engine = window.QB;
 let seed = +process.argv[2] || 1;
 // --digest: print a sha1 over every final game state, so a refactor that
 // should not change behaviour can be checked against a recorded hash
@@ -12,29 +12,30 @@ const rnd = () => {
 };
 Math.random = rnd;
 const problems = {};
-const prob = (k, d) => {
-  problems[k] = problems[k] || { n: 0, ex: d };
-  problems[k].n++;
+// Count a problem by kind, keeping the first example seen.
+const recordProblem = (kind, example) => {
+  problems[kind] = problems[kind] || { count: 0, example };
+  problems[kind].count++;
 };
-function cardTotals(S) {
-  const c = S.cards;
+function cardTotals(state) {
+  const cards = state.cards;
   const all = [].concat(
-    c.decks.C,
-    c.decks.S,
-    c.decks.F,
-    c.discards.C,
-    c.discards.S,
-    c.discards.F,
-    c.hand,
-    c.factionHand,
-    c.table,
-    c.factionTable,
+    cards.decks.C,
+    cards.decks.S,
+    cards.decks.F,
+    cards.discards.C,
+    cards.discards.S,
+    cards.discards.F,
+    cards.hand,
+    cards.factionHand,
+    cards.table,
+    cards.factionTable,
   );
   return all.length + ":" + new Set(all).size;
 }
-function randomAnswer(S) {
-  const p = S.walk.prompt;
-  switch (p.type) {
+function randomAnswer(state) {
+  const prompt = state.walk.prompt;
+  switch (prompt.type) {
     case "yesno":
     case "situ":
     case "confirm":
@@ -42,9 +43,9 @@ function randomAnswer(S) {
     case "ring":
       return rnd() < 0.5;
     case "count":
-      return Math.floor(p.min + rnd() * (p.max - p.min + 1));
+      return Math.floor(prompt.min + rnd() * (prompt.max - prompt.min + 1));
     case "choice":
-      return p.options[Math.floor(rnd() * p.options.length)].value;
+      return prompt.options[Math.floor(rnd() * prompt.options.length)].value;
     case "action":
       return rnd() < 0.8 ? "done" : "no";
     case "playcard":
@@ -52,7 +53,7 @@ function randomAnswer(S) {
     case "step":
       return rnd() < 0.85 ? "done" : "no";
     case "roll":
-      return p.options[Math.floor(rnd() * p.options.length)];
+      return prompt.options[Math.floor(rnd() * prompt.options.length)];
     case "priority":
       return "ok";
     case "battleForm":
@@ -72,143 +73,159 @@ function randomAnswer(S) {
         attackingSiege: rnd() < 0.5,
       };
   }
-  throw new Error("unknown prompt " + p.type);
+  throw new Error("unknown prompt " + prompt.type);
 }
-function finish(S, tag) {
+function finish(state, tag) {
   // answer until the walk is done
-  let n = 0;
-  const total = cardTotals(S);
-  while (S.walk && !S.walk.done) {
-    if (!S.walk.prompt) {
-      prob(
+  let prompts = 0;
+  const total = cardTotals(state);
+  while (state.walk && !state.walk.done) {
+    if (!state.walk.prompt) {
+      recordProblem(
         "LIMBO walk not done and no prompt",
         tag +
           " node " +
-          S.walk.page +
+          state.walk.page +
           "." +
-          S.walk.node +
+          state.walk.node +
           " trail:" +
-          S.walk.trail
+          state.walk.trail
             .slice(-4)
-            .map((t) => t.kind + ":" + (t.text || "").slice(0, 30))
+            .map((entry) => entry.kind + ":" + (entry.text || "").slice(0, 30))
             .join(" | "),
       );
       return false;
     }
-    const a = randomAnswer(S);
+    const answer = randomAnswer(state);
     try {
-      Q.answer(S, a);
-    } catch (e) {
-      prob("EXCEPTION " + e.message, tag + " " + e.stack.split("\n")[1]);
+      engine.answer(state, answer);
+    } catch (error) {
+      recordProblem(
+        "EXCEPTION " + error.message,
+        tag + " " + error.stack.split("\n")[1],
+      );
       return false;
     }
     if (
-      cardTotals(S) !== total &&
-      !/Servants|His Will/.test(JSON.stringify(S.log.slice(-3)))
+      cardTotals(state) !== total &&
+      !/Servants|His Will/.test(JSON.stringify(state.log.slice(-3)))
     ) {
-      prob(
-        "CARD TOTAL CHANGED " + total + "->" + cardTotals(S),
+      recordProblem(
+        "CARD TOTAL CHANGED " + total + "->" + cardTotals(state),
         tag +
           " " +
-          S.log
+          state.log
             .slice(-2)
-            .map((l) => l.t)
+            .map((entry) => entry.t)
             .join(" / "),
       );
     }
-    if (++n > 400) {
-      prob(
+    if (++prompts > 400) {
+      recordProblem(
         "RUNAWAY prompts in one walk",
-        tag + " " + S.walk.page + "." + S.walk.node,
+        tag + " " + state.walk.page + "." + state.walk.node,
       );
       return false;
     }
   }
   return true;
 }
-function randomBoard(S) {
-  const B = S.board;
-  B.fs.progress = Math.floor(rnd() * 8);
-  B.fs.revealed = rnd() < 0.3;
-  B.fs.mordor = rnd() < 0.2;
-  B.fs.inFPSettlement = rnd() < 0.4;
-  B.fs.atStart = rnd() < 0.2;
-  B.fs.companions = Math.floor(rnd() * 8);
-  for (const k in B.chars) B.chars[k] = rnd() < 0.4;
-  for (const k of ["sauron", "isengard", "se"])
-    B.nations[k] = Math.floor(rnd() * 4);
-  for (const k of ["gondor", "rohan", "north", "dwarves", "elves"])
-    B.nations[k] = ["passive", "active", "war"][Math.floor(rnd() * 3)];
-  for (const k in B.factions) B.factions[k] = rnd() < 0.4;
-  B.nazgul = Math.floor(rnd() * 9);
-  B.shadowVP = Math.floor(rnd() * 10);
-  B.corruption = Math.floor(rnd() * 12);
-  B.rings = Math.floor(rnd() * 4);
+function randomBoard(state) {
+  const board = state.board;
+  board.fs.progress = Math.floor(rnd() * 8);
+  board.fs.revealed = rnd() < 0.3;
+  board.fs.mordor = rnd() < 0.2;
+  board.fs.inFPSettlement = rnd() < 0.4;
+  board.fs.atStart = rnd() < 0.2;
+  board.fs.companions = Math.floor(rnd() * 8);
+  for (const key in board.chars) board.chars[key] = rnd() < 0.4;
+  for (const key of ["sauron", "isengard", "se"])
+    board.nations[key] = Math.floor(rnd() * 4);
+  for (const key of ["gondor", "rohan", "north", "dwarves", "elves"])
+    board.nations[key] = ["passive", "active", "war"][Math.floor(rnd() * 3)];
+  for (const key in board.factions) board.factions[key] = rnd() < 0.4;
+  board.nazgul = Math.floor(rnd() * 9);
+  board.shadowVP = Math.floor(rnd() * 10);
+  board.corruption = Math.floor(rnd() * 12);
+  board.rings = Math.floor(rnd() * 4);
 }
-function game(settings, g) {
-  const S = Q.newState(settings);
-  const tag0 = JSON.stringify(settings) + " g" + g;
-  Q.startPhase(S, "setup");
-  if (!finish(S, tag0 + " setup")) return S;
+function game(settings, gameNumber) {
+  const state = engine.newState(settings);
+  const gameTag = JSON.stringify(settings) + " g" + gameNumber;
+  engine.startPhase(state, "setup");
+  if (!finish(state, gameTag + " setup")) return state;
   for (let turn = 0; turn < 4; turn++) {
-    const tag = tag0 + " T" + S.turn;
-    if (rnd() < 0.7) randomBoard(S);
-    for (const ph of ["p1", "p2", "p3", "p4"]) {
-      Q.startPhase(S, ph);
-      if (S.walk && !finish(S, tag + " " + ph)) return S;
+    const tag = gameTag + " T" + state.turn;
+    if (rnd() < 0.7) randomBoard(state);
+    for (const phase of ["p1", "p2", "p3", "p4"]) {
+      engine.startPhase(state, phase);
+      if (state.walk && !finish(state, tag + " " + phase)) return state;
     }
     // Phase 5: walk until dice are gone (dice on) or 12 walks (dice off)
     let walks = 0;
     while (true) {
-      const dice = S.settings.dice;
+      const dice = state.settings.dice;
       const left = dice
-        ? S.dice.pool.filter((d) => d.st === "avail" || d.st === "reserved")
-            .length
+        ? state.dice.pool.filter(
+            (die) => die.st === "avail" || die.st === "reserved",
+          ).length
         : null;
       if (dice && left === 0) break;
       if (!dice && walks >= 12) break;
       if (walks > 60) {
-        prob(
+        recordProblem(
           "PHASE 5 NEVER ENDS",
           tag +
             " left=" +
             left +
             " pool=" +
-            JSON.stringify(S.dice.pool.map((d) => d.face + "/" + d.st)) +
+            JSON.stringify(
+              state.dice.pool.map((die) => die.face + "/" + die.st),
+            ) +
             " last=" +
-            S.walk.result,
+            state.walk.result,
         );
         break;
       }
-      Q.startPhase(S, "p5");
-      if (!finish(S, tag + " p5#" + walks)) return S;
+      engine.startPhase(state, "p5");
+      if (!finish(state, tag + " p5#" + walks)) return state;
       walks++;
       if (rnd() < 0.25) {
-        Q.startBattle(S, 1);
-        if (!finish(S, tag + " battle1")) return S;
-        if (S.walk.result === "battleNext") {
-          Q.startBattle(S, 2);
-          if (!finish(S, tag + " battle2")) return S;
+        engine.startBattle(state, 1);
+        if (!finish(state, tag + " battle1")) return state;
+        if (state.walk.result === "battleNext") {
+          engine.startBattle(state, 2);
+          if (!finish(state, tag + " battle2")) return state;
         }
       }
-      if (rnd() < 0.3) randomBoard(S);
+      if (rnd() < 0.3) randomBoard(state);
     }
-    Q.nextTurn(S);
+    engine.nextTurn(state);
   }
-  return S;
+  return state;
 }
-let g = 0;
-for (let i = 0; i < 16; i++) {
-  const st = {
-    dice: !!(i & 1),
-    cards: !!(i & 2),
-    tracker: !!(i & 4),
-    wome: !!(i & 8),
+// The 16 setting combinations, one per bit pattern.
+function settingsFromBits(bits) {
+  return {
+    dice: !!(bits & 1),
+    cards: !!(bits & 2),
+    tracker: !!(bits & 4),
+    wome: !!(bits & 8),
   };
-  for (let k = 0; k < 25; k++) digest.update(JSON.stringify(game(st, g++)));
 }
-console.log("games:", g);
+let gameNumber = 0;
+for (let bits = 0; bits < 16; bits++) {
+  const settings = settingsFromBits(bits);
+  for (let i = 0; i < 25; i++)
+    digest.update(JSON.stringify(game(settings, gameNumber++)));
+}
+console.log("games:", gameNumber);
 if (wantDigest) console.log("digest:", digest.digest("hex"));
-for (const k in problems)
-  console.log(problems[k].n + "x", k, "\n   e.g.", problems[k].ex);
+for (const kind in problems)
+  console.log(
+    problems[kind].count + "x",
+    kind,
+    "\n   e.g.",
+    problems[kind].example,
+  );
 process.exit(Object.keys(problems).length ? 1 : 0);
