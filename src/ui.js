@@ -414,23 +414,23 @@
       LEGAL +
       "</footer></div>"
     );
-    function opt(id, t, d, onT, offT, on) {
-      return (
-        '<label class="opt"><input type="checkbox" id="opt-' +
-        id +
-        '" ' +
-        (on ? "checked" : "") +
-        "><div><b>" +
-        t +
-        "</b><span>" +
-        fmt(d) +
-        '<span class="oo"><b>On:</b> ' +
-        fmt(onT) +
-        '</span><span class="oo"><b>Off:</b> ' +
-        fmt(offT) +
-        "</span></span></div></label>"
-      );
-    }
+  }
+  function opt(id, t, d, onT, offT, on) {
+    return (
+      '<label class="opt"><input type="checkbox" id="opt-' +
+      id +
+      '" ' +
+      (on ? "checked" : "") +
+      "><div><b>" +
+      t +
+      "</b><span>" +
+      fmt(d) +
+      '<span class="oo"><b>On:</b> ' +
+      fmt(onT) +
+      '</span><span class="oo"><b>Off:</b> ' +
+      fmt(offT) +
+      "</span></span></div></label>"
+    );
   }
   function wireSetup() {
     $("#start").onclick = () => {
