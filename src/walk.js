@@ -2055,7 +2055,6 @@
     if (phase === "p5") {
       S.phase = "p5";
       startWalk(S, p5Page(S), "Phase 5");
-      return;
     }
   }
   function startBattle(S, round) {
