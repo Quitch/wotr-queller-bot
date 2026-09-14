@@ -1,8 +1,60 @@
 // Queller Bot flowcharts — transcribed from War_of_the_Ring.drawio (10 pages).
 // Node kinds: S start (green ellipse), A action (red ellipse), D decision (yellow), d follow-up decision (blue),
 // J jump (grey box), P priority list (purple), T step (orange), N note/title.
-// Node: [kind, x, y, w, h, text, extra]. extra: {items:[...], bold:true, t2:'non-bold part', wome:true}
-// Edge: [from, to, label, waypoints]. A decision edge with no label is the answer the other edge lacks.
+// Node: [kind, x, y, width, height, text, extra]. extra: {items: [...], any: true (the items are alternatives),
+//   bold: true (Elven Ring condition), t2: "non-bold part", wome: true (WoME only), die: "Army" (the die an action
+//   box uses), name: "..." (a jump box's start point when it differs from its text)}.
+// Edge: [from, to, label, waypoints, anchors {ex, en}, style ("elbow"), hideLabel]; slots 4-6 are filled by
+//   anchors.js. A decision edge with no label is the answer the other edge lacks.
+// Read nodes and edges through QB_NODE / QB_EDGE rather than by slot number.
+window.QB_NODE_KIND = {
+  START: "S",
+  ACTION: "A",
+  DECISION: "D",
+  FOLLOW_UP: "d",
+  JUMP: "J",
+  PRIORITY: "P",
+  STEP: "T",
+  NOTE: "N",
+};
+window.QB_NODE_SLOT = {
+  KIND: 0,
+  X: 1,
+  Y: 2,
+  WIDTH: 3,
+  HEIGHT: 4,
+  TEXT: 5,
+  EXTRA: 6,
+};
+window.QB_EDGE_SLOT = {
+  FROM: 0,
+  TO: 1,
+  LABEL: 2,
+  WAYPOINTS: 3,
+  ANCHORS: 4,
+  STYLE: 5,
+  HIDE_LABEL: 6,
+};
+window.QB_NODE = {
+  kind: (node) => node[window.QB_NODE_SLOT.KIND],
+  text: (node) => node[window.QB_NODE_SLOT.TEXT],
+  extra: (node) => node[window.QB_NODE_SLOT.EXTRA] || {},
+  box: (node) => ({
+    x: node[window.QB_NODE_SLOT.X],
+    y: node[window.QB_NODE_SLOT.Y],
+    width: node[window.QB_NODE_SLOT.WIDTH],
+    height: node[window.QB_NODE_SLOT.HEIGHT],
+  }),
+};
+window.QB_EDGE = {
+  from: (edge) => edge[window.QB_EDGE_SLOT.FROM],
+  to: (edge) => edge[window.QB_EDGE_SLOT.TO],
+  label: (edge) => edge[window.QB_EDGE_SLOT.LABEL],
+  waypoints: (edge) => edge[window.QB_EDGE_SLOT.WAYPOINTS],
+  anchors: (edge) => edge[window.QB_EDGE_SLOT.ANCHORS],
+  isElbow: (edge) => edge[window.QB_EDGE_SLOT.STYLE] === "elbow",
+  hidesLabel: (edge) => !!edge[window.QB_EDGE_SLOT.HIDE_LABEL],
+};
 window.QB_FLOW = {};
 (function (F) {
   function page(name, short, nodes, edges) {

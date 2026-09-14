@@ -2,6 +2,8 @@
 (function () {
   const engine = window.QB,
     FLOW = window.QB_FLOW,
+    NODE = window.QB_NODE,
+    NODE_KIND = window.QB_NODE_KIND,
     cardById = engine.cardById,
     GLOSSARY = window.QB_GLOSSARY,
     debug = window.QB_DEBUG;
@@ -632,19 +634,20 @@
     );
   }
   const NODE_KIND_NAME = {
-    D: "Decision",
-    d: "Follow-up decision",
-    A: "Action",
-    T: "Step",
-    P: "Priority list",
-    J: "Jump",
-    S: "Start",
+    [NODE_KIND.START]: "Start point",
+    [NODE_KIND.ACTION]: "Action",
+    [NODE_KIND.DECISION]: "Decision",
+    [NODE_KIND.FOLLOW_UP]: "Follow-up decision",
+    [NODE_KIND.JUMP]: "Jump",
+    [NODE_KIND.PRIORITY]: "Priority list",
+    [NODE_KIND.STEP]: "Step",
+    [NODE_KIND.NOTE]: "Note",
   };
   function promptHTML(walk) {
     const prompt = walk.prompt,
       page = FLOW[walk.page],
-      node = page.nodes[walk.node] || ["D"];
-    const kind = prompt.kind || node[0] || "D";
+      node = page.nodes[walk.node] || [NODE_KIND.DECISION];
+    const kind = prompt.kind || NODE.kind(node) || NODE_KIND.DECISION;
     const eyebrow =
       '<div class="eyebrow"><span class="sw" style="background:var(--n' +
       kind +
@@ -663,7 +666,7 @@
       '<button class="btn yes" data-ans="yes">Yes</button><button class="btn no" data-ans="no">No</button>';
     switch (prompt.type) {
       case "yesno": {
-        const isRing = prompt.bold || (node[6]?.bold && !prompt.sub);
+        const isRing = prompt.bold || (NODE.extra(node).bold && !prompt.sub);
         body =
           (prompt.board ? '<div class="eyebrow">Board question</div>' : "") +
           '<p class="q">' +
@@ -1934,6 +1937,7 @@
     stripMarkup,
     cardHTML,
     CARD_HALF,
+    NODE_KIND_NAME,
     checkboxRowHTML,
     numberRowHTML,
     openModal,

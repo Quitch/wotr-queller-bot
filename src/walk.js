@@ -2,6 +2,9 @@
 (function () {
   const engine = window.QB,
     FLOW = window.QB_FLOW,
+    NODE = window.QB_NODE,
+    NODE_KIND = window.QB_NODE_KIND,
+    EDGE = window.QB_EDGE,
     cardById = engine.cardById;
   const SHADOW_NATION_NAME = {
       sauron: "Sauron",
@@ -14,11 +17,6 @@
       "Southrons and Easterlings": "se",
     };
   const PENDING = null; // returned by a step that has set a prompt and is waiting for the player
-
-  // flow.js node tuple: [kind, nodeExtra, y, walk, h, text, extra]
-  const kind = (node) => node[0],
-    text = (node) => node[5],
-    extra = (node) => node[6] || {};
 
   const JUMPS = [
     [/^Army$/, { page: "AR", start: "Army", die: "Army" }],
@@ -114,20 +112,20 @@
     return null;
   }
   function outEdges(page, id) {
-    return FLOW[page].edges.filter((edge) => edge[0] === id);
+    return FLOW[page].edges.filter((edge) => EDGE.from(edge) === id);
   }
   function edgeFor(page, id, label) {
     const edges = outEdges(page, id);
-    let edge = edges.find((candidate) => candidate[2] === label);
-    if (!edge) edge = edges.find((candidate) => candidate[2] == null);
+    let edge = edges.find((candidate) => EDGE.label(candidate) === label);
+    if (!edge) edge = edges.find((candidate) => EDGE.label(candidate) == null);
     return edge;
   }
   function findStart(page, name) {
     const nodes = FLOW[page].nodes;
     for (const id in nodes) {
       if (
-        kind(nodes[id]) === "S" &&
-        normalizeText(text(nodes[id])) === normalizeText(name)
+        NODE.kind(nodes[id]) === NODE_KIND.START &&
+        normalizeText(NODE.text(nodes[id])) === normalizeText(name)
       )
         return id;
     }
@@ -209,7 +207,7 @@
     const walk = state.walk;
     const edge = edgeFor(walk.page, walk.node, label);
     if (!edge) return false;
-    goto(state, walk.page, edge[1]);
+    goto(state, walk.page, EDGE.to(edge));
     return true;
   }
   function endWalk(state, result, message) {
@@ -234,20 +232,20 @@
     else
       endWalk(
         state,
-        "phase:" + normalizeText(text(node)),
-        "Reached “" + normalizeText(text(node)) + "”.",
+        "phase:" + normalizeText(NODE.text(node)),
+        "Reached “" + normalizeText(NODE.text(node)) + "”.",
       );
   }
   // The handler for each box kind (see flow.js); notes are passed through.
   const STEP = {
-    S: atStart,
-    N: (state) => follow(state, null),
-    D: (state, walk, node) => handleDecision(state, node),
-    d: (state, walk, node) => handleDecision(state, node),
-    J: (state, walk, node) => handleJump(state, node),
-    A: (state, walk, node) => handleAction(state, node),
-    T: (state, walk, node) => handleStep(state, node),
-    P: (state, walk, node) => handlePriority(state, node),
+    [NODE_KIND.START]: atStart,
+    [NODE_KIND.NOTE]: (state) => follow(state, null),
+    [NODE_KIND.DECISION]: (state, walk, node) => handleDecision(state, node),
+    [NODE_KIND.FOLLOW_UP]: (state, walk, node) => handleDecision(state, node),
+    [NODE_KIND.JUMP]: (state, walk, node) => handleJump(state, node),
+    [NODE_KIND.ACTION]: (state, walk, node) => handleAction(state, node),
+    [NODE_KIND.STEP]: (state, walk, node) => handleStep(state, node),
+    [NODE_KIND.PRIORITY]: (state, walk, node) => handlePriority(state, node),
   };
   function run(state) {
     let guard = 0;
@@ -264,7 +262,7 @@
       }
       const walk = state.walk,
         node = cur(state),
-        boxKind = kind(node);
+        boxKind = NODE.kind(node);
       if (!STEP[boxKind]) {
         endWalk(state, "noaction", "Unknown box kind “" + boxKind + "”.");
         break;
@@ -312,10 +310,10 @@
   function ask(state, node, question, promptExtra) {
     setPrompt(state, {
       type: "yesno",
-      text: question || text(node),
+      text: question || NODE.text(node),
       node: state.walk.node,
       page: state.walk.page,
-      kind: kind(node),
+      kind: NODE.kind(node),
       ...promptExtra,
     });
   }
@@ -331,7 +329,7 @@
       part: partKey,
       node: walk.node,
       page: walk.page,
-      kind: "d",
+      kind: NODE_KIND.FOLLOW_UP,
       board: true,
     });
     return PENDING;
@@ -342,13 +340,13 @@
     const walk = state.walk,
       id = walk.node,
       page = walk.page,
-      nodeExtra = extra(node),
+      nodeExtra = NODE.extra(node),
       board = state.board,
       cards = state.settings.cards,
       dice = state.settings.dice;
     if (nodeExtra.wome && !state.settings.wome)
       return recordDecision(state, {
-        text: text(node),
+        text: NODE.text(node),
         ringCondition: nodeExtra.bold,
         answer: false,
         auto: true,
@@ -359,7 +357,7 @@
       factionsKnown = trackerOn || (cards && state.settings.wome);
     const answerAuto = (value, why) =>
       recordDecision(state, {
-        text: text(node),
+        text: NODE.text(node),
         ringCondition: nodeExtra.bold,
         answer: value,
         auto: true,
@@ -482,7 +480,7 @@
           const minions = engine.minionsAvailable(state);
           if (minions.length)
             return recordDecision(state, {
-              text: text(node),
+              text: NODE.text(node),
               ringCondition: true,
               answer: true,
               auto: true,
@@ -490,7 +488,7 @@
             });
           trail(state, {
             kind: "q",
-            text: text(node),
+            text: NODE.text(node),
             answer: "No",
             auto: true,
             why: "no minion can be mustered (tracker)",
@@ -516,7 +514,7 @@
         if (walk.sub === 0) {
           if (trackerOn && board.fs.mordor)
             return recordDecision(state, {
-              text: text(node),
+              text: NODE.text(node),
               ringCondition: true,
               answer: true,
               auto: true,
@@ -834,7 +832,7 @@
     if (nodeExtra.t2 && !nodeExtra.any) {
       // two-part decision: the bold (ring) part first, then the plain part
       if (walk.sub === 0)
-        return ask(state, node, text(node), { sub: 1, bold: true });
+        return ask(state, node, NODE.text(node), { sub: 1, bold: true });
       return ask(state, node, nodeExtra.t2, { sub: 2 });
     }
     return ask(
@@ -878,14 +876,14 @@
   // ----- jumps -----
   function handleJump(state, node) {
     const walk = state.walk,
-      spec = jumpSpec(text(node)),
-      label = normalizeText(text(node));
+      spec = jumpSpec(NODE.text(node)),
+      label = normalizeText(NODE.text(node));
     if (!spec) {
       trail(state, { kind: "skip", text: label, why: "unknown box" });
       exitJump(state);
       return;
     }
-    if (extra(node).wome && !state.settings.wome) {
+    if (NODE.extra(node).wome && !state.settings.wome) {
       trail(state, { kind: "skip", text: label, why: "WoME not in play" });
       exitJump(state);
       return;
@@ -1145,7 +1143,7 @@
     walk.dieUsed = frame.dieUsed;
     walk.cands = null;
     walk.chosen = null;
-    trail(state, { kind: "back", text: normalizeText(text(cur(state))) });
+    trail(state, { kind: "back", text: normalizeText(NODE.text(cur(state))) });
     exitJump(state);
   }
 
@@ -1159,8 +1157,8 @@
   }
   function drawStep(state, node, key) {
     const walk = state.walk,
-      label = normalizeText(text(node)),
-      isStep = kind(node) === "T";
+      label = normalizeText(NODE.text(node)),
+      isStep = NODE.kind(node) === NODE_KIND.STEP;
     if (!state.settings.cards)
       return setPrompt(state, {
         type: isStep ? "step" : "action",
@@ -1200,8 +1198,8 @@
   function handleAction(state, node) {
     const walk = state.walk,
       key = walk.page + "." + walk.node,
-      label = normalizeText(text(node)),
-      nodeExtra = extra(node),
+      label = normalizeText(NODE.text(node)),
+      nodeExtra = NODE.extra(node),
       cards = state.settings.cards,
       dice = state.settings.dice;
     if (nodeExtra.die && !(walk.die === nodeExtra.die && walk.dieObj != null)) {
@@ -1492,8 +1490,8 @@
   function handleStep(state, node) {
     const walk = state.walk,
       key = walk.page + "." + walk.node,
-      label = normalizeText(text(node)),
-      nodeExtra = extra(node),
+      label = normalizeText(NODE.text(node)),
+      nodeExtra = NODE.extra(node),
       dice = state.settings.dice,
       cards = state.settings.cards;
     const continueWith = (why) => continueStep(state, label, why);
@@ -1694,8 +1692,8 @@
   function continuePriority(state, node, why) {
     trail(state, {
       kind: "pri",
-      text: text(node),
-      items: extra(node).items,
+      text: NODE.text(node),
+      items: NODE.extra(node).items,
       auto: true,
       why,
     });
@@ -1704,9 +1702,9 @@
   function handlePriority(state, node) {
     const walk = state.walk,
       key = walk.page + "." + walk.node,
-      nodeExtra = extra(node),
+      nodeExtra = NODE.extra(node),
       cards = state.settings.cards,
-      label = text(node);
+      label = NODE.text(node);
     const continueWith = (why) => continuePriority(state, node, why);
     if (cards) {
       const cardPriorityNodes = [
@@ -1766,7 +1764,7 @@
             discarded.push(
               ...engine.autoDiscard(
                 state,
-                extra(FLOW.FA.nodes.discPri).items,
+                NODE.extra(FLOW.FA.nodes.discPri).items,
                 "F",
               ),
             );
@@ -2036,8 +2034,8 @@
           break;
         }
         recordDecision(state, {
-          text: text(node),
-          ringCondition: extra(node).bold,
+          text: NODE.text(node),
+          ringCondition: NODE.extra(node).bold,
           answer: value,
           auto: false,
         });

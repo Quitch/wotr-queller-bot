@@ -3,6 +3,9 @@ const fs = require("node:fs"),
   path = require("node:path");
 const fakeWindow = require("./load.js")();
 const FLOW = fakeWindow.QB_FLOW,
+  NODE = fakeWindow.QB_NODE,
+  NODE_KIND = fakeWindow.QB_NODE_KIND,
+  EDGE = fakeWindow.QB_EDGE,
   engine = fakeWindow.QB;
 let fails = 0;
 const fail = (message) => {
@@ -49,7 +52,7 @@ for (const nodeKey of cardLists) {
     fail("card list " + nodeKey + " missing");
     continue;
   }
-  for (const criterion of node[6].items)
+  for (const criterion of NODE.extra(node).items)
     if (
       !engine.criterionTest(criterion, state, null, {
         eventFull: false,
@@ -62,21 +65,30 @@ for (const nodeKey of cardLists) {
 for (const pageKey in FLOW)
   for (const nodeId in FLOW[pageKey].nodes) {
     const node = FLOW[pageKey].nodes[nodeId];
-    const outEdges = FLOW[pageKey].edges.filter((edge) => edge[0] === nodeId);
-    if (node[0] === "J" && !engine.jumpSpec(node[5]))
+    const kind = NODE.kind(node);
+    const outEdges = FLOW[pageKey].edges.filter(
+      (edge) => EDGE.from(edge) === nodeId,
+    );
+    if (kind === NODE_KIND.JUMP && !engine.jumpSpec(NODE.text(node)))
       fail(
         "no JUMPS entry for " +
           pageKey +
           "." +
           nodeId +
           ' "' +
-          engine.normalizeText(node[5]) +
+          engine.normalizeText(NODE.text(node)) +
           '"',
       );
-    if ((node[0] === "D" || node[0] === "d") && outEdges.length !== 2)
+    if (
+      (kind === NODE_KIND.DECISION || kind === NODE_KIND.FOLLOW_UP) &&
+      outEdges.length !== 2
+    )
       fail(pageKey + "." + nodeId + " has " + outEdges.length + " arrows");
-    if (!outEdges.length && !["A", "J", "N"].includes(node[0]))
-      fail(pageKey + "." + nodeId + " (" + node[0] + ") has no arrow out");
+    if (
+      !outEdges.length &&
+      ![NODE_KIND.ACTION, NODE_KIND.JUMP, NODE_KIND.NOTE].includes(kind)
+    )
+      fail(pageKey + "." + nodeId + " (" + kind + ") has no arrow out");
   }
 // 4. every card flag key exists; every card the engine expects has its data
 for (const card of fakeWindow.QB_CARDS) {

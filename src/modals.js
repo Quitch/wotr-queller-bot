@@ -2,6 +2,9 @@
 (function () {
   const engine = window.QB,
     FLOW = window.QB_FLOW,
+    NODE = window.QB_NODE,
+    NODE_KIND = window.QB_NODE_KIND,
+    EDGE = window.QB_EDGE,
     ui = window.QBUI,
     GLOSSARY = window.QB_GLOSSARY,
     debug = window.QB_DEBUG;
@@ -287,14 +290,14 @@
   }
   // ---------- flowchart SVG ----------
   const NODE_STYLE = {
-    S: ["#d5e8d4", "#82b366"],
-    A: ["#f8cecc", "#b85450"],
-    D: ["#fff2cc", "#d6b656"],
-    d: ["#dae8fc", "#6c8ebf"],
-    J: ["#f5f5f5", "#666666"],
-    P: ["#e1d5e7", "#9673a6"],
-    T: ["#ffe6cc", "#d79b00"],
-    N: [null, null],
+    [NODE_KIND.START]: { fill: "#d5e8d4", stroke: "#82b366" },
+    [NODE_KIND.ACTION]: { fill: "#f8cecc", stroke: "#b85450" },
+    [NODE_KIND.DECISION]: { fill: "#fff2cc", stroke: "#d6b656" },
+    [NODE_KIND.FOLLOW_UP]: { fill: "#dae8fc", stroke: "#6c8ebf" },
+    [NODE_KIND.JUMP]: { fill: "#f5f5f5", stroke: "#666666" },
+    [NODE_KIND.PRIORITY]: { fill: "#e1d5e7", stroke: "#9673a6" },
+    [NODE_KIND.STEP]: { fill: "#ffe6cc", stroke: "#d79b00" },
+    [NODE_KIND.NOTE]: { fill: null, stroke: null },
   };
   function svgPage(pageKey) {
     const page = FLOW[pageKey];
@@ -313,12 +316,12 @@
     let maxX = 0,
       maxY = 0;
     for (const id in page.nodes) {
-      const node = page.nodes[id];
-      maxX = Math.max(maxX, node[1] + node[3]);
-      maxY = Math.max(maxY, node[2] + node[4]);
+      const box = NODE.box(page.nodes[id]);
+      maxX = Math.max(maxX, box.x + box.width);
+      maxY = Math.max(maxY, box.y + box.height);
     }
     for (const edge of page.edges) {
-      for (const waypoint of edge[3] || []) {
+      for (const waypoint of EDGE.waypoints(edge) || []) {
         maxX = Math.max(maxX, waypoint[0]);
         maxY = Math.max(maxY, waypoint[1]);
       }
@@ -334,23 +337,24 @@
     // edges first, so the boxes are drawn over them
     let labels = "";
     for (const edge of page.edges) {
-      const fromBox = page.nodes[edge[0]],
-        toBox = page.nodes[edge[1]];
-      if (!fromBox || !toBox) continue;
+      const fromNode = page.nodes[EDGE.from(edge)],
+        toNode = page.nodes[EDGE.to(edge)];
+      if (!fromNode || !toNode) continue;
       const points = route(
-        fromBox,
-        toBox,
-        edge[3],
-        edge[4],
-        edge[5] === "elbow",
+        NODE.box(fromNode),
+        NODE.box(toNode),
+        EDGE.waypoints(edge),
+        EDGE.anchors(edge),
+        EDGE.isElbow(edge),
       );
       svg +=
         '<polyline points="' +
         points.map((point) => point.join(",")).join(" ") +
         '" fill="none" stroke="#333" stroke-width="1.2" marker-end="url(#arr)"/>';
-      if (edge[2] && !edge[6]) {
+      const label = EDGE.label(edge);
+      if (label && !EDGE.hidesLabel(edge)) {
         const [labelX, labelY] = midpoint(points);
-        const labelWidth = edge[2].length * 5.6 + 8;
+        const labelWidth = label.length * 5.6 + 8;
         labels +=
           '<rect x="' +
           (labelX - labelWidth / 2) +
@@ -363,20 +367,23 @@
           '" y="' +
           (labelY + 3) +
           '" text-anchor="middle" font-size="10" fill="#333">' +
-          esc(edge[2]) +
+          esc(label) +
           "</text>";
       }
     }
     for (const id in page.nodes) {
       const node = page.nodes[id];
-      const [kind, x, y, width, height, text, nodeExtra] = node;
+      const kind = NODE.kind(node),
+        { x, y, width, height } = NODE.box(node),
+        text = NODE.text(node),
+        nodeExtra = NODE.extra(node);
       const style = NODE_STYLE[kind];
       const isCurrent = id === curNode,
         wasVisited = visited.has(id);
       let shape = "";
-      const fill = style[0] || "none",
-        stroke = style[1] || "none";
-      if (kind === "S" || kind === "A")
+      const fill = style.fill || "none",
+        stroke = style.stroke || "none";
+      if (kind === NODE_KIND.START || kind === NODE_KIND.ACTION)
         shape =
           '<ellipse cx="' +
           (x + width / 2) +
@@ -391,7 +398,7 @@
           '" stroke="' +
           stroke +
           '"/>';
-      else if (kind === "N") {
+      else if (kind === NODE_KIND.NOTE) {
         if (id === "grp")
           shape =
             '<rect x="' +
@@ -403,7 +410,7 @@
             '" height="' +
             height +
             '" rx="8" fill="none" stroke="#999" stroke-dasharray="4 3"/>';
-      } else if (kind === "J")
+      } else if (kind === NODE_KIND.JUMP)
         shape =
           '<rect x="' +
           x +
@@ -445,17 +452,17 @@
           '" height="' +
           height +
           '" rx="' +
-          (kind === "T" ? 0 : 8) +
+          (kind === NODE_KIND.STEP ? 0 : 8) +
           '" fill="' +
           fill +
           '" stroke="' +
           stroke +
           '"/>';
-      if (wasVisited && !isCurrent && kind !== "N") {
+      if (wasVisited && !isCurrent && kind !== NODE_KIND.NOTE) {
         const shade = 'fill="#3a332c" fill-opacity=".22" stroke="none"';
-        const rx = kind === "T" || kind === "J" ? 0 : 8;
+        const rx = kind === NODE_KIND.STEP || kind === NODE_KIND.JUMP ? 0 : 8;
         shape +=
-          kind === "S" || kind === "A"
+          kind === NODE_KIND.START || kind === NODE_KIND.ACTION
             ? '<ellipse cx="' +
               (x + width / 2) +
               '" cy="' +
@@ -494,7 +501,7 @@
           '" rx="12" fill="none" stroke="#8A2A22" stroke-width="3"/>';
       let inner;
       const bold = nodeExtra?.bold;
-      const pad = kind === "N" ? 0 : 4;
+      const pad = kind === NODE_KIND.NOTE ? 0 : 4;
       const label = nodeLabel(kind, id, text, node);
       const extraHeight = id === "ringNote" ? 14 : 0;
       inner =
@@ -541,19 +548,11 @@
       walk = state?.walk;
     const curNode =
       walk && !walk.done && walk.page === pageKey ? walk.node : null;
-    const KIND = {
-      S: "Start point",
-      A: "Action",
-      D: "Decision",
-      d: "Follow-up decision",
-      J: "Jump",
-      P: "Priority list",
-      T: "Step",
-      N: "Note",
-    };
     const nodeName = (id) => {
       const node = page.nodes[id];
-      return node ? engine.normalizeText(node[5]).replaceAll("*", "") : id;
+      return node
+        ? engine.normalizeText(NODE.text(node)).replaceAll("*", "")
+        : id;
     };
     let html =
       '<div class="flowtext"><p class="notice">Text version of ' +
@@ -561,11 +560,13 @@
       ". Each box lists where its arrows lead.</p><ol>";
     for (const id in page.nodes) {
       const node = page.nodes[id];
-      if (node[0] === "N" && !/grp/.test(id)) continue;
+      const kind = NODE.kind(node);
+      if (kind === NODE_KIND.NOTE && !/grp/.test(id)) continue;
       if (id === "grp") continue;
-      const nodeExtra = node[6] || {};
-      const outEdges = page.edges.filter((edge) => edge[0] === id);
-      let text = "<b>" + esc(KIND[node[0]]) + ":</b> " + fmt(node[5]);
+      const nodeExtra = NODE.extra(node);
+      const outEdges = page.edges.filter((edge) => EDGE.from(edge) === id);
+      let text =
+        "<b>" + esc(ui.NODE_KIND_NAME[kind]) + ":</b> " + fmt(NODE.text(node));
       if (nodeExtra.t2)
         text += " " + ui.ringIcon() + " (ring part) — or " + fmt(nodeExtra.t2);
       if (nodeExtra.bold && !nodeExtra.t2)
@@ -583,14 +584,14 @@
           outEdges
             .map(
               (edge) =>
-                (edge[2] ? esc(edge[2]) + ": " : "then: ") +
+                (EDGE.label(edge) ? esc(EDGE.label(edge)) + ": " : "then: ") +
                 "go to “" +
-                esc(nodeName(edge[1])) +
+                esc(nodeName(EDGE.to(edge))) +
                 "”",
             )
             .join("; ") +
           "</div>";
-      else if (node[0] === "A")
+      else if (kind === NODE_KIND.ACTION)
         text +=
           '<div class="notice">then: stop (if not possible, rule 29)</div>';
       html +=
@@ -609,7 +610,7 @@
   }
   // The HTML inside a node box: page titles, the ring note and group labels have their own styling; everything else is the node text.
   function nodeLabel(kind, id, text, node) {
-    if (kind === "N" && id !== "grp" && /title/.test(id))
+    if (kind === NODE_KIND.NOTE && id !== "grp" && /title/.test(id))
       return (
         '<div style="font-size:16px;font-weight:700;text-align:right">' +
         esc(text) +
@@ -630,7 +631,8 @@
     return nodeInner(node);
   }
   function nodeInner(node) {
-    const [, , , , , text, nodeExtra] = node;
+    const text = NODE.text(node),
+      nodeExtra = NODE.extra(node);
     let html = esc(text)
       .replace(/\*([^*]+)\*/g, "<i>$1</i>")
       .replaceAll("\n", "<br>");
@@ -687,7 +689,7 @@
   }
   // The point on a box's edge nearest to (px, py): on the top or bottom edge when the point is more above/below than beside it.
   function anchor(box, px, py) {
-    const [, x, y, width, height] = box;
+    const { x, y, width, height } = box;
     const centreX = x + width / 2,
       centreY = y + height / 2;
     const dx = px - centreX,
@@ -703,7 +705,7 @@
   }
   // anchor towards a draw.io waypoint: leave from the side the point lies beyond (horizontal when it is outside the box's x-range), like draw.io's orthogonal router
   function waypointAnchor(box, px, py) {
-    const [, x, y, width, height] = box;
+    const { x, y, width, height } = box;
     const outX = px < x || px > x + width,
       outY = py < y || py > y + height;
     if (outX)
@@ -721,12 +723,12 @@
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const JOG = 20; // how far an arrow steps out of a box before turning
   const onTopOrBottomEdge = (box, point) =>
-    Math.abs(point[1] - box[2]) < 0.5 ||
-    Math.abs(point[1] - box[2] - box[4]) < 0.5; // an anchor there means a vertical exit/entry
+    Math.abs(point[1] - box.y) < 0.5 ||
+    Math.abs(point[1] - box.y - box.height) < 0.5; // an anchor there means a vertical exit/entry
   // A point on a box from a draw.io anchor (fractions of the width and height).
   const anchorAt = (box, anchorFraction) => [
-    box[1] + box[3] * anchorFraction[0],
-    box[2] + box[4] * anchorFraction[1],
+    box.x + box.width * anchorFraction[0],
+    box.y + box.height * anchorFraction[1],
   ];
   // The point the edge heads for at one end: the first/last waypoint, else the other box's explicit anchor, else its centre.
   function towards(waypoint, anchorFraction, box, centre) {
@@ -743,19 +745,19 @@
   // Which way an edge leaves a box: -1 from the top (vertical) or left edge, +1 from the bottom or right.
   function exitDirection(box, point, vertical) {
     const nearStart = vertical
-      ? Math.abs(point[1] - box[2]) < 0.5
-      : Math.abs(point[0] - box[1]) < 0.5;
+      ? Math.abs(point[1] - box.y) < 0.5
+      : Math.abs(point[0] - box.x) < 0.5;
     return nearStart ? -1 : 1;
   }
-  // The node tuple's position and size slots for each axis.
-  const AXIS_SLOTS = {
-    x: { position: 1, size: 3 },
-    y: { position: 2, size: 4 },
+  // A box's position and size fields along each axis.
+  const AXIS_FIELDS = {
+    x: { position: "x", size: "width" },
+    y: { position: "y", size: "height" },
   };
   // A lane for a detour between two boxes along one axis: midway through the gap between them when there is one,
   // otherwise just outside both boxes on the side the edge is heading (towardsStart = towards 0).
   function lane(fromBox, toBox, axis, towardsStart, jog) {
-    const { position, size } = AXIS_SLOTS[axis];
+    const { position, size } = AXIS_FIELDS[axis];
     if (towardsStart) {
       if (toBox[position] + toBox[size] <= fromBox[position])
         return (toBox[position] + toBox[size] + fromBox[position]) / 2;
@@ -770,8 +772,9 @@
       ) + jog
     );
   }
+  // Boxes are {x, y, width, height}; points and waypoints are [x, y].
   function boxCentre(box) {
-    return [box[1] + box[3] / 2, box[2] + box[4] / 2];
+    return [box.x + box.width / 2, box.y + box.height / 2];
   }
   function route(fromBox, toBox, waypoints, anchors, elbow) {
     const fromCentre = boxCentre(fromBox),
@@ -907,10 +910,10 @@
       points.push(end);
       return points;
     }
-    const below = toCentre[1] > fromBox[2] + fromBox[4],
-      above = toCentre[1] + toBox[4] / 2 < fromBox[2],
-      right = toCentre[0] > fromBox[1] + fromBox[3],
-      left = toCentre[0] + toBox[3] / 2 < fromBox[1];
+    const below = toCentre[1] > fromBox.y + fromBox.height,
+      above = toCentre[1] + toBox.height / 2 < fromBox.y,
+      right = toCentre[0] > fromBox.x + fromBox.width,
+      left = toCentre[0] + toBox.width / 2 < fromBox.x;
     if (
       (below && !(right || left)) ||
       (below &&
@@ -918,12 +921,12 @@
           Math.abs(toCentre[1] - fromCentre[1]))
     ) {
       const start = [
-          clamp(toCentre[0], fromBox[1] + 8, fromBox[1] + fromBox[3] - 8),
-          fromBox[2] + fromBox[4],
+          clamp(toCentre[0], fromBox.x + 8, fromBox.x + fromBox.width - 8),
+          fromBox.y + fromBox.height,
         ],
         finish = [
-          clamp(fromCentre[0], toBox[1] + 8, toBox[1] + toBox[3] - 8),
-          toBox[2],
+          clamp(fromCentre[0], toBox.x + 8, toBox.x + toBox.width - 8),
+          toBox.y,
         ];
       const midY = (start[1] + finish[1]) / 2;
       return Math.abs(start[0] - finish[0]) < 1
@@ -936,12 +939,12 @@
         Math.abs(toCentre[1] - fromCentre[1])
     ) {
       const start = [
-          clamp(toCentre[0], fromBox[1] + 8, fromBox[1] + fromBox[3] - 8),
-          fromBox[2],
+          clamp(toCentre[0], fromBox.x + 8, fromBox.x + fromBox.width - 8),
+          fromBox.y,
         ],
         finish = [
-          clamp(fromCentre[0], toBox[1] + 8, toBox[1] + toBox[3] - 8),
-          toBox[2] + toBox[4],
+          clamp(fromCentre[0], toBox.x + 8, toBox.x + toBox.width - 8),
+          toBox.y + toBox.height,
         ];
       const midY = (start[1] + finish[1]) / 2;
       return Math.abs(start[0] - finish[0]) < 1
@@ -950,12 +953,12 @@
     }
     if (right) {
       const start = [
-          fromBox[1] + fromBox[3],
-          clamp(toCentre[1], fromBox[2] + 6, fromBox[2] + fromBox[4] - 6),
+          fromBox.x + fromBox.width,
+          clamp(toCentre[1], fromBox.y + 6, fromBox.y + fromBox.height - 6),
         ],
         finish = [
-          toBox[1],
-          clamp(fromCentre[1], toBox[2] + 6, toBox[2] + toBox[4] - 6),
+          toBox.x,
+          clamp(fromCentre[1], toBox.y + 6, toBox.y + toBox.height - 6),
         ];
       const midX = (start[0] + finish[0]) / 2;
       return Math.abs(start[1] - finish[1]) < 1
@@ -963,12 +966,12 @@
         : [start, [midX, start[1]], [midX, finish[1]], finish];
     }
     const start = [
-        fromBox[1],
-        clamp(toCentre[1], fromBox[2] + 6, fromBox[2] + fromBox[4] - 6),
+        fromBox.x,
+        clamp(toCentre[1], fromBox.y + 6, fromBox.y + fromBox.height - 6),
       ],
       finish = [
-        toBox[1] + toBox[3],
-        clamp(fromCentre[1], toBox[2] + 6, toBox[2] + toBox[4] - 6),
+        toBox.x + toBox.width,
+        clamp(fromCentre[1], toBox.y + 6, toBox.y + toBox.height - 6),
       ];
     const midX = (start[0] + finish[0]) / 2;
     return Math.abs(start[1] - finish[1]) < 1
@@ -1387,7 +1390,7 @@
     for (const pageKey in FLOW) {
       for (const id in FLOW[pageKey].nodes) {
         const node = FLOW[pageKey].nodes[id];
-        if (node[0] === "S")
+        if (NODE.kind(node) === NODE_KIND.START)
           html +=
             '<option value="' +
             pageKey +
@@ -1396,7 +1399,7 @@
             '">' +
             esc(FLOW[pageKey].name) +
             " — " +
-            esc(engine.normalizeText(node[5])) +
+            esc(engine.normalizeText(NODE.text(node))) +
             "</option>";
       }
     }
@@ -1569,9 +1572,14 @@
         ui.act(
           () => {
             ui.state.walk = null;
-            engine.startWalk(ui.state, pageKey, FLOW[pageKey].nodes[id][5], {
-              die,
-            });
+            engine.startWalk(
+              ui.state,
+              pageKey,
+              NODE.text(FLOW[pageKey].nodes[id]),
+              {
+                die,
+              },
+            );
             ui.closeModal();
           },
           { a: "jump", page: pageKey, start: id, die },
