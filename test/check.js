@@ -1,6 +1,6 @@
 // Static consistency checks between walk.js / engine.js and the flowchart + card data. Exit 1 on any failure.
-const fs = require("fs"),
-  path = require("path");
+const fs = require("node:fs"),
+  path = require("node:path");
 const W = require("./load.js")();
 const F = W.QB_FLOW,
   Q = W.QB;

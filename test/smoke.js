@@ -1,9 +1,9 @@
 // Browser smoke test: boots the built page the way the artifact host does, plays through a turn with every option on,
 // exercises the tracker triggers, the table-card list, the die tap, undo and every modal. Fails on any page error.
 const { chromium } = require("playwright");
-const fs = require("fs"),
-  path = require("path"),
-  http = require("http");
+const fs = require("node:fs"),
+  path = require("node:path"),
+  http = require("node:http");
 (async () => {
   const html =
     '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"></head><body>' +

@@ -1,8 +1,8 @@
 // Screenshots of the main states for a visual check.
 const { chromium } = require("playwright");
-const fs = require("fs"),
-  path = require("path"),
-  http = require("http");
+const fs = require("node:fs"),
+  path = require("node:path"),
+  http = require("node:http");
 (async () => {
   const html =
     '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"></head><body>' +
