@@ -257,8 +257,7 @@ const fs = require("node:fs"),
   if (
     log.errors.length !== 2 ||
     !log.errors[0].rolledBack ||
-    !log.errors[0].during ||
-    log.errors[0].during.a !== "smokeFail" ||
+    log.errors[0].during?.a !== "smokeFail" ||
     !log.errors[1].lastAction
   )
     dbgErrors.push("errors not recorded as expected");
@@ -271,7 +270,7 @@ const fs = require("node:fs"),
   // 8. reload from autosave; the action history survives the reload
   await page.reload({ waitUntil: "load" });
   s = await S();
-  console.log("reloaded turn", s && s.turn, "phase", s && s.phase);
+  console.log("reloaded turn", s?.turn, "phase", s?.phase);
   await page.click("#newGameBtn");
   await page.click('#modal [data-ask="ok"]');
   console.log("setup screen:", !!(await page.$("#start")));
@@ -315,13 +314,12 @@ const fs = require("node:fs"),
   log = JSON.parse(await page.inputValue("#dbgTxt"));
   console.log(
     "broken save in log: turn",
-    log.brokenAutosave && log.brokenAutosave.turn,
+    log.brokenAutosave?.turn,
     "boot error:",
-    (log.errors.find((e) => e.a === "boot-render") || {}).message,
+    log.errors.find((e) => e.a === "boot-render")?.message,
   );
   if (
-    !log.brokenAutosave ||
-    log.brokenAutosave.turn !== 3 ||
+    log.brokenAutosave?.turn !== 3 ||
     !log.errors.some((e) => e.a === "boot-render")
   )
     dbgErrors.push("broken autosave not captured");

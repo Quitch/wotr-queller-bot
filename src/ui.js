@@ -95,7 +95,7 @@
   }
   function loadJSON(txt) {
     const o = JSON.parse(txt);
-    if (!o || !o.settings || !o.board) throw new Error("not a Queller save");
+    if (!o?.settings || !o.board) throw new Error("not a Queller save");
     return Q.migrate(o);
   }
 
@@ -162,15 +162,7 @@
     });
     document.body.addEventListener("mouseout", (e) => {
       const t = e.target.closest(".term");
-      if (
-        t &&
-        !(
-          e.relatedTarget &&
-          e.relatedTarget.closest &&
-          e.relatedTarget.closest("#tip")
-        )
-      )
-        hideTip();
+      if (t && !e.relatedTarget?.closest?.("#tip")) hideTip();
     });
     document.body.addEventListener("focusin", (e) => {
       const t = e.target.closest(".term");
@@ -235,7 +227,7 @@
     bar.innerHTML =
       '<div class="wrap"><span class="msg"><b>Something went wrong in the app</b> — ' +
       esc(last ? last.message : "an error was recorded") +
-      (last && last.rolledBack
+      (last?.rolledBack
         ? ". Your last action was undone; the game continues."
         : ".") +
       " Please export a debug log and send it with a description of what you were doing.</span>" +
@@ -299,10 +291,7 @@
     const root = $("#app");
     hideTip();
     const prevKey = focusKey(document.activeElement),
-      prevWasAnswer =
-        document.activeElement &&
-        document.activeElement.dataset &&
-        document.activeElement.dataset.ans !== undefined;
+      prevWasAnswer = document.activeElement?.dataset?.ans !== undefined;
     const openMore = [...root.querySelectorAll("details.more")].map(
       (d) => d.open,
     );
@@ -346,7 +335,7 @@
     const live = $("#live");
     const last = S.log[S.log.length - 1];
     if (live && last && S.walk) live.textContent = last.t;
-    if (prevWasAnswer || (S.walk && S.walk.prompt && !prevKey)) {
+    if (prevWasAnswer || (S.walk?.prompt && !prevKey)) {
       const p = $(".prompt, .result");
       if (p) p.focus();
     } else if (prevKey) {
@@ -500,7 +489,7 @@
     const w = S.walk;
     if (w && !w.done) {
       h += promptHTML(w);
-    } else if (w && w.done) {
+    } else if (w?.done) {
       h += resultHTML(w);
     } else h += '<div class="idle">' + idleText() + "</div>";
     if (w)
@@ -644,7 +633,7 @@
       '<button class="btn yes" data-ans="yes">Yes</button><button class="btn no" data-ans="no">No</button>';
     switch (p.type) {
       case "yesno": {
-        const isRing = p.bold || (node[6] && node[6].bold && !p.sub);
+        const isRing = p.bold || (node[6]?.bold && !p.sub);
         body =
           (p.board ? '<div class="eyebrow">Board question</div>' : "") +
           '<p class="q">' +
@@ -751,7 +740,7 @@
           (p.combat ? " as its combat card" : "") +
           ":</p>" +
           cardHTML(c) +
-          (w.steps && w.steps.length
+          (w.steps?.length
             ? '<ol class="steps">' +
               w.steps.map((s) => "<li>" + fmt(s) + "</li>").join("") +
               "</ol>"
@@ -1588,8 +1577,8 @@
           {
             a: "answer",
             prompt: "count",
-            page: S.walk && S.walk.page,
-            node: S.walk && S.walk.node,
+            page: S.walk?.page,
+            node: S.walk?.node,
             value: v,
           },
         );
@@ -1635,7 +1624,7 @@
   }
   function onAnswer(a) {
     const w = S.walk,
-      p = w && w.prompt;
+      p = w?.prompt;
     if (!p) return;
     act(
       () => {
@@ -1659,7 +1648,7 @@
   // The player marks an available die as used by hand (the [data-spend] buttons in the dice row).
   function spendDieClick(i) {
     const d = S.dice.pool[i];
-    if (!d || d.st !== "avail") return;
+    if (d?.st !== "avail") return;
     ask({
       title: "Mark this die as used?",
       text:
@@ -1676,7 +1665,7 @@
         act(
           () => {
             const d2 = S.dice.pool[i];
-            if (d2 && d2.st === "avail") Q.spendDie(S, d2, "marked by you");
+            if (d2?.st === "avail") Q.spendDie(S, d2, "marked by you");
           },
           { a: "spendDie", index: i, face: d.face },
         );
@@ -1685,7 +1674,7 @@
   }
   function afterWalk() {
     const w = S.walk;
-    if (!w || !w.done) return;
+    if (!w?.done) return;
     const r = w.result || "";
     if (w.entry.page === "BA") {
       S.battleOpen = r === "battleNext";

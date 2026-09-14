@@ -150,8 +150,7 @@ ok(
   err.message.startsWith("Cannot read") &&
     err.name === "TypeError" &&
     err.stack &&
-    err.during &&
-    err.during.a === "answer" &&
+    err.during?.a === "answer" &&
     err.state &&
     err.state.turn === S.turn,
   "an error during an action records the action, the stack and a state digest",
@@ -238,10 +237,7 @@ if (L) {
     L.walks.length > 0 && !("key" in L.walks[0]) && L.walks[0].trail.length,
     "recent walk trails included",
   );
-  ok(
-    L.brokenAutosave && L.brokenAutosave.settings,
-    "the broken autosave is included, parsed",
-  );
+  ok(L.brokenAutosave?.settings, "the broken autosave is included, parsed");
   ok(
     L.environment.userAgent === "node" &&
       L.dom.prompt === "x" &&

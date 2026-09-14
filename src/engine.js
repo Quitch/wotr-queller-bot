@@ -147,7 +147,7 @@
       o.settings.tracker = o.settings.walk !== false;
       delete o.settings.walk;
     }
-    const n = o.board && o.board.nations;
+    const n = o.board?.nations;
     if (n)
       for (const k of ["sauron", "isengard", "se"]) {
         if (typeof n[k] === "boolean") n[k] = n[k] ? 0 : SN_START[k];
@@ -235,8 +235,7 @@
     const B = S.battle || {};
     if (c.deck === "B") {
       const fac = c.faction.toLowerCase();
-      if (!S.board.factions[fac] || !(B.figures && B.figures[fac]))
-        return false;
+      if (!S.board.factions[fac] || !B.figures?.[fac]) return false;
     }
     return c.cpre ? COMBAT_PRECONDITIONS[c.cpre](S, B) : true;
   }
@@ -575,7 +574,7 @@
   }
   function playCard(S, id, ctx) {
     const c = byId[id];
-    const combat = !!(ctx && ctx.combat);
+    const combat = !!ctx?.combat;
     removeFromLists(S, id);
     const onTable = ON_TABLE(id) && !combat;
     if (onTable) {
@@ -599,7 +598,7 @@
   function resolveCardEffects(S, id, ctx) {
     const c = byId[id];
     const out = [];
-    if (ctx && ctx.combat) return out;
+    if (ctx?.combat) return out;
     const K = S.cards;
     if (c.effect === "servants") {
       if (K.decks.F.length < 3 && K.discards.F.length) {
@@ -708,8 +707,7 @@
     }
     // The Palantír of Orthanc: after an Event die plays an Event card, draw another card (a preferred one: Character under the corruption strategy, Strategy under military).
     if (
-      ctx &&
-      ctx.die === "Event" &&
+      ctx?.die === "Event" &&
       (c.deck === "C" || c.deck === "S") &&
       ctx.palantirBefore
     ) {

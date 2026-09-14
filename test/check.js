@@ -39,7 +39,7 @@ const cardLists = [
 ];
 for (const k of cardLists) {
   const [p, id] = k.split(".");
-  const node = F[p] && F[p].nodes[id];
+  const node = F[p]?.nodes[id];
   if (!node) {
     fail("card list " + k + " missing");
     continue;

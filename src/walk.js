@@ -1235,7 +1235,7 @@
       case "MU.musterCardA":
       case "M5.playCharDie":
       case "M5.playEventDie": {
-        if (cards && !w.chosen && w.cands && w.cands.length) {
+        if (cards && !w.chosen && w.cands?.length) {
           const r = Q.applyPriority(S, w.cands, [
             "Ascending order of initiative",
           ]);
@@ -1342,7 +1342,7 @@
   }
   function spendCurrentDie(S, why) {
     const w = S.walk;
-    if (!w || !w.die) return;
+    if (!w?.die) return;
     if (S.settings.dice && w.dieObj != null) {
       Q.spendDie(S, S.dice.pool[w.dieObj], why);
     } else
@@ -1811,7 +1811,7 @@
   // ----- answers from the UI -----
   function answer(S, v) {
     const w = S.walk;
-    if (!w || !w.prompt) return;
+    if (!w?.prompt) return;
     const p = w.prompt;
     w.prompt = null;
     const n = cur(S);

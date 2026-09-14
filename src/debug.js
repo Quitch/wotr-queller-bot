@@ -58,7 +58,7 @@
       phase: S.phase,
       strategy: S.strategy,
       walk: w ? w.page + "." + w.node : null,
-      prompt: w && w.prompt ? w.prompt.type : null,
+      prompt: w?.prompt ? w.prompt.type : null,
       done: w ? !!w.done : null,
       result: w ? w.result : null,
       trail: w ? w.trail.length : 0,
@@ -85,7 +85,7 @@
     try {
       return digest(S);
     } catch (e) {
-      return { digestFailed: String((e && e.message) || e) };
+      return { digestFailed: String(e?.message || e) };
     }
   }
   function walkKey(S, w) {
@@ -128,7 +128,7 @@
   function noteWalk(S, w, note) {
     const key = walkKey(S, w);
     const last = D.walks.at(-1);
-    if (last && last.key === key) return;
+    if (last?.key === key) return;
     const c = compactWalk(S, w, note);
     c.key = key;
     push(D.walks, c, LIMITS.walks);
@@ -154,7 +154,7 @@
         e.a !== "load"
       )
         noteWalk(S, D.preWalk, "replaced or abandoned");
-      if (w && w.done) noteWalk(S, w);
+      if (w?.done) noteWalk(S, w);
     }
     D.preWalk = null;
     push(D.actions, e, LIMITS.actions);
@@ -195,7 +195,7 @@
     s.push(
       "Queller Bot Runner version " +
         Q.VERSION +
-        (env && env.built ? " (built " + env.built + ")" : ""),
+        (env?.built ? " (built " + env.built + ")" : ""),
     );
     if (!S) s.push("No game in progress (New game screen)");
     else {
@@ -273,7 +273,7 @@
     const errors = withTimes(D.errors);
     return {
       format: FORMAT,
-      app: { version: Q.VERSION, built: (ctx.env && ctx.env.built) || null },
+      app: { version: Q.VERSION, built: ctx.env?.built || null },
       exported: iso(Date.now()),
       report: ctx.report || "",
       summary: summary(S, ctx.env, errors),

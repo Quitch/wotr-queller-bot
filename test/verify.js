@@ -129,7 +129,7 @@ function base(st, strategy) {
     [/threat\b.*muster/, false],
   ]);
   const asks = seen.filter(
-    (p) => p && p.type === "diecheck" && /Muster/.test(p.text),
+    (p) => p?.type === "diecheck" && /Muster/.test(p.text),
   ).length;
   ok(
     asks >= 2,
@@ -182,11 +182,8 @@ function base(st, strategy) {
   S.dice.pool = [die("Event"), die("Army")]; // no Character die → "Play card using event die"
   Q.startPhase(S, "p5");
   const seen = drive(S, [[/confirm/, true]]);
-  const pc = seen.find((p) => p && p.type === "playcard");
-  ok(
-    pc && pc.card === "sa017",
-    "6.1 playcard prompt raised for Lure of the Ring",
-  );
+  const pc = seen.find((p) => p?.type === "playcard");
+  ok(pc?.card === "sa017", "6.1 playcard prompt raised for Lure of the Ring");
   ok(
     !S.cards.hand.includes("sa017") && S.cards.discards.C.includes("sa017"),
     "6.1 card left the hand",
@@ -217,9 +214,9 @@ function base(st, strategy) {
     [/Witch King/, false],
     [/laying siege/, true],
   ]);
-  const pc = seen.find((p) => p && p.type === "playcard");
+  const pc = seen.find((p) => p?.type === "playcard");
   ok(
-    pc && pc.card === "sa001b2" && pc.combat,
+    pc?.card === "sa001b2" && pc.combat,
     "6.2 Durin's Bane chosen from the table",
   );
   ok(
@@ -402,8 +399,7 @@ function base(st, strategy) {
   E.length = 0;
   E.push(...saved);
   ok(
-    S2.walk &&
-      S2.walk.done &&
+    S2.walk?.done &&
       S2.walk.result === "noaction" &&
       /did not finish/.test(S2.walk.trail[S2.walk.trail.length - 1].text),
     "7.3 run() ends a walk that never reaches a prompt instead of leaving it in limbo",

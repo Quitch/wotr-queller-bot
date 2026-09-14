@@ -92,7 +92,7 @@
     if (m) m.remove();
     const app = $("#app");
     if (app) app.removeAttribute("inert");
-    if (opener && opener.isConnected) {
+    if (opener?.isConnected) {
       opener.focus();
     }
     opener = null;
@@ -121,7 +121,7 @@
       case "rules":
         return ["General rules", rulesHTML(), true];
       case "flow":
-        if (m.arg && m.arg.current) {
+        if (m.arg?.current) {
           flowPage = currentPage();
           m.arg = null;
         }
@@ -294,10 +294,10 @@
   function svgPage(pk) {
     const P = F[pk];
     const S = U.S;
-    const w = S && S.walk;
+    const w = S?.walk;
     const curNode = w && !w.done && w.page === pk ? w.node : null;
     const visited = new Set();
-    if ((w && w.page === pk) || (w && w.trail.some((t) => t.page === pk)))
+    if (w?.page === pk || w?.trail.some((t) => t.page === pk))
       w.trail.forEach((t) => {
         if (t.page === pk && t.node) visited.add(t.node);
       });
@@ -477,7 +477,7 @@
           (ht + 10) +
           '" rx="12" fill="none" stroke="#8A2A22" stroke-width="3"/>';
       let inner;
-      const bold = ex && ex.bold;
+      const bold = ex?.bold;
       const pad = k === "N" ? 0 : 4;
       const txt =
         k === "N" && id !== "grp" && /title/.test(id)
@@ -504,7 +504,7 @@
         '" height="' +
         (ht - 2 * pad + extra) +
         '"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;display:flex;align-items:' +
-        ((ex && ex.items) || id === "grp" ? "flex-start" : "center") +
+        (ex?.items || id === "grp" ? "flex-start" : "center") +
         ";justify-content:center;text-align:center;color:#1d1a17;line-height:1.15;font-size:11px;overflow:hidden;" +
         (bold ? "font-weight:700;" : "") +
         '"><div style="width:100%">' +
@@ -535,7 +535,7 @@
   function textPage(pk) {
     const P = F[pk];
     const S = U.S,
-      w = S && S.walk;
+      w = S?.walk;
     const curNode = w && !w.done && w.page === pk ? w.node : null;
     const KIND = {
       S: "Start point",
@@ -605,13 +605,13 @@
     let s = esc(t)
       .replace(/\*([^*]+)\*/g, "<i>$1</i>")
       .replaceAll("\n", "<br>");
-    if (ex && ex.t2)
+    if (ex?.t2)
       s =
         "<b>" +
         s +
         "</b> or " +
         esc(ex.t2).replace(/\*([^*]+)\*/g, "<i>$1</i>");
-    if (ex && ex.items)
+    if (ex?.items)
       s =
         '<div style="text-align:left;width:100%"><b style="display:block;text-align:center">' +
         s +
@@ -692,7 +692,7 @@
   function route(a, b, wp, an, elbow) {
     const ac = [a[1] + a[3] / 2, a[2] + a[4] / 2],
       bc = [b[1] + b[3] / 2, b[2] + b[4] / 2];
-    if (elbow && wp && wp.length && an && an.ex && an.en) {
+    if (elbow && wp?.length && an?.ex && an.en) {
       // draw.io elbowEdgeStyle: one elbow positioned by the first waypoint
       const p0 = [a[1] + a[3] * an.ex[0], a[2] + a[4] * an.ex[1]],
         pn = [b[1] + b[3] * an.en[0], b[2] + b[4] * an.en[1]];
@@ -703,33 +703,31 @@
     }
     if (an && (an.ex || an.en)) {
       // explicit draw.io exit/entry anchors (fractions of the box); a missing side falls back to the nearest-point heuristic
-      const first =
-          wp && wp.length
-            ? wp[0]
-            : an.en
-              ? [b[1] + b[3] * an.en[0], b[2] + b[4] * an.en[1]]
-              : bc,
-        last =
-          wp && wp.length
-            ? wp[wp.length - 1]
-            : an.ex
-              ? [a[1] + a[3] * an.ex[0], a[2] + a[4] * an.ex[1]]
-              : ac;
+      const first = wp?.length
+          ? wp[0]
+          : an.en
+            ? [b[1] + b[3] * an.en[0], b[2] + b[4] * an.en[1]]
+            : bc,
+        last = wp?.length
+          ? wp[wp.length - 1]
+          : an.ex
+            ? [a[1] + a[3] * an.ex[0], a[2] + a[4] * an.ex[1]]
+            : ac;
       const p0 = an.ex
         ? [a[1] + a[3] * an.ex[0], a[2] + a[4] * an.ex[1]]
-        : wp && wp.length
+        : wp?.length
           ? wpAnchor(a, first[0], first[1])
           : anchor(a, first[0], first[1]);
       const pn = an.en
         ? [b[1] + b[3] * an.en[0], b[2] + b[4] * an.en[1]]
-        : wp && wp.length
+        : wp?.length
           ? wpAnchor(b, last[0], last[1])
           : anchor(b, last[0], last[1]);
       const exV = onTopOrBottomEdge(a, p0),
         enV = onTopOrBottomEdge(b, pn);
       const pts = [p0];
       let prev = p0;
-      if (wp && wp.length) {
+      if (wp?.length) {
         for (const p of wp) {
           if (Math.abs(p[0] - prev[0]) > 1 && Math.abs(p[1] - prev[1]) > 1)
             pts.push(exV ? [prev[0], p[1]] : [p[0], prev[1]]);
@@ -753,14 +751,14 @@
           : Math.abs(pn[0] - b[1]) < 0.5
             ? -1
             : 1;
-        if (!(wp && wp.length) && !exV && !enV && exDir === enDir) {
+        if (!wp?.length && !exV && !enV && exDir === enDir) {
           const ox =
             exDir > 0
               ? Math.max(prev[0], pn[0]) + J
               : Math.min(prev[0], pn[0]) - J;
           pts.push([ox, prev[1]], [ox, pn[1]]);
         } else if (
-          !(wp && wp.length) &&
+          !wp?.length &&
           !exV &&
           !enV &&
           (pn[0] - prev[0]) * exDir < 0
@@ -782,18 +780,13 @@
                 ? Math.min(a[2], b[2]) - J
                 : Math.max(a[2] + a[4], b[2] + b[4]) + J;
           pts.push([ox, prev[1]], [ox, ya], [ix, ya], [ix, pn[1]]);
-        } else if (!(wp && wp.length) && exV && enV && exDir === enDir) {
+        } else if (!wp?.length && exV && enV && exDir === enDir) {
           const oy =
             exDir > 0
               ? Math.max(prev[1], pn[1]) + J
               : Math.min(prev[1], pn[1]) - J;
           pts.push([prev[0], oy], [pn[0], oy]);
-        } else if (
-          !(wp && wp.length) &&
-          exV &&
-          enV &&
-          (pn[1] - prev[1]) * exDir < 0
-        ) {
+        } else if (!wp?.length && exV && enV && (pn[1] - prev[1]) * exDir < 0) {
           const oy = prev[1] + J * exDir,
             iy = pn[1] - J * exDir;
           const gapX =
@@ -823,7 +816,7 @@
       pts.push(pn);
       return pts;
     }
-    if (wp && wp.length) {
+    if (wp?.length) {
       const p0 = wpAnchor(a, wp[0][0], wp[0][1]);
       const pn = wpAnchor(b, wp[wp.length - 1][0], wp[wp.length - 1][1]);
       const pts = [p0];
@@ -953,10 +946,9 @@
   // The artifact host offers a downloads capability; a plain <a download> may be inert for viewers, so the copy button (and the text box) is the fallback.
   async function downloadText(name, data, note, alt) {
     try {
-      const d =
-        window.claude && window.claude.use
-          ? await window.claude.use("downloads")
-          : null;
+      const d = window.claude?.use
+        ? await window.claude.use("downloads")
+        : null;
       if (d) {
         await d.save({ filename: name, data });
         note.textContent = "Saved " + name + ".";
@@ -1025,7 +1017,7 @@
       reducedMotion: mq("(prefers-reduced-motion: reduce)"),
       online: navigator.onLine,
       storage,
-      timeZone: (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone,
+      timeZone: Intl.DateTimeFormat().resolvedOptions()?.timeZone,
       utcOffsetMin: -new Date().getTimezoneOffset(),
       visibility: document.visibilityState,
       uptimeMs: Math.round(performance.now()),
@@ -1048,10 +1040,7 @@
     const m = U.getModal();
     const ae = document.activeElement;
     return {
-      rendered: !!(
-        document.getElementById("app") &&
-        document.getElementById("app").children.length
-      ),
+      rendered: !!document.getElementById("app")?.children.length,
       prompt: t(".prompt"),
       result: t(".result"),
       phaseButtons: [...document.querySelectorAll("[data-phase]")].map(
@@ -1079,7 +1068,7 @@
     return DBG.text({
       S: U.S,
       history: U.history,
-      report: ($("#dbgReport") || {}).value || "",
+      report: $("#dbgReport")?.value || "",
       env: environment(),
       dom: domSnapshot(),
       storage: storageOverview(),
