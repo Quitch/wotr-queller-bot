@@ -1,0 +1,9 @@
+{
+  "config": {
+    "default": true,
+    // Long lines are fine in prose and in the annotated command lists of the README.
+    "MD013": false,
+  },
+  "globs": ["**/*.md"],
+  "ignores": ["node_modules/**"],
+}
