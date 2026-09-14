@@ -125,7 +125,7 @@
   // Walks are recorded once they finish (or are abandoned), so the trail of a walk the player has moved on from is still in the log.
   function noteWalk(S, w, note) {
     const key = walkKey(S, w);
-    const last = D.walks[D.walks.length - 1];
+    const last = D.walks.at(-1);
     if (last && last.key === key) return;
     const c = compactWalk(S, w, note);
     c.key = key;
@@ -172,8 +172,7 @@
         e.stack = String(err.stack).split("\n").slice(0, 12).join("\n");
     } else e.message = String(err);
     if (D.inflight && !e.during) e.during = D.inflight;
-    else if (!e.during && D.actions.length)
-      e.lastAction = D.actions[D.actions.length - 1];
+    else if (!e.during && D.actions.length) e.lastAction = D.actions.at(-1);
     if (S) e.state = safeDigest(S);
     push(D.errors, e, LIMITS.errors);
     D.inflight = null;

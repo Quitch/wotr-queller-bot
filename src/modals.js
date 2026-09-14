@@ -63,7 +63,7 @@
       ].filter((x) => !x.disabled && x.offsetParent !== null);
       if (!f.length) return;
       const first = f[0],
-        last = f[f.length - 1];
+        last = f.at(-1);
       if (e.shiftKey && document.activeElement === first) {
         last.focus();
         e.preventDefault();
