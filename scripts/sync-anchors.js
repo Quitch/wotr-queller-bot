@@ -43,11 +43,18 @@ function attributes(tag) {
     out[name] = decodeXML(value);
   return out;
 }
+// Remove every tag, repeating until none is left so a tag split by another tag does not survive one pass.
+function stripTags(text) {
+  let previous;
+  do {
+    previous = text;
+    text = text.replace(/<[^<>]*>/g, "");
+  } while (text !== previous);
+  return text;
+}
 // A draw.io label as plain text (labels are HTML fragments).
 const plainText = (html) =>
-  decodeXML(html)
-    .replace(/<br\s*\/?>/gi, " ")
-    .replace(/<[^<>]+>/g, "")
+  stripTags(decodeXML(html).replace(/<br\s*\/?>/gi, " "))
     .replace(/\s+/g, " ")
     .trim();
 // The style string as {key: value}.
