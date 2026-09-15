@@ -5,7 +5,7 @@ import { escapeHTML as esc, formatText as fmt } from "../ui/dom.js";
 const glossaryContent = () => ({
   title: "Glossary of terms",
   body:
-    '<div class="body"><p class="notice">Words in italics on the flowcharts are defined here. Hover a term anywhere in the app for its definition; click it to open this list.</p><dl class="gl">' +
+    '<div class="body"><p class="notice">Words in italics on the flowcharts are defined here. Hover, focus or tap a term anywhere in the app for its definition; press Enter or tap again to open this list.</p><dl class="gl">' +
     Object.keys(GLOSSARY)
       .map(
         (term) =>

@@ -12,7 +12,7 @@ const jumpContent = () => ({
 });
 function jumpHTML() {
   let html =
-    '<div class="body"><p class="notice">Walk a page from any green start point — for example when a card tells Queller to make a choice (rule 12), to place Nazgûl, or to choose a discard. The walk uses no die unless you pick one.</p><div style="display:grid;gap:8px;grid-template-columns:1fr auto;align-items:center"><select id="jumpSel" aria-label="Start point">';
+    '<div class="body"><p class="notice">Walk a page from any green start point — for example when a card tells Queller to make a choice (rule 12), to place Nazgûl, or to choose a discard. The walk uses no die unless you pick one.</p><div class="jumpgrid"><select id="jumpSel" aria-label="Start point">';
   for (const pageKey in FLOW) {
     for (const id in FLOW[pageKey].nodes) {
       const node = FLOW[pageKey].nodes[id];

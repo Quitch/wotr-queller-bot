@@ -18,10 +18,17 @@ export function walkHTML(extra) {
   } else if (walk?.done) {
     html += resultHTML(walk);
   } else html += '<div class="idle">' + idleText() + "</div>";
+  // data-key names the walk, so ui/render.js keeps the player's open/closed choice while it lasts and returns to the
+  // default (open while walking, closed once done) when a walk starts or ends
   if (walk)
     html +=
-      "<details " +
-      (walk.done ? "" : "open") +
+      '<details data-key="' +
+      escapeHTML(walk.entry.page + "|" + walk.entry.start) +
+      "|" +
+      state.turn +
+      (walk.done ? "|done" : "") +
+      '"' +
+      (walk.done ? "" : " open") +
       "><summary>Walk trail — " +
       escapeHTML(FLOW[walk.entry.page].name) +
       " from “" +

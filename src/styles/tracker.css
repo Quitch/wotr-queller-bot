@@ -6,7 +6,7 @@
 }
 .tracker h3 {
   font-family: var(--font-body);
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);

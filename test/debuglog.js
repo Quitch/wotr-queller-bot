@@ -144,11 +144,17 @@ function checkAbandonedWalk(state) {
     "an abandoned walk is kept with a note",
   );
 }
+// The write to storage is deferred to the end of the task, so a burst of actions costs one write; flush() writes now.
 function checkPersistence() {
+  const beforeFlush = stored.text;
+  debug.flush();
   const saved = stored.text;
   ok(
-    saved && JSON.parse(saved).actions.length === debug.actions.length,
-    "history persisted to storage on every action",
+    saved &&
+      JSON.parse(saved).actions.length === debug.actions.length &&
+      (!beforeFlush ||
+        JSON.parse(beforeFlush).actions.length <= debug.actions.length),
+    "history persisted to storage after flush (deferred until then)",
   );
   debug.reset();
   ok(debug.actions.length === 0, "reset clears the history");

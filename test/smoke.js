@@ -1,26 +1,56 @@
 // Browser smoke test: boots the built page the way the artifact host does, plays through a turn with every option on,
-// exercises the tracker triggers, the table-card list, the die tap, undo and every modal. Fails on any page error.
+// exercises the tracker triggers, the table-card list, the die tap, undo and every modal, then a 360px touch screen
+// (the Tools menu, no sideways scroll). axe-core runs on every screen and modal. Fails on any page error or a serious
+// axe violation.
 import path from "node:path";
+import { AxeBuilder } from "@axe-core/playwright";
 import {
   SEL,
+  VIEWPORT,
   WAIT_FOR_UNCAUGHT_MS,
   MAX_PHASE5_WALKS,
   brokenAutosave,
   launchBuiltPage,
+  openFromToolsMenu,
   startGameWithEverythingOn,
   readState,
+  scrollsSideways,
   answerAll,
 } from "./browser.js";
 // The errors this script raises on purpose, and the console line the app prints when it falls back to the setup screen.
 const DELIBERATE_ERROR = /smoke: deliberate|could not render the saved game/;
 const BUILD_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\dZ$/; // what build.js defines QB_BUILT as
+const AXE_FAILING_IMPACTS = ["serious", "critical"]; // axe-core violations that fail the run
 const debugFailures = [];
+// axe-core over the page as it stands; a serious or critical violation fails the run.
+async function axeCheck(page, what) {
+  const { violations } = await new AxeBuilder({ page }).analyze();
+  const failing = violations.filter((violation) =>
+    AXE_FAILING_IMPACTS.includes(violation.impact),
+  );
+  console.log(
+    "axe " + what + ":",
+    violations.length ? violations.map((v) => v.id).join(", ") : "clean",
+  );
+  for (const violation of failing)
+    debugFailures.push(
+      "axe " +
+        what +
+        ": " +
+        violation.id +
+        " (" +
+        violation.impact +
+        ") at " +
+        violation.nodes.map((node) => node.target.join(" ")).join("; "),
+    );
+}
 const debugLog = async (page) =>
   JSON.parse(await page.inputValue(SEL.DEBUG_TEXT));
 const usable = (state, status) =>
   state.dice.pool.filter((die) => die.status === status).length;
 
 async function newGameWithEverythingOn(page) {
+  await axeCheck(page, "setup screen");
   await startGameWithEverythingOn(page);
   await page.click(SEL.phase("setup"));
   await answerAll(page);
@@ -45,6 +75,7 @@ async function newGameWithEverythingOn(page) {
   await answerAll(page);
   await page.click(SEL.phase("p4"));
   await answerAll(page);
+  await axeCheck(page, "game screen");
   state = await readState(page);
   console.log(
     "after p4: hunt",
@@ -149,6 +180,7 @@ async function exerciseTableCardsDiceUndoAndModals(page) {
     "help",
   ]) {
     await page.click(SEL.modal(modal));
+    await axeCheck(page, modal + " modal");
     if (modal === "flow") await page.click(SEL.FLOW_TOGGLE);
     if (modal === "calc") {
       await page.click(SEL.CALC_INCREASE_REGULARS);
@@ -157,6 +189,7 @@ async function exerciseTableCardsDiceUndoAndModals(page) {
     await page.click(SEL.MODAL_CLOSE);
   }
   await page.click(SEL.phase("jumpto"));
+  await axeCheck(page, "jump modal");
   await page.click(SEL.JUMP_GO);
   await answerAll(page);
 }
@@ -181,6 +214,7 @@ async function checkDebugLogExport(page) {
   await page.click(SEL.modal("settings"));
   await page.click(SEL.DEBUG_OPEN);
   console.log("debug modal:", await page.textContent(SEL.MODAL_TITLE));
+  await axeCheck(page, "debug modal");
   let log = await debugLog(page);
   console.log(
     "log format",
@@ -242,6 +276,7 @@ async function checkFailedActionAndUncaughtError(page) {
     }, 0),
   );
   await page.waitForTimeout(WAIT_FOR_UNCAUGHT_MS);
+  await axeCheck(page, "error bar");
   await page.click(SEL.ERROR_BAR_LOG);
   const log = await debugLog(page);
   console.log(
@@ -351,6 +386,60 @@ async function checkBuildEssentials(page) {
       "build essentials missing: " + JSON.stringify(essentials),
     );
 }
+// A 360px touch screen: the Tools menu opens and reaches Settings, and nothing scrolls sideways on either screen, with
+// the full or the minimal tracker, or with any modal open (the flowchart in both views). Returns the page errors.
+async function checkPhoneLayout() {
+  const { page, errors, close } = await launchBuiltPage({
+    viewport: VIEWPORT.PHONE_SMALL,
+    touch: true,
+    captureErrors: true,
+  });
+  const wide = [];
+  const check = async (what) => {
+    if (await scrollsSideways(page)) wide.push(what);
+  };
+  await check("setup screen");
+  await startGameWithEverythingOn(page);
+  await page.click(SEL.phase("setup"));
+  await answerAll(page);
+  await check("game screen");
+  await page.click(SEL.TOOLS_BUTTON);
+  const menuOpen = !!(await page.$(SEL.TOOLS_MENU));
+  await axeCheck(page, "tools menu");
+  await page.click(SEL.menuItem("settings"));
+  const title = await page.textContent(SEL.MODAL_TITLE);
+  console.log("phone: Tools menu open", menuOpen, "→", title);
+  if (!menuOpen || title !== "Settings")
+    debugFailures.push("the Tools menu did not open or reach Settings");
+  await check("settings modal");
+  await page.click(SEL.MODAL_CLOSE);
+  for (const modal of ["glossary", "flow", "rules", "calc", "save", "help"]) {
+    await openFromToolsMenu(page, modal);
+    await check(modal + " modal");
+    if (modal === "flow") {
+      await page.click(SEL.FLOW_TOGGLE);
+      await check("flow modal, other view");
+    }
+    await page.click(SEL.MODAL_CLOSE);
+  }
+  await page.click(SEL.phase("jumpto"));
+  await check("jump modal");
+  await page.click(SEL.MODAL_CLOSE);
+  await page.evaluate(() => {
+    window.QBUI.act(() => {
+      window.QBUI.state.settings.tracker = false;
+    });
+  });
+  await check("game screen, minimal tracker");
+  console.log(
+    "phone: sideways scroll:",
+    wide.length ? wide.join(", ") : "none",
+  );
+  if (wide.length)
+    debugFailures.push("scrolls sideways at 360px: " + wide.join(", "));
+  await close();
+  return errors;
+}
 async function main() {
   const { page, errors, close } = await launchBuiltPage({
     captureErrors: true,
@@ -371,6 +460,7 @@ async function main() {
     fullPage: true,
   });
   await close();
+  errors.push(...(await checkPhoneLayout()));
   const unexpected = errors
     .filter((error) => !DELIBERATE_ERROR.test(error))
     .concat(debugFailures.map((failure) => "debug: " + failure));

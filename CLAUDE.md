@@ -9,7 +9,7 @@ Queller Bot for War of the Ring: a single-file web app that walks the Queller bo
 ## Commands
 
 ```text
-npm run build           # bundle src/ into index.html (esbuild; defines QB_BUILT with the UTC build time)
+npm run build           # bundle src/ into index.html (esbuild, minified with names kept; defines QB_BUILT with the UTC build time)
 npm run verify          # all linters + all Node tests; run before committing
 npm run lint            # eslint + stylelint + markdownlint + prettier --check
 npm run format          # prettier --write .
@@ -26,10 +26,11 @@ node test/verify.js     # scripted scenarios (driveWalk() answers prompts by reg
 node test/debuglog.js   # debug log module
 node test/render.js     # the whole UI built without a DOM: 32 short random games (test/play.js) rendering the game screen, every prompt, every card half, every modal's content and every flowchart SVG; every arrow routes between its boxes
 node test/ui.js         # unit tests of the UI's pure logic: text markup, board paths, tracker values, storage and save loading, widgets, phase tables, trail/result/card renderers
+node test/contrast.js   # the colour tokens (both themes) and the flowchart strokes against their backgrounds: text 7:1, borders/strokes 3:1; --table prints every ratio
 node test/fuzz.js 7     # 400 random games with seed 7 across all 16 setting combinations; any seed works
 node test/fuzz.js 7 --digest  # also prints a sha256 of every final state: a refactor that preserves behaviour leaves it unchanged
-node test/smoke.js      # Playwright browser run of the built index.html (build first; needs `npx playwright install chromium`)
-node test/shot.js       # Playwright screenshots to test/shot-*.png (build first)
+node test/smoke.js      # Playwright browser run of the built index.html, desktop and a 360px touch screen, with axe-core on every screen and modal (build first; needs `npx playwright install chromium`)
+node test/shot.js       # Playwright screenshots to test/shot-*.png, desktop plus phone portrait and landscape (build first)
 ```
 
 The Node tests never touch the DOM. `test/load.js` is the one place they reach into `src/`: it re-exports the engine and walker (`QB`), the flowchart data (`QB_FLOW`, `QB_NODE`, `QB_NODE_KIND`, `QB_EDGE`), the cards (`QB_CARDS`), the reference text (`GLOSSARY`, `RULES`, …), the debug log (`QB_DEBUG`), the UI surface (`QB_UI`) and the UI's pure HTML builders and tables (`gameHTML`, `promptHTML`, `PROMPT_RENDERERS`, `MODAL_REGISTRATIONS`, `svgPage`, `route`, …). Every module under `ui/` and `modals/` imports without a DOM (all `document`/`window` use is inside function bodies), so `test/render.js` builds the whole page and every modal's content in Node; only the DOM wiring (`render()`, `act()`, `boot()`, `wire.js`, `tooltip.js`, the modal framework) is left to the Playwright scripts, which are not part of `npm test` (the `browser` CI job runs `smoke.js`); `test/browser.js` serves the built page and launches Chromium for both. `test/play.js` is the random game driver `fuzz.js` and `render.js` share: a seeded `Math.random`, a random answer to every prompt, and hooks around every answer (`onWalkStart`, `onPrompt`, `afterAnswer`, `afterPhase`) for a test's own checks.
@@ -55,7 +56,7 @@ The stylesheets are written one declaration per line on purpose and their class/
 
 ## Reference material (not tracked)
 
-`docs/ref/` holds the two rulebooks as PDF and extracted text, and the
+`docs/refs/` holds the two rulebooks as PDF and extracted text, and the
 draw.io flowchart that `flow/` was transcribed from. Grep the `.txt`
 files for rules questions rather than reading them whole. The flowchart
 XML is the source of truth when node text in `flow/pages/` looks wrong.
@@ -71,3 +72,4 @@ XML is the source of truth when node text in `flow/pages/` looks wrong.
 - `src/flow/anchors.json` is generated: after a draw.io change, run `npm run anchors` (add `--check` to see whether it is up to date) rather than editing it. The script matches draw.io boxes to flow.js nodes by geometry, so a new box needs its flow.js node first.
 - Prettier owns layout (eslint-config-prettier is last in the ESLint config). `endOfLine` is `auto`; `.gitattributes` normalises to LF.
 - The README's header line carries the version and date; keep it in step with `VERSION`.
+- `docs/wcag-2.2.md` is the WCAG 2.2 compliance record: an accessibility-relevant change (markup, colour tokens, focus handling, target sizes, live regions) updates the affected rows and its change log in the same commit. `test/contrast.js` guards the colour tokens; the smoke test runs axe-core.

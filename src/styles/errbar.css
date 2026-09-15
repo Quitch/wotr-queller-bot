@@ -3,9 +3,10 @@
   background: #7e2419;
   color: #fff7f2;
   font-size: 0.9rem;
-  line-height: 1.45;
+  line-height: 1.5;
   padding-block: 10px;
-  padding-inline: 16px;
+  padding-inline: max(16px, env(safe-area-inset-left, 0px))
+    max(16px, env(safe-area-inset-right, 0px));
 }
 #errbar .wrap {
   display: flex;

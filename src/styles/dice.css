@@ -27,7 +27,7 @@
   left: 8px;
   background: var(--surface);
   padding: 0 5px;
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--accent);
@@ -86,15 +86,29 @@ button.die:hover {
   border-radius: 50%;
   background: var(--line2);
 }
+/* a used die keeps full contrast: its icon goes to the muted ink and a bar strikes it through (a border, so it survives forced colours) */
 .die.st-used .ico {
-  opacity: 0.5;
+  color: var(--muted);
+}
+.die.f-Eye.st-used .ico {
+  color: var(--accent-ink);
+}
+.die.st-used::after {
+  content: "";
+  position: absolute;
+  left: 6px;
+  right: 6px;
+  top: 50%;
+  height: 0;
+  border-top: 2px solid var(--bad);
+  transform: rotate(-30deg);
 }
 .legend {
   display: flex;
   flex-wrap: wrap;
   gap: 4px 12px;
   margin-top: 10px;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: var(--muted);
 }
 .legend span {
@@ -106,19 +120,6 @@ button.die:hover {
   width: 16px;
   height: 16px;
   color: var(--muted);
-}
-.die.st-used {
-  opacity: 0.45;
-}
-.die.st-used::after {
-  content: "";
-  position: absolute;
-  left: 6px;
-  right: 6px;
-  top: 50%;
-  height: 2px;
-  background: var(--bad);
-  transform: rotate(-30deg);
 }
 .die.st-hunt {
   border-color: var(--accent);
@@ -133,13 +134,6 @@ button.die:hover {
 }
 .die.k-F {
   border-radius: 50%;
-}
-.die .cap {
-  position: absolute;
-  bottom: -14px;
-  font-size: 0.55rem;
-  color: var(--muted);
-  letter-spacing: 0.05em;
 }
 .dicerow {
   display: flex;

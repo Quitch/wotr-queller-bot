@@ -21,6 +21,26 @@
     font-size: 16px;
   }
 }
+/* taps act at once (no double-tap zoom delay), a long press on a button selects nothing, and a scrolling region
+   keeps its scroll from chaining into the page behind it */
+.btn,
+.stepper button,
+.die,
+.term,
+summary,
+select {
+  touch-action: manipulation;
+}
+button:not(.term) {
+  user-select: none;
+}
+.modal .body,
+.flowwrap,
+.tabs,
+.trail,
+.log {
+  overscroll-behavior: contain;
+}
 @keyframes pop {
   from {
     transform: translateY(4px);

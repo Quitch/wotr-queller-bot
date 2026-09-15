@@ -10,7 +10,7 @@ function handHTML(cards, handCount) {
   const deckLabel = (id) =>
     cardById[id].deck === DECK.CHARACTER ? "Character" : "Strategy";
   return (
-    '<div class="hand"><ul aria-label="Cards in hand: ' +
+    '<div class="hand"><ul role="list" aria-label="Cards in hand: ' +
     handCount.character +
     " Character, " +
     handCount.strategy +

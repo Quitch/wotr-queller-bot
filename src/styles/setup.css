@@ -14,7 +14,7 @@
   margin-top: 5px;
 }
 .setup .opt.dis {
-  opacity: 0.5;
+  opacity: 0.7;
   cursor: not-allowed;
 }
 .setup .opt.dis input {
@@ -37,7 +37,7 @@
   color: var(--ink);
 }
 .notice {
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   color: var(--muted);
   max-width: 75ch;
   line-height: 1.5;

@@ -6,11 +6,12 @@ import * as ui from "../../ui/index.js";
 import { FLOW_GEOMETRY, route } from "./route.js";
 
 // The flowchart as an SVG: the boxes of a page with the arrows between them, the walk's current box outlined and its visited boxes shaded.
-const SVG_COLOUR = {
+// The diagram is always drawn on white; test/contrast.js checks every stroke against it at 3:1.
+export const SVG_COLOUR = {
   ARROW: "#333",
   LABEL_TEXT: "#333",
-  HATCH: "#999",
-  GROUP_STROKE: "#999",
+  HATCH: "#8a8a8a",
+  GROUP_STROKE: "#8a8a8a",
   BACKGROUND: "#fff",
   LABEL_BACKGROUND: "#fff",
   VISITED_SHADE: "#3a332c",
@@ -20,16 +21,18 @@ const SVG_COLOUR = {
   TEXT: "#1d1a17",
   GROUP_TEXT: "#555",
 };
-const NODE_STYLE = {
-  [NODE_KIND.START]: { fill: "#d5e8d4", stroke: "#82b366" },
+// The draw.io fills with darker strokes (the light-theme --n*s tokens in styles/tokens.css match).
+export const NODE_STYLE = {
+  [NODE_KIND.START]: { fill: "#d5e8d4", stroke: "#568a3c" },
   [NODE_KIND.ACTION]: { fill: "#f8cecc", stroke: "#b85450" },
-  [NODE_KIND.DECISION]: { fill: "#fff2cc", stroke: "#d6b656" },
-  [NODE_KIND.FOLLOW_UP]: { fill: "#dae8fc", stroke: "#6c8ebf" },
+  [NODE_KIND.DECISION]: { fill: "#fff2cc", stroke: "#9c7f1f" },
+  [NODE_KIND.FOLLOW_UP]: { fill: "#dae8fc", stroke: "#5478ad" },
   [NODE_KIND.JUMP]: { fill: "#f5f5f5", stroke: "#666666" },
   [NODE_KIND.PRIORITY]: { fill: "#e1d5e7", stroke: "#9673a6" },
-  [NODE_KIND.STEP]: { fill: "#ffe6cc", stroke: "#d79b00" },
+  [NODE_KIND.STEP]: { fill: "#ffe6cc", stroke: "#a97600" },
   [NODE_KIND.NOTE]: { fill: null, stroke: null },
 };
+const SVG_CACHE_SIZE = 10; // rendered pages kept, by page and walk marks
 // What the walk marks on a page: its current box (when it is on this page) and the boxes its trail visited.
 export function walkMarks(pageKey) {
   const walk = ui.state?.walk;
@@ -298,9 +301,7 @@ function nodeSVG(id, node, { curNode, visited }) {
     "</g>"
   );
 }
-export function svgPage(pageKey) {
-  const page = FLOW[pageKey];
-  const marks = walkMarks(pageKey);
+function buildSVGPage(page, marks) {
   // edges first, so the boxes are drawn over them; the labels last, over everything
   const edges = page.edges.map((edge) => edgeSVG(page, edge));
   return (
@@ -312,6 +313,27 @@ export function svgPage(pageKey) {
     edges.map((edge) => edge.label).join("") +
     "</svg>"
   );
+}
+// A page's SVG depends only on the page and the walk's marks on it, so the last few are kept: a tab or a toggle
+// re-renders the modal without laying the page out again.
+const svgCache = new Map();
+export function svgPage(pageKey) {
+  const page = FLOW[pageKey];
+  const marks = walkMarks(pageKey);
+  const key =
+    pageKey +
+    "|" +
+    (marks.curNode || "") +
+    "|" +
+    [...marks.visited].sort().join(",");
+  let svg = svgCache.get(key);
+  if (svg === undefined) {
+    svg = buildSVGPage(page, marks);
+    svgCache.set(key, svg);
+    if (svgCache.size > SVG_CACHE_SIZE)
+      svgCache.delete(svgCache.keys().next().value);
+  }
+  return svg;
 }
 // The HTML inside a node box: page titles, the ring note and group labels have their own styling; everything else is the node text.
 function nodeLabel(kind, id, text, node) {

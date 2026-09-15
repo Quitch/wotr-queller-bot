@@ -64,6 +64,23 @@ function quarantineBrokenAutosave(raw, error, { action, note, state }) {
     state,
   );
 }
+// The live region screen readers hear the latest log line through: created once, so it exists before it is filled
+// (a region built into each render would be replaced in the same tick and go unannounced).
+function installLiveRegion() {
+  const live = document.createElement("div");
+  live.id = "live";
+  live.className = "sr";
+  live.setAttribute("aria-live", "polite");
+  live.setAttribute("aria-atomic", "true");
+  document.body.appendChild(live);
+}
+// The debug log is written to storage lazily; make sure it is written before the page goes away.
+function installDebugFlush() {
+  window.addEventListener("pagehide", debug.flush);
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") debug.flush();
+  });
+}
 // Escape closes the tooltip first, then the open modal.
 function installEscapeKey() {
   document.addEventListener("keydown", (event) => {
@@ -116,8 +133,10 @@ export function boot() {
   );
   document.documentElement.lang = document.documentElement.lang || "en";
   installTooltip();
+  installLiveRegion();
   installGlossaryListeners();
   installEscapeKey();
+  installDebugFlush();
   renderOrFallback(storageGet(STORAGE_KEY.AUTOSAVE));
 }
 // A bar above the app after an error: the game carries on (a failed action was rolled back) and a debug log is one tap away.

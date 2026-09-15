@@ -1,9 +1,10 @@
 // The modal dialog: one element at a time, its focus handling, and the registry of modals. A modal registers
 // {content(modal) -> {title, body, narrow}, wire?(modal, el), headerButtons?, beforeRender?(modal), focusOnOpen?(modal, el)}.
-import { escapeHTML as esc } from "../ui/dom.js";
+import { escapeHTML as esc, focusKey } from "../ui/dom.js";
 import * as ui from "../ui/index.js";
 
 const MODALS = {};
+const OPEN_CLASS = "modalOpen"; // on <html> while a modal is open: the page behind it does not scroll
 let opener = null; // the element to give focus back to when the modal closes
 export function registerModals(specs) {
   Object.assign(MODALS, specs);
@@ -57,10 +58,16 @@ function labelBodyRegions(el, title) {
     region.setAttribute("aria-label", title + " content");
   });
 }
-// Where focus goes when a modal opens: where the modal's hook puts it, else the title (a re-render keeps the current focus).
-function focusOnOpen(modal, el, reopen) {
+// Where focus goes when a modal opens: where the modal's hook puts it, else the title. When a modal re-renders itself
+// (a tab, a toggle, a saved slot), focus goes back to the control that had it, found again by its focus key.
+function focusAfterRender(modal, el, previousKey) {
+  const previous = previousKey && el.querySelector(previousKey);
+  if (previous) {
+    previous.focus();
+    return;
+  }
   if (specOf(modal).focusOnOpen?.(modal, el)) return;
-  if (!reopen) ui.find("#mtitle").focus();
+  if (!previousKey) ui.find("#mtitle").focus();
 }
 function modalContent(modal) {
   const spec = MODALS[modal.name];
@@ -70,13 +77,17 @@ export function renderModal() {
   const modal = ui.modal;
   if (!modal) return;
   const existing = ui.find("#modal");
-  const reopen = !!existing;
-  if (existing) existing.remove();
-  else opener = document.activeElement;
+  let previousKey = null;
+  if (existing) {
+    if (existing.contains(document.activeElement))
+      previousKey = focusKey(document.activeElement) || "#mtitle";
+    existing.remove();
+  } else opener = document.activeElement;
   specOf(modal).beforeRender?.(modal);
   const content = modalContent(modal);
   const el = buildModalElement(modal, content);
   document.body.appendChild(el);
+  document.documentElement.classList.add(OPEN_CLASS);
   const app = ui.find("#app");
   if (app) app.setAttribute("inert", "");
   ui.find("#mclose").onclick = closeModal;
@@ -86,12 +97,13 @@ export function renderModal() {
   trapTabFocus(el);
   labelBodyRegions(el, content.title);
   specOf(modal).wire?.(modal, el);
-  focusOnOpen(modal, el, reopen);
+  focusAfterRender(modal, el, previousKey);
 }
 export function closeModal() {
   ui.setModal(null);
   const element = ui.find("#modal");
   if (element) element.remove();
+  document.documentElement.classList.remove(OPEN_CLASS);
   const app = ui.find("#app");
   if (app) app.removeAttribute("inert");
   if (opener?.isConnected) {

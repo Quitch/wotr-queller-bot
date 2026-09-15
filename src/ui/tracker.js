@@ -138,11 +138,18 @@ function minimalTrackerHTML() {
   if (state.settings.cards) html += situationalBlockHTML();
   if (!html) return "";
   return (
-    '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">minimal</span></h2><div class="tracker">' +
+    '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">minimal</span></h2>' +
+    trackerNoticeHTML() +
+    '<div class="tracker">' +
     html +
     "</div></section>"
   );
 }
+// With cards tracked, a tracker change can open a question about a card on the table: say so before it happens (WCAG 3.2.2).
+const trackerNoticeHTML = () =>
+  state.settings.cards
+    ? '<p class="notice" style="margin:0 0 8px">A change here may ask whether a card on the table is discarded.</p>'
+    : "";
 const scoreSectionHTML = () =>
   "<h3>Score</h3>" +
   trackerNumber("shadowVP", "Shadow victory points") +
@@ -190,7 +197,9 @@ const factionsSectionHTML = () =>
 export function trackerHTML() {
   if (!state.settings.tracker) return minimalTrackerHTML();
   return (
-    '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">answers what it can</span></h2><div class="tracker">' +
+    '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">answers what it can</span></h2>' +
+    trackerNoticeHTML() +
+    '<div class="tracker">' +
     scoreSectionHTML() +
     fellowshipSectionHTML() +
     charactersSectionHTML() +

@@ -1,7 +1,7 @@
 /* log */
 .log {
   font-family: var(--font-mono);
-  font-size: 0.76rem;
+  font-size: 0.8rem;
   max-height: 220px;
   overflow: auto;
   margin: 0;
@@ -16,4 +16,5 @@
 }
 .log li.c {
   color: var(--ink);
+  font-weight: 600;
 }

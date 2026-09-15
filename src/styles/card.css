@@ -18,13 +18,13 @@
 .card .ct b {
   font-family: var(--font-display);
   font-size: 1rem;
+  min-width: 0;
 }
 .card .tag {
   font-size: 0.7rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--muted);
-  white-space: nowrap;
 }
 .card .cond {
   font-weight: 600;
@@ -34,7 +34,7 @@
   margin: 0;
 }
 .card p + p {
-  margin-top: 1.5em;
+  margin-top: 2.25em;
 }
 .card .combat {
   border-top: 1px dashed var(--line2);

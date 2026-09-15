@@ -13,12 +13,13 @@
     "lint:md": "markdownlint-cli2",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "test": "node test/check.js && node test/verify.js && node test/debuglog.js && node test/render.js && node test/ui.js && node test/fuzz.js 1",
+    "test": "node test/check.js && node test/verify.js && node test/debuglog.js && node test/render.js && node test/ui.js && node test/contrast.js && node test/fuzz.js 1",
     "coverage": "c8 --src src --all --exclude test --exclude scripts --exclude build.js -r text -r lcov npm test",
     "smoke": "node test/smoke.js",
     "verify": "npm run lint && npm test"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
     "c8": "^12.0.0",
     "esbuild": "^0.28.2",

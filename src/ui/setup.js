@@ -5,9 +5,10 @@ import * as engine from "../qb.js";
 import { commit } from "./actions.js";
 import { openModal } from "./ask.js";
 import { LEGAL, MODAL, STORAGE_KEY } from "./constants.js";
-import { find, formatText, parseJSONOr } from "./dom.js";
+import { find, formatText, onClickEach, parseJSONOr } from "./dom.js";
 import { setHistory, setState, state } from "./session.js";
 import { storageGet, storageSet } from "./storage.js";
+import { skipLinkHTML } from "./widgets.js";
 
 export function setupHTML() {
   const settings = {
@@ -18,8 +19,12 @@ export function setupHTML() {
     ...parseJSONOr(storageGet(STORAGE_KEY.OPTIONS) || "{}", {}),
   };
   return (
-    '<div class="top"><div class="brand"><h1>Queller Bot Runner</h1><span class="sub">Shadow player · War of the Ring 2nd Ed.</span></div></div>' +
-    '<div class="setup"><h2 style="font-size:1.3rem;margin-bottom:6px">New game</h2><p class="notice" style="max-width:none">Choose which parts of the bot the app should run for you. Each part works on its own — turn off anything you would rather keep on the table.</p>' +
+    skipLinkHTML("Skip to the New game options") +
+    '<header class="top"><div class="brand"><h1>Queller Bot Runner</h1><span class="sub">Shadow player · War of the Ring 2nd Ed.</span></div>' +
+    '<nav class="tools" aria-label="Tools"><button class="btn" data-modal="' +
+    MODAL.HELP +
+    '">Help</button></nav></header>' +
+    '<main id="main" tabindex="-1" class="setup"><h2 style="font-size:1.3rem;margin-bottom:6px">New game</h2><p class="notice">Choose which parts of the bot the app should run for you. Each part works on its own — turn off anything you would rather keep on the table.</p>' +
     optionHTML("dice", {
       title: "Roll and track Queller’s dice",
       description:
@@ -49,7 +54,7 @@ export function setupHTML() {
         "no tracker to maintain, but every question about the board is put to you.",
       checked: settings.tracker,
     }) +
-    '<h4 style="margin-top:18px">Expansions</h4>' +
+    '<h3 style="margin-top:18px">Expansions</h3>' +
     optionHTML("wome", {
       title: "Warriors of Middle-earth",
       description:
@@ -64,9 +69,10 @@ export function setupHTML() {
       ? '<p class="notice" role="status" style="margin-top:12px;color:var(--bad)">An earlier game could not be shown after the page reloaded, so the app started here. That game is kept in the debug log — please export it and send it with a description of what happened. Starting a new game clears it.</p>'
       : "") +
     '<div id="loadArea" hidden style="margin-top:14px"></div>' +
-    '<footer class="notice">' +
+    "</main>" +
+    '<footer class="notice setup" aria-label="Licences and trademarks">' +
     LEGAL +
-    "</footer></div>"
+    "</footer>"
   );
 }
 // One New-game option: a checkbox with its title, description and what happens when it is on or off.
@@ -109,4 +115,5 @@ export function wireSetup() {
     wireLoad(area);
   };
   find("#debugBtn").onclick = () => openModal(MODAL.DEBUG);
+  onClickEach("[data-modal]", (button) => openModal(button.dataset.modal));
 }

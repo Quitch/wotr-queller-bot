@@ -1,6 +1,6 @@
 # Queller Bot Runner — sources (version 59, 14 Sep 2026)
 
-`npm run build` bundles `src/` into `index.html` (the single-file artifact; the Artifact host adds the doctype/head/body). The sources are ES modules; esbuild follows the imports from `src/main.js` and the `@import`s from `src/styles/index.css` and writes one classic, unminified script and one stylesheet into the page.
+`npm run build` bundles `src/` into `index.html` (the single-file artifact; the Artifact host adds the doctype/head/body). The sources are ES modules; esbuild follows the imports from `src/main.js` and the `@import`s from `src/styles/index.css` and writes one classic script (minified, with function names kept for the debug log's stack traces) and one stylesheet into the page. `docs/wcag-2.2.md` records where the app stands against WCAG 2.2 and how each criterion is met.
 
 Tests (run all before building):
 
@@ -9,10 +9,11 @@ Tests (run all before building):
     node test/debuglog.js # debug log module: action history, walk trails, error capture, persistence, the exported log
     node test/render.js   # the whole UI built without a DOM: 32 short random games rendering the game screen, every prompt, every card half, every modal's content and every flowchart SVG; every arrow routes between its boxes
     node test/ui.js       # unit tests of the UI's pure logic: text markup, board paths, tracker values, storage and save loading, widgets, phase tables, trail/result/card renderers
+    node test/contrast.js # the colour tokens of both themes and the flowchart strokes against their backgrounds: text at 7:1, borders and strokes at 3:1
     node test/fuzz.js 1   # 400 random games (any seed) across all 16 setting combinations: no exceptions, no walk left without a prompt, card totals conserved
     node test/fuzz.js 1 --digest  # the same, printing a sha256 of every final state (unchanged by a refactor that preserves behaviour)
-    node test/smoke.js    # Playwright: plays a turn in the built page, tracker triggers, modals, debug log export, a rolled-back action, an uncaught error, reload from autosave, a broken autosave; fails on any unexpected page error
-    node test/shot.js     # screenshots of the full and minimal tracker layouts, the error bar, the debug log modal (light/dark/phone) and the broken-autosave screen (test/shot-*.png)
+    node test/smoke.js    # Playwright: plays a turn in the built page, tracker triggers, modals, debug log export, a rolled-back action, an uncaught error, reload from autosave, a broken autosave, then a 360px touch screen (the Tools menu, no sideways scroll); axe-core runs on every screen and modal; fails on any unexpected page error or a serious axe violation
+    node test/shot.js     # screenshots of the full and minimal tracker layouts, the error bar, the debug log modal (light/dark/phone), the broken-autosave screen, and the phone layouts in portrait and landscape (test/shot-*.png)
 
 `npm test` runs the Node tests (everything above except `smoke.js` and `shot.js`); `npm run coverage` runs them under c8 and prints a coverage table alongside `coverage/lcov.info`; `npm run smoke` runs the browser test against a built `index.html`. The `Verify` GitHub Actions workflow runs lint, coverage and the build in one job (and, when the `SONAR_TOKEN` secret is present, sends the LCOV report to SonarQube Cloud, whose coverage figure is therefore the Node-side coverage only) and the browser smoke test in another. `test/play.js` is the random game driver `fuzz.js` and `render.js` share; `test/load.js` is the one place the tests reach into `src/`.
 

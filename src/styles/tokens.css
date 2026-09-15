@@ -1,41 +1,46 @@
-/* colour, shadow and font tokens: light, then dark by system preference, then dark by choice (the toggle wins) */
+/* colour, shadow and font tokens: light, then dark by system preference, then dark by choice (the toggle wins).
+   test/contrast.js checks the text tokens at 7:1 and the border, focus and node-stroke tokens at 3:1 on their backgrounds. */
 :root {
+  color-scheme: light;
+
   --bg: #e9e5dc;
   --surface: #f6f3ec;
   --surface2: #ede8de;
   --ink: #221e1b;
   --muted: #4e4842;
   --line: #cfc7b9;
-  --line2: #8f8574;
+  --line2: #847a69;
   --accent: #7e2419;
   --accent-ink: #fff7f2;
   --gold: #8e6f22;
   --focus: #3b6ea8;
-  --ok: #2a5731;
-  --warn: #6e4508;
-  --bad: #8a2820;
+  --ok: #244f2b;
+  --warn: #62400a;
+  --bad: #7e2419;
   --nS: #d5e8d4;
-  --nSs: #82b366;
+  --nSs: #568a3c;
   --nA: #f8cecc;
   --nAs: #b85450;
   --nD: #fff2cc;
-  --nDs: #d6b656;
+  --nDs: #9c7f1f;
   --nd: #dae8fc;
-  --nds: #6c8ebf;
+  --nds: #5478ad;
   --nJ: #f2f0ea;
   --nJs: #666;
   --nP: #e1d5e7;
   --nPs: #9673a6;
   --nT: #ffe6cc;
-  --nTs: #d79b00;
+  --nTs: #a97600;
   --node-ink: #1d1a17;
   --shadow: 0 1px 2px rgb(30 20 10 / 8%), 0 6px 18px -8px rgb(30 20 10 / 25%);
   --font-display: "Cinzel", Georgia, "Times New Roman", serif;
   --font-body: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
-  --font-mono: "IBM Plex Mono", Menlo, Consolas, monospace;
+  --font-mono: ui-monospace, Menlo, Consolas, "Liberation Mono", monospace;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
     --bg: #17151a;
     --surface: #211e25;
     --surface2: #2a2630;
@@ -49,7 +54,7 @@
     --focus: #7fa9e0;
     --ok: #7cc484;
     --warn: #e0ac58;
-    --bad: #ee8577;
+    --bad: #f2a094;
     --nS: #2f4a2e;
     --nSs: #82b366;
     --nA: #5a2b28;
@@ -69,6 +74,8 @@
   }
 }
 :root[data-theme="dark"] {
+  color-scheme: dark;
+
   --bg: #17151a;
   --surface: #211e25;
   --surface2: #2a2630;
@@ -82,7 +89,7 @@
   --focus: #7fa9e0;
   --ok: #7cc484;
   --warn: #e0ac58;
-  --bad: #ee8577;
+  --bad: #f2a094;
   --nS: #2f4a2e;
   --nSs: #82b366;
   --nA: #5a2b28;
