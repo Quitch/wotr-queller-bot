@@ -201,15 +201,28 @@ export function trackerHTML() {
     "</div></section>"
   );
 }
-// dotted paths into state.board ("fs.progress")
+// dotted paths into state.board ("fs.progress"): each step must be a field the board already has, so a path can
+// neither reach a prototype nor add a field
+function boardSlot(path) {
+  const keys = path.split(".");
+  const key = keys.pop();
+  let object = state.board;
+  for (const step of keys) {
+    if (!Object.hasOwn(object, step))
+      throw new Error("Unknown board field: " + path);
+    object = object[step];
+  }
+  if (!Object.hasOwn(object, key))
+    throw new Error("Unknown board field: " + path);
+  return { object, key };
+}
 export function boardValue(path) {
-  return path.split(".").reduce((object, key) => object[key], state.board);
+  const { object, key } = boardSlot(path);
+  return object[key];
 }
 function setBoardValue(path, value) {
-  const keys = path.split(".");
-  let object = state.board;
-  for (let i = 0; i < keys.length - 1; i++) object = object[keys[i]];
-  object[keys[keys.length - 1]] = value;
+  const { object, key } = boardSlot(path);
+  object[key] = value;
 }
 export const STEP_LIMITS = {
   shadowVP: [0, 10],

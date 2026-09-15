@@ -27,5 +27,8 @@
     "prettier": "3.9.6",
     "stylelint": "17.15.0",
     "stylelint-config-standard": "40.0.0"
+  },
+  "overrides": {
+    "smol-toml": "^1.7.1"
   }
 }
