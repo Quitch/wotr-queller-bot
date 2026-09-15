@@ -30,7 +30,7 @@ Tests are plain Node scripts (no test runner); each exits 1 on failure, and any 
 ## Conventions to follow on every edit
 
 - The walker's handler tables under `src/walk/` are keyed by literal `"PAGE.node"` strings that `test/check.js` validates against `src/flow/`; keep the keys literal, and when a flowchart node or its text changes, update `walk/` to match and run `node test/check.js`. A new card flag or effect goes into the allow-lists `check.js` enforces.
-- Bump `VERSION` in `src/engine/constants.js` (and the README's header line) only when the artifact is published. Enum values and saved-game field names are persisted in autosaves and slots, so renaming one needs a `migrate` step once published saves exist.
+- Bump `VERSION` in `src/engine/constants.js` (with the README's header line and `sonar.projectVersion` in `sonar-project.properties`) only when the artifact is published. Enum values and saved-game field names are persisted in autosaves and slots, so renaming one needs a `migrate` step once published saves exist.
 - Read flowchart nodes and edges through the `NODE` / `EDGE` accessors, never by slot.
 - `src/flow/anchors.json` is generated: run `npm run anchors` after a draw.io change; never hand-edit it.
 - A module exports only what another module imports; `engine/index.js`, `walk/index.js`, `ui/index.js` and `modals/index.js` are the public surfaces. Mutable module state (`ui/session.js`, `debug.js`, the modal modules' own state) changes only inside its module or through a setter it exports. Never read a binding imported across an import cycle while a module evaluates.

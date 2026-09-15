@@ -56,7 +56,7 @@ The `Verify` workflow (`.github/workflows/verify.yml`) runs on every push to `ma
 
 ## Conventions
 
-- Bump `VERSION` in `src/engine/constants.js` for every published build; saved games carry it and `migrate` upgrades old saves. The README's header line carries the version and date; keep it in step with `VERSION`.
+- Bump `VERSION` in `src/engine/constants.js` for every published build; saved games carry it and `migrate` upgrades old saves. The README's header line carries the version and date; keep it in step with `VERSION`, as is `sonar.projectVersion` in `sonar-project.properties`, which sets the start of the New Code period on SonarQube Cloud.
 - Node text in `src/flow/` is what the walker matches on. When adding a flowchart node or changing node text, update `src/walk/` to match and run `node test/check.js`. The walker's handler tables are keyed by literal `"PAGE.node"` strings, which `check.js` validates by scanning every file under `src/walk/`, so keep the keys literal.
 - When adding a card flag or effect, add it to the allow-lists that `check.js` enforces.
 - Enum values (`PROMPT`, `TRAIL`, `DIE_STATE`, …) and the field names of the saved game are persisted in autosaves and slots: renaming one changes what saved games hold, so it needs a `migrate` step once there are published saves to upgrade (`VERSION` is bumped only when the artifact is published). CSS class names such as `k-D`, `st-used` and `t-skip` are derived from those values too.
