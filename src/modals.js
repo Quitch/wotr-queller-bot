@@ -6,10 +6,11 @@ import { RULES } from "./ref/rules.js";
 import { RULINGS } from "./ref/rulings.js";
 import { TURN } from "./ref/turn.js";
 import * as debug from "./debug.js";
-// ui.js imports this module back (renderModal, closeModal, loadHTML, wireLoad). MODAL_CONTENT and MODAL_WIRERS below read MODAL
-// while this module evaluates, so ui.js must have finished first: main.js imports this module before ui.js (see the note there).
-import * as ui from "./ui.js";
-import { escapeHTML as esc, formatText as fmt, MODAL } from "./ui.js";
+// ui/ask.js imports this module back (renderModal, closeModal, loadHTML, wireLoad); both sides only call each other's
+// functions at run time. MODAL and the text helpers come straight from their modules so this module can evaluate first.
+import * as ui from "./ui/index.js";
+import { MODAL } from "./ui/constants.js";
+import { escapeHTML as esc, formatText as fmt } from "./ui/dom.js";
 
 const { PHASE } = engine;
 const DEFAULT_FLOW_PAGE = "C14";
