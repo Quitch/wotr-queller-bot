@@ -16,6 +16,7 @@
       YES_NO_PROMPTS,
       WALK_RESULT,
       phaseFromResult,
+      DIE_STATE,
     } = window.QB,
     cardById = engine.cardById,
     GLOSSARY = window.QB_GLOSSARY,
@@ -134,13 +135,17 @@
   // If the action throws, the game is put back as it was before it, the error is recorded and the error bar offers a debug log.
   function act(fn, info) {
     snapshot();
-    debug.begin(info || { a: "act" }, state);
+    debug.begin(info || { action: "act" }, state);
     try {
       fn();
     } catch (error) {
       const brokenState = state;
       state = JSON.parse(history.pop());
-      debug.error(error, { a: "actionFailed", rolledBack: true }, brokenState);
+      debug.error(
+        error,
+        { action: "actionFailed", rolledBack: true },
+        brokenState,
+      );
       commit();
       showErrBar();
       return;
@@ -150,7 +155,7 @@
   }
   function undo() {
     if (!history.length) return;
-    debug.begin({ a: "undo" }, state);
+    debug.begin({ action: "undo" }, state);
     state = JSON.parse(history.pop());
     debug.finishAction(state);
     commit();
@@ -174,7 +179,7 @@
       debug.error(
         event.error || event.message,
         {
-          a: "uncaught",
+          action: "uncaught",
           src: event.filename ? String(event.filename).split("/").pop() : null,
           line: event.lineno,
           col: event.colno,
@@ -186,7 +191,7 @@
     window.addEventListener("unhandledrejection", (event) => {
       debug.error(
         event.reason || "unhandled promise rejection",
-        { a: "unhandledrejection" },
+        { action: "unhandledrejection" },
         state,
       );
       showErrBar();
@@ -207,7 +212,7 @@
     storageSet(STORAGE_KEY.BROKEN_AUTOSAVE, raw);
     debug.error(
       error,
-      { a: action, note: note + "; kept under " + STORAGE_KEY.BROKEN_AUTOSAVE },
+      { action, note: note + "; kept under " + STORAGE_KEY.BROKEN_AUTOSAVE },
       state,
     );
   }
@@ -289,7 +294,7 @@
       });
     debug.action(
       {
-        a: "pageLoad",
+        action: "pageLoad",
         autosave: !!autosave.raw,
         restored: !!state,
         broken: !!storageGet(STORAGE_KEY.BROKEN_AUTOSAVE),
@@ -406,7 +411,7 @@
   function announceLastLogLine() {
     const live = find("#live");
     const last = state.log[state.log.length - 1];
-    if (live && last && state.walk) live.textContent = last.t;
+    if (live && last && state.walk) live.textContent = last.text;
   }
   function render() {
     const root = find("#app");
@@ -554,7 +559,7 @@
       );
       storageSet(STORAGE_KEY.OPTIONS, JSON.stringify(settings));
       storageSet(STORAGE_KEY.BROKEN_AUTOSAVE, "");
-      debug.begin({ a: "newGame", settings }, null);
+      debug.begin({ action: "newGame", settings }, null);
       state = engine.newState(settings);
       history = [];
       engine.log(state, "New game. Roll for Queller’s starting strategy.");
@@ -754,12 +759,12 @@
   }
   // With dice tracked, Phase 6 replaces Phase 5 once Queller has no usable die left (available or set aside for a minion).
   function dicePoolSpent() {
-    const DIE_STATE = engine.DIE_STATE;
     return (
       state.settings.dice &&
       state.dice.pool.length > 0 &&
       !state.dice.pool.some(
-        (die) => die.st === DIE_STATE.AVAIL || die.st === DIE_STATE.RESERVED,
+        (die) =>
+          die.status === DIE_STATE.AVAIL || die.status === DIE_STATE.RESERVED,
       )
     );
   }
@@ -1142,9 +1147,9 @@
   }
   // Which die the walk's current action uses, for the action prompt's help line.
   function dieHelpText(walk) {
-    if (state.settings.dice && walk.dieObj != null)
+    if (state.settings.dice && walk.dieIndex != null)
       return (
-        "Uses the " + escapeHTML(state.dice.pool[walk.dieObj].face) + " die."
+        "Uses the " + escapeHTML(state.dice.pool[walk.dieIndex].face) + " die."
       );
     return walk.die
       ? "Uses a " + escapeHTML(engine.DIE_REQUIREMENT_NAME[walk.die]) + " die."
@@ -1321,7 +1326,7 @@
             '">T' +
             entry.turn +
             " · " +
-            escapeHTML(entry.t) +
+            escapeHTML(entry.text) +
             "</li>",
         )
         .join("") +
@@ -1377,33 +1382,33 @@
       : "";
   }
   const DIE_STATUS_TEXT = {
-    pool: "not yet rolled",
-    hunt: "in the Hunt box",
-    avail: "available — tap to mark it used",
-    used: "used",
-    reserved: "set aside for a minion",
+    [DIE_STATE.POOL]: "not yet rolled",
+    [DIE_STATE.HUNT]: "in the Hunt box",
+    [DIE_STATE.AVAIL]: "available — tap to mark it used",
+    [DIE_STATE.USED]: "used",
+    [DIE_STATE.RESERVED]: "set aside for a minion",
   };
   // One die in the pool; an available die is a button that marks it used (index = its position in the pool).
   function dieHTML(die, index) {
-    const dieStatus = DIE_STATUS_TEXT[die.st];
+    const dieStatus = DIE_STATUS_TEXT[die.status];
     const cls =
       "die k-" +
-      die.k +
+      die.kind +
       " st-" +
-      die.st +
+      die.status +
       (die.face ? " f-" + die.face.replace("/", "-") : "");
     const inner =
       (die.face
         ? faceIcon(die.face)
         : '<span class="blank" aria-hidden="true"></span>') +
       '<span class="sr">' +
-      (die.k === DIE_KIND.FACTION ? "Faction die" : "Action die") +
+      (die.kind === DIE_KIND.FACTION ? "Faction die" : "Action die") +
       (die.face ? " showing " + escapeHTML(die.face) : "") +
       ", " +
       dieStatus +
       "</span>";
     const title = escapeHTML(die.face || "not rolled") + " · " + dieStatus;
-    return die.st === "avail"
+    return die.status === DIE_STATE.AVAIL
       ? '<li><button type="button" class="' +
           cls +
           '" data-spend="' +
@@ -1420,8 +1425,10 @@
     if (!dice.pool.length)
       return '<div class="notice">Dice are recovered in Phase 1.</div>';
     const indexedDice = dice.pool.map((die, index) => [die, index]);
-    const huntDice = indexedDice.filter(([die]) => die.st === "hunt"),
-      otherDice = indexedDice.filter(([die]) => die.st !== "hunt");
+    const huntDice = indexedDice.filter(
+        ([die]) => die.status === DIE_STATE.HUNT,
+      ),
+      otherDice = indexedDice.filter(([die]) => die.status !== DIE_STATE.HUNT);
     return (
       '<div class="dicewrap"><div class="huntbox"><span class="hlbl">Hunt box</span><ul class="dice" aria-label="Dice in the Hunt box">' +
       (huntDice.length
@@ -1682,8 +1689,8 @@
     );
   };
   // The situational card checks answered this turn, with a button to forget them (and the playability cache).
-  function situBlockHTML() {
-    const answeredKeys = Object.keys(state.situ);
+  function situationalBlockHTML() {
+    const answeredKeys = Object.keys(state.situational);
     return (
       '<h3>Card checks answered this turn</h3><div class="situ">' +
       (answeredKeys.length
@@ -1693,7 +1700,7 @@
                 '<div class="row"><span>' +
                 escapeHTML(engine.SITUATIONAL_QUESTIONS[key]) +
                 "</span><b>" +
-                (state.situ[key] ? "Yes" : "No") +
+                (state.situational[key] ? "Yes" : "No") +
                 "</b></div>",
             )
             .join("")
@@ -1739,7 +1746,7 @@
     if ((state.settings.cards || state.settings.dice) && state.settings.wome)
       html += minimalFactionsSectionHTML();
     if (state.settings.dice) html += huntSectionHTML();
-    if (state.settings.cards) html += situBlockHTML();
+    if (state.settings.cards) html += situationalBlockHTML();
     if (!html) return "";
     return (
       '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">minimal</span></h2><div class="tracker">' +
@@ -1804,7 +1811,7 @@
       shadowNationsSectionHTML() +
       fpNationsSectionHTML() +
       (state.settings.wome ? factionsSectionHTML() : "") +
-      situBlockHTML() +
+      situationalBlockHTML() +
       "</div></section>"
     );
   }
@@ -1839,7 +1846,7 @@
           state.playable = {};
         asks = engine.tableTriggers(state, { key: path, from, to: value });
       },
-      { a: "tracker", key: path, from, to: value },
+      { action: "tracker", key: path, from, to: value },
     );
     return asks;
   }
@@ -1864,7 +1871,7 @@
                   pending.card,
                   "its discard condition was met",
                 ),
-              { a: "tableTrigger", card: pending.card },
+              { action: "tableTrigger", card: pending.card },
             );
           askNextTriggeredCard();
         },
@@ -1906,7 +1913,7 @@
           () => {
             engine.answer(state, form);
           },
-          { a: "answer", prompt: PROMPT.BATTLE_FORM, value: form },
+          { action: "answer", prompt: PROMPT.BATTLE_FORM, value: form },
         );
       };
     onClickEach("[data-bs]", (button) => {
@@ -1933,7 +1940,7 @@
           afterWalk();
         },
         {
-          a: "answer",
+          action: "answer",
           prompt: PROMPT.COUNT,
           page: state.walk?.page,
           node: state.walk?.node,
@@ -1976,10 +1983,10 @@
       resetBtn.onclick = () =>
         act(
           () => {
-            state.situ = {};
+            state.situational = {};
             state.playable = {};
           },
-          { a: "forgetCardChecks" },
+          { action: "forgetCardChecks" },
         );
   }
   function wire() {
@@ -2007,7 +2014,7 @@
         afterWalk();
       },
       {
-        a: "answer",
+        action: "answer",
         prompt: prompt.type,
         page: walk.page,
         node: walk.node,
@@ -2025,13 +2032,13 @@
   // The player marks an available die as used by hand (the [data-spend] buttons in the dice row).
   function spendDieClick(index) {
     const die = state.dice.pool[index];
-    if (die?.st !== "avail") return;
+    if (die?.status !== DIE_STATE.AVAIL) return;
     ask({
       title: "Mark this die as used?",
       text:
         "The " +
         die.face +
-        (die.k === DIE_KIND.FACTION ? " Faction" : "") +
+        (die.kind === DIE_KIND.FACTION ? " Faction" : "") +
         " die will be marked as used for the rest of this turn. Undo reverses it.",
       buttons: [
         { v: "ok", label: "Mark as used", primary: true },
@@ -2042,10 +2049,10 @@
         act(
           () => {
             const dieNow = state.dice.pool[index];
-            if (dieNow?.st === "avail")
+            if (dieNow?.status === DIE_STATE.AVAIL)
               engine.spendDie(state, dieNow, "marked by you");
           },
-          { a: "spendDie", index, face: die.face },
+          { action: "spendDie", index, face: die.face },
         );
       },
     });
@@ -2110,7 +2117,7 @@
         engine.startPhase(state, id);
         afterWalk();
       },
-      { a: "phase", id },
+      { action: "phase", id },
     );
   }
   function onCard(action, id) {
@@ -2130,14 +2137,17 @@
               engine.discardCard(state, id, "discarded from the table");
               if (shownCard === id) shownCard = null;
             },
-            { a: "discardTable", card: id },
+            { action: "discardTable", card: id },
           );
         },
       });
       return;
     }
     shownCard = action === "show" ? id : null;
-    debug.action({ a: "tableCard", show: action === "show", card: id }, state);
+    debug.action(
+      { action: "tableCard", show: action === "show", card: id },
+      state,
+    );
     render();
   }
 
@@ -2189,7 +2199,7 @@
   };
   function openModal(name, arg) {
     modal = { name, arg };
-    if (name !== MODAL.ASK) debug.action({ a: "modal", name }, state);
+    if (name !== MODAL.ASK) debug.action({ action: "modal", name }, state);
     window.QBUI.renderModal();
   }
   function ask(spec) {
@@ -2205,7 +2215,7 @@
       ],
       onPick: (choice) => {
         if (choice !== "ok") return;
-        debug.begin({ a: "newGameScreen" }, state);
+        debug.begin({ action: "newGameScreen" }, state);
         history = [];
         state = null;
         modal = null;

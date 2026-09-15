@@ -163,7 +163,7 @@ function checkCardConservation(state, tag, expected, prompt) {
       " " +
       state.log
         .slice(-2)
-        .map((entry) => entry.t)
+        .map((entry) => entry.text)
         .join(" / "),
   );
   return expected;
@@ -232,7 +232,8 @@ function maybeBattle(state, tag) {
 }
 const usableDice = (state) =>
   state.dice.pool.filter(
-    (die) => die.st === DIE_STATE.AVAIL || die.st === DIE_STATE.RESERVED,
+    (die) =>
+      die.status === DIE_STATE.AVAIL || die.status === DIE_STATE.RESERVED,
   ).length;
 // Phase 5: walk until the dice are gone (dice on) or a fixed number of walks (dice off).
 function playPhase5(state, tag) {
@@ -250,7 +251,7 @@ function playPhase5(state, tag) {
           left +
           " pool=" +
           JSON.stringify(
-            state.dice.pool.map((die) => die.face + "/" + die.st),
+            state.dice.pool.map((die) => die.face + "/" + die.status),
           ) +
           " last=" +
           state.walk.result,

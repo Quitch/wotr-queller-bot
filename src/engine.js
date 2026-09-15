@@ -21,7 +21,7 @@
     }
     return items;
   };
-  const VERSION = 59; // app version (shown in the debug log and stamped on saves)
+  const VERSION = 60; // app version (shown in the debug log and stamped on saves)
 
   // The values are what saved games and cards.js hold, so they must not change without a migrate() step.
   const STRATEGY = { CORRUPTION: "corruption", MILITARY: "military" };
@@ -279,7 +279,50 @@
     if (save.board && save.board.rings === undefined) save.board.rings = 0;
     delete save.shownCard;
     delete save.lastAction;
+    migrateDice(save.dice);
+    migrateWalk(save.walk);
+    migrateSituational(save);
+    migrateLog(save.log);
     return save;
+  }
+  // Saves up to version 59 used shorter field names; the values are unchanged.
+  function renameField(object, from, to) {
+    if (
+      object &&
+      typeof object === "object" &&
+      from in object &&
+      !(to in object)
+    ) {
+      object[to] = object[from];
+      delete object[from];
+    }
+  }
+  // dice {k, st} → {kind, status}
+  function migrateDice(dice) {
+    for (const die of dice?.pool || []) {
+      renameField(die, "k", "kind");
+      renameField(die, "st", "status");
+    }
+  }
+  // walk.dieObj → dieIndex and walk.reserveDieObj → reservedDieIndex (also in every stack frame); an open prompt's options {v, l} → {value, label}
+  function migrateWalk(walk) {
+    if (!walk) return;
+    renameField(walk, "dieObj", "dieIndex");
+    renameField(walk, "reserveDieObj", "reservedDieIndex");
+    for (const frame of walk.stack || [])
+      renameField(frame, "dieObj", "dieIndex");
+    for (const option of walk.prompt?.options || []) {
+      renameField(option, "v", "value");
+      renameField(option, "l", "label");
+    }
+  }
+  // situ → situational
+  function migrateSituational(save) {
+    renameField(save, "situ", "situational");
+  }
+  // log entries {t} → {text}
+  function migrateLog(log) {
+    for (const entry of log || []) renameField(entry, "t", "text");
   }
 
   // Each returns true/false, or asks a situational question (answered once per turn) via situationalAnswer().
@@ -297,9 +340,8 @@
     siegeEngine: "Is a Shadow Siege Engine in this battle?",
   };
   function situationalAnswer(state, key) {
-    const answer = state.situ[key];
-    if (answer === undefined)
-      return { situ: key, q: SITUATIONAL_QUESTIONS[key] };
+    const answer = state.situational[key];
+    if (answer === undefined) return { key, q: SITUATIONAL_QUESTIONS[key] };
     return answer;
   }
   const PRECONDITIONS = {
@@ -336,8 +378,8 @@
       !state.settings.dice ||
       availableDice(state).some(
         (die) =>
-          die.k === DIE_KIND.ACTION &&
-          !(state.walk && state.dice.pool.indexOf(die) === state.walk.dieObj),
+          die.kind === DIE_KIND.ACTION &&
+          !(state.walk && state.dice.pool.indexOf(die) === state.walk.dieIndex),
       ),
   };
   function precondition(state, cardId) {
@@ -446,7 +488,7 @@
       cards: newCards(),
       board: newBoard(),
       ringUsedThisTurn: false,
-      situ: {},
+      situational: {},
       playable: {},
       battle: null,
       battleOpen: false,
@@ -512,21 +554,21 @@
     state.dice.hunt = 0;
     for (let i = 0; i < count; i++)
       state.dice.pool.push({
-        k: DIE_KIND.ACTION,
+        kind: DIE_KIND.ACTION,
         face: null,
-        st: DIE_STATE.POOL,
+        status: DIE_STATE.POOL,
       });
     // WoME p.8: the Faction die joins the pool at the start of the turn after the first Shadow Faction enters play, and leaves it the turn after the last one is gone.
     state.dice.factionDie = shadowFactionInPlay(state);
     if (state.dice.factionDie)
       state.dice.pool.push({
-        k: DIE_KIND.FACTION,
+        kind: DIE_KIND.FACTION,
         face: null,
-        st: DIE_STATE.POOL,
+        status: DIE_STATE.POOL,
       });
     state.minionReserved = false;
     state.ringUsedThisTurn = false;
-    state.situ = {};
+    state.situational = {};
     state.playable = {};
     log(
       state,
@@ -539,12 +581,12 @@
   }
   function assignHunt(state, requested) {
     const pool = state.dice.pool.filter(
-      (die) => die.k === DIE_KIND.ACTION && die.st === DIE_STATE.POOL,
+      (die) => die.kind === DIE_KIND.ACTION && die.status === DIE_STATE.POOL,
     );
     const cap = huntCap(state),
       placed = Math.min(requested, cap, pool.length);
     for (let i = 0; i < placed; i++) {
-      pool[i].st = DIE_STATE.HUNT;
+      pool[i].status = DIE_STATE.HUNT;
       pool[i].face = FACE.EYE;
     }
     state.dice.hunt += placed;
@@ -570,14 +612,14 @@
     let eyes = 0;
     const out = [];
     for (const die of state.dice.pool) {
-      if (die.st !== DIE_STATE.POOL) continue;
+      if (die.status !== DIE_STATE.POOL) continue;
       die.face =
-        die.k === DIE_KIND.ACTION ? pick(SHADOW_FACES) : pick(FACTION_FACES);
+        die.kind === DIE_KIND.ACTION ? pick(SHADOW_FACES) : pick(FACTION_FACES);
       if (die.face === FACE.EYE) {
-        die.st = DIE_STATE.HUNT;
+        die.status = DIE_STATE.HUNT;
         state.dice.hunt++;
         eyes++;
-      } else die.st = DIE_STATE.AVAIL;
+      } else die.status = DIE_STATE.AVAIL;
       out.push(die.face);
     }
     let hunt = "";
@@ -631,7 +673,7 @@
     );
   }
   function availableDice(state) {
-    return state.dice.pool.filter((die) => die.st === DIE_STATE.AVAIL);
+    return state.dice.pool.filter((die) => die.status === DIE_STATE.AVAIL);
   }
   function findDie(state, req) {
     const faces = DIE_REQUIREMENT_FACES[req] || [req];
@@ -644,7 +686,7 @@
   }
   function spendDie(state, die, why) {
     if (!die) return;
-    die.st = DIE_STATE.USED;
+    die.status = DIE_STATE.USED;
     log(
       state,
       "Used the " + die.face + " die" + (why ? " — " + why : "") + ".",
@@ -665,7 +707,7 @@
   // Elven Ring (rule 36): change one non-preferred available die to the required result.
   function ringChange(state, req) {
     const available = availableDice(state).filter(
-      (die) => die.k === DIE_KIND.ACTION,
+      (die) => die.kind === DIE_KIND.ACTION,
     );
     if (!available.length) return null;
     const die = nonPreferredFirst(state, available, 1)[0];
@@ -858,13 +900,13 @@
     if (!state.settings.dice) return [];
     const chosen = nonPreferredFirst(
       state,
-      availableDice(state).filter((die) => die.k === DIE_KIND.ACTION),
+      availableDice(state).filter((die) => die.kind === DIE_KIND.ACTION),
       LIDLESS_EYE_DICE,
     );
     const from = chosen.map((die) => die.face);
     for (const die of chosen) {
       die.face = FACE.EYE;
-      die.st = DIE_STATE.HUNT;
+      die.status = DIE_STATE.HUNT;
       state.dice.hunt++;
     }
     let logText = "no unused die to change.",
@@ -1241,7 +1283,7 @@
   }
 
   function log(state, text, extra) {
-    state.log.push({ t: text, turn: state.turn, ...extra });
+    state.log.push({ text, turn: state.turn, ...extra });
     if (state.log.length > LOG_CAP) state.log.shift();
   }
 

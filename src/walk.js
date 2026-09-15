@@ -245,16 +245,16 @@
     mode: options.mode || null,
     battleRound: options.battleRound || null,
   });
-  // The die the walk holds (dieObj: its index in the pool), the player's die answers when dice are not rolled
-  // (dieAns, pendingDie), and the Muster die brought back from "set aside for a minion" (fromReserve, reserveDieObj).
+  // The die the walk holds (dieIndex: its index in the pool), the player's die answers when dice are not rolled
+  // (dieAns, pendingDie), and the Muster die brought back from "set aside for a minion" (fromReserve, reservedDieIndex).
   const walkDieState = (options) => ({
     die: options.die || null,
-    dieObj: options.dieObj != null ? options.dieObj : null,
+    dieIndex: options.dieIndex != null ? options.dieIndex : null,
     dieAns: {},
     dieUsed: false,
     pendingDie: null,
     fromReserve: false,
-    reserveDieObj: null,
+    reservedDieIndex: null,
   });
   // Elven Ring state (rules 36-38): a ring condition was met; the ring question was put to the player.
   const walkRingState = () => ({ ringArmed: false, ringAsked: false });
@@ -1164,7 +1164,7 @@
       if (met && typeof met === "object") {
         setPrompt(state, {
           type: PROMPT.SITUATIONAL,
-          key: met.situ,
+          key: met.key,
           text: met.q,
         });
         return PENDING;
@@ -1229,8 +1229,8 @@
       return;
     }
     state.minionReserved = true;
-    if (walk.dieObj != null && state.settings.dice) {
-      state.dice.pool[walk.dieObj].st = engine.DIE_STATE.RESERVED;
+    if (walk.dieIndex != null && state.settings.dice) {
+      state.dice.pool[walk.dieIndex].status = engine.DIE_STATE.RESERVED;
     }
     delete walk.dieAns[DIE_REQUIREMENT.MUSTER];
     delete walk.dieAns[DIE_REQUIREMENT.CHAR_OR_MUSTER]; // the die the player said Queller had is no longer available
@@ -1239,7 +1239,7 @@
       kind: TRAIL.NOTE,
       text: "Muster die set aside for a minion",
     });
-    walk.dieObj = null;
+    walk.dieIndex = null;
     walk.die = null;
     doReturn(state);
   }
@@ -1249,7 +1249,9 @@
       walk.mode !== "ringAny" &&
       engine.ringAvailable(state) &&
       (!state.settings.dice ||
-        engine.availableDice(state).some((die) => die.k === DIE_KIND.ACTION));
+        engine
+          .availableDice(state)
+          .some((die) => die.kind === DIE_KIND.ACTION));
     if (canUseRing) {
       trail(state, { kind: TRAIL.JUMP, text: label });
       const entry = walk.entry;
@@ -1333,7 +1335,7 @@
       });
       return false;
     }
-    walk.dieObj = state.dice.pool.indexOf(die);
+    walk.dieIndex = state.dice.pool.indexOf(die);
     return true;
   }
   // Without dice: ask the player whether Queller has the die (once per type per walk), then offer an Elven Ring before giving up.
@@ -1394,7 +1396,7 @@
       page: walk.page,
       node: walk.node,
       die: walk.die,
-      dieObj: walk.dieObj,
+      dieIndex: walk.dieIndex,
       dieUsed: walk.dieUsed,
     });
     if (!engine.dieSatisfies(walk.die, spec.die)) walk.die = spec.die;
@@ -1421,12 +1423,12 @@
       if (
         walk.fromReserve &&
         state.settings.dice &&
-        walk.reserveDieObj != null &&
-        state.dice.pool[walk.reserveDieObj].st === engine.DIE_STATE.AVAIL
+        walk.reservedDieIndex != null &&
+        state.dice.pool[walk.reservedDieIndex].status === engine.DIE_STATE.AVAIL
       ) {
         engine.spendDie(
           state,
-          state.dice.pool[walk.reserveDieObj],
+          state.dice.pool[walk.reservedDieIndex],
           "set aside for a minion, no action possible",
         );
         endWalk(
@@ -1448,7 +1450,7 @@
     const frame = walk.stack.pop();
     goto(state, frame.page, frame.node);
     walk.die = frame.die;
-    walk.dieObj = frame.dieObj;
+    walk.dieIndex = frame.dieIndex;
     walk.dieUsed = frame.dieUsed;
     walk.cands = null;
     walk.chosen = null;
@@ -1516,7 +1518,7 @@
   // the box was skipped for want of the die, or PENDING while a die question is open.
   function claimActionDie(state, walk, node, label) {
     const die = NODE.extra(node).die;
-    if (!die || (walk.die === die && walk.dieObj != null)) return true;
+    if (!die || (walk.die === die && walk.dieIndex != null)) return true;
     const dieResult = ensureDie(state, die, label);
     if (dieResult === PENDING) return PENDING;
     if (!dieResult) {
@@ -1566,7 +1568,7 @@
     if (!available.length)
       return skipAction(state, label, "no die left to discard");
     const die = engine.pick(available);
-    die.st = engine.DIE_STATE.USED;
+    die.status = engine.DIE_STATE.USED;
     engine.log(
       state,
       "Discarded an unplayable " + die.face + " die at random (rule 32).",
@@ -1580,7 +1582,7 @@
   // Re-enter Muster 2 holding the Muster die that was set aside for a minion (Rulings: it must be used now).
   function enterMuster2WithReservedDie(state, walk, reservedIndex) {
     walk.fromReserve = true;
-    walk.reserveDieObj = reservedIndex;
+    walk.reservedDieIndex = reservedIndex;
     trail(state, {
       kind: TRAIL.JUMP,
       text: "Muster 2 (die set aside for the minion)",
@@ -1589,18 +1591,18 @@
       page: walk.page,
       node: walk.node,
       die: null,
-      dieObj: null,
+      dieIndex: null,
       dieUsed: false,
     });
     walk.die = DIE_REQUIREMENT.MUSTER;
-    walk.dieObj = reservedIndex;
+    walk.dieIndex = reservedIndex;
     goto(state, "MU", findStart("MU", "Muster 2"));
     follow(state, null);
   }
   // "Use Muster die set aside for minion": bring the reserved die back and walk Muster 2 with it.
   function useReservedMinionDie(state, node, { walk, diceOn, label }) {
     const reserved = diceOn
-      ? state.dice.pool.find((die) => die.st === engine.DIE_STATE.RESERVED)
+      ? state.dice.pool.find((die) => die.status === engine.DIE_STATE.RESERVED)
       : null;
     if (diceOn ? !reserved : !state.minionReserved) {
       trail(state, {
@@ -1617,10 +1619,10 @@
     }
     let reservedIndex = null;
     if (diceOn) {
-      reserved.st = engine.DIE_STATE.AVAIL;
+      reserved.status = engine.DIE_STATE.AVAIL;
       reservedIndex = state.dice.pool.indexOf(reserved);
       state.minionReserved = state.dice.pool.some(
-        (die) => die.st === engine.DIE_STATE.RESERVED,
+        (die) => die.status === engine.DIE_STATE.RESERVED,
       );
     } else state.minionReserved = false;
     enterMuster2WithReservedDie(state, walk, reservedIndex);
@@ -1786,8 +1788,8 @@
   function spendCurrentDie(state, why) {
     const walk = state.walk;
     if (!walk?.die) return;
-    if (state.settings.dice && walk.dieObj != null) {
-      engine.spendDie(state, state.dice.pool[walk.dieObj], why);
+    if (state.settings.dice && walk.dieIndex != null) {
+      engine.spendDie(state, state.dice.pool[walk.dieIndex], why);
     } else
       engine.log(
         state,
@@ -1798,7 +1800,7 @@
           ".",
       );
     walk.die = null;
-    walk.dieObj = null;
+    walk.dieIndex = null;
   }
   // Rule 29: an action Queller cannot take is skipped — follow the arrow out of the box, or return to the page that sent us here.
   function exitAction(state) {
@@ -2379,7 +2381,7 @@
     follow(state, null);
   }
   function answerSituational(state, prompt, value) {
-    state.situ[prompt.key] = !!value;
+    state.situational[prompt.key] = !!value;
     trail(state, {
       kind: TRAIL.QUESTION,
       text: prompt.text,
@@ -2622,7 +2624,7 @@
     state.turn++;
     state.phase = PHASE.P1;
     state.walk = null;
-    state.situ = {};
+    state.situational = {};
     state.playable = {};
     state.battle = null;
     state.battleOpen = false;

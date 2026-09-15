@@ -1418,7 +1418,7 @@
         textarea.value =
           "The debug log could not be built: " +
           (error.stack || error.message || error);
-        debug.error(error, { a: "debugBuild" }, ui.state);
+        debug.error(error, { action: "debugBuild" }, ui.state);
       }
       return textarea.value;
     };
@@ -1427,7 +1427,7 @@
     el.querySelector("#dbgDl").onclick = () => {
       const data = refresh();
       debug.action(
-        { a: "debugExport", how: "download", bytes: data.length },
+        { action: "debugExport", how: "download", bytes: data.length },
         ui.state,
       );
       downloadText({
@@ -1440,7 +1440,7 @@
     el.querySelector("#dbgCopy").onclick = () => {
       const data = refresh();
       debug.action(
-        { a: "debugExport", how: "copy", bytes: data.length },
+        { action: "debugExport", how: "copy", bytes: data.length },
         ui.state,
       );
       copyText({
@@ -1489,7 +1489,7 @@
   // Replace the game with a parsed save.
   function replaceGame(save, title) {
     debug.begin(
-      { a: "load", title, turn: save.turn, version: save.appVersion },
+      { action: "load", title, turn: save.turn, version: save.appVersion },
       ui.state,
     );
     ui.history = [];
@@ -1690,7 +1690,10 @@
     ui.onClickEach(
       "[data-save]",
       (button) => {
-        debug.action({ a: "saveSlot", slot: +button.dataset.save }, ui.state);
+        debug.action(
+          { action: "saveSlot", slot: +button.dataset.save },
+          ui.state,
+        );
         const slotList = slots();
         slotList[+button.dataset.save] = {
           turn: ui.state.turn,
@@ -1740,7 +1743,7 @@
               applySetting(input.dataset.set, input.checked);
               ui.renderModal();
             },
-            { a: "setting", key: input.dataset.set, value: input.checked },
+            { action: "setting", key: input.dataset.set, value: input.checked },
           )),
     );
   }
@@ -1753,7 +1756,7 @@
         const inputValue = input ? input.value : undefined;
         debug.action(
           {
-            a: "ask",
+            action: "ask",
             title: spec.title,
             pick: button.dataset.ask,
             input: inputValue,
@@ -1781,7 +1784,7 @@
           );
           ui.closeModal();
         },
-        { a: "jump", page: pageKey, start: id, die },
+        { action: "jump", page: pageKey, start: id, die },
       );
     };
   }

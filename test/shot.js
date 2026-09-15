@@ -61,7 +61,7 @@ async function shootErrorBarAndDebugLog(page) {
       () => {
         throw new Error("example failure while answering");
       },
-      { a: "answer" },
+      { action: "answer" },
     );
   });
   await page.screenshot({ path: shotPath("errbar"), clip: CLIP.ERROR_BAR });

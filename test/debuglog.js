@@ -43,7 +43,7 @@ function drive(state) {
     const value = defaultAnswer(prompt);
     debug.begin(
       {
-        a: "answer",
+        action: "answer",
         prompt: prompt.type,
         page: state.walk.page,
         node: state.walk.node,
@@ -56,7 +56,7 @@ function drive(state) {
   }
 }
 function startPhaseAsAction(state, phase) {
-  debug.begin({ a: "phase", id: phase }, state);
+  debug.begin({ action: "phase", id: phase }, state);
   engine.startPhase(state, phase);
   debug.finishAction(state);
 }
@@ -73,7 +73,7 @@ function playShortGame() {
       state.createdVersion === engine.VERSION,
     "new state stamped with the app version " + engine.VERSION,
   );
-  debug.action({ a: "pageLoad", autosave: false }, null);
+  debug.action({ action: "pageLoad", autosave: false }, null);
   for (const phase of [PHASE.SETUP, PHASE.P1, PHASE.P3, PHASE.P4, PHASE.P5]) {
     startPhaseAsAction(state, phase);
     drive(state);
@@ -84,12 +84,12 @@ function checkActionHistory() {
   const actions = debug.actions;
   ok(
     actions.length > 5 &&
-      actions[0].a === "pageLoad" &&
-      actions[1].a === "phase",
+      actions[0].action === "pageLoad" &&
+      actions[1].action === "phase",
     "actions recorded in order (" + actions.length + ")",
   );
   ok(
-    actions.every((record) => typeof record.t === "number") &&
+    actions.every((record) => typeof record.time === "number") &&
       actions
         .slice(1)
         .every(
@@ -124,7 +124,7 @@ function checkWalkRecords(state) {
     "walk trails stored compactly",
   );
   const walksBefore = debug.walks.length;
-  debug.action({ a: "modal", name: "rules" }, state);
+  debug.action({ action: "modal", name: "rules" }, state);
   ok(
     debug.walks.length === walksBefore,
     "a finished walk is recorded once, not on every later action",
@@ -137,7 +137,7 @@ function checkAbandonedWalk(state) {
     state.walk && !state.walk.done && state.walk.prompt,
     "a Phase 5 walk opens a prompt to abandon",
   );
-  debug.begin({ a: "phase", id: "abandon" }, state);
+  debug.begin({ action: "phase", id: "abandon" }, state);
   state.walk = null;
   debug.finishAction(state);
   ok(
@@ -170,12 +170,25 @@ function checkPersistence() {
       debug.walks.length === restored.walks.length,
     "the previous log survives a corrupt stored history",
   );
+  stored.text = JSON.stringify({
+    actions: [{ a: "old", t: 1, during: { a: "older", t: 0 } }],
+    errors: [],
+    walks: [{ t: 2 }],
+  });
+  debug.restore(storage);
+  ok(
+    debug.actions[0].action === "old" &&
+      debug.actions[0].time === 1 &&
+      debug.actions[0].during.action === "older" &&
+      debug.walks[0].time === 2,
+    "a format-1 stored history is upgraded to action/time",
+  );
   stored.text = saved;
   debug.restore(storage);
 }
 // Errors during an action, uncaught between actions, and with a state that cannot be digested.
 function checkErrors(state) {
-  debug.begin({ a: "answer", prompt: PROMPT.YES_NO, value: true }, state);
+  debug.begin({ action: "answer", prompt: PROMPT.YES_NO, value: true }, state);
   const err = debug.error(
     new TypeError("Cannot read properties of undefined (reading 'face')"),
     { rolledBack: true },
@@ -185,12 +198,16 @@ function checkErrors(state) {
     err.message.startsWith("Cannot read") &&
       err.name === "TypeError" &&
       err.stack &&
-      err.during?.a === "answer" &&
+      err.during?.action === "answer" &&
       err.state &&
       err.state.turn === state.turn,
     "an error during an action records the action, the stack and a state digest",
   );
-  const err2 = debug.error("Script error.", { a: "uncaught", line: 12 }, state);
+  const err2 = debug.error(
+    "Script error.",
+    { action: "uncaught", line: 12 },
+    state,
+  );
   ok(
     err2.message === "Script error." && err2.lastAction && !err2.during,
     "an uncaught error between actions points at the last action",
@@ -203,7 +220,7 @@ function checkErrors(state) {
 function checkRingBuffer(state) {
   const limit = debug.LIMITS.actions;
   for (let i = 0; i < limit + OVERFLOW; i++)
-    debug.action({ a: "modal", name: "x" + i }, state);
+    debug.action({ action: "modal", name: "x" + i }, state);
   ok(
     debug.actions.length === limit &&
       debug.actions[debug.actions.length - 1].name ===

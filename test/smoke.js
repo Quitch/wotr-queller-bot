@@ -17,7 +17,7 @@ const debugFailures = [];
 const debugLog = async (page) =>
   JSON.parse(await page.inputValue(SEL.DEBUG_TEXT));
 const usable = (state, status) =>
-  state.dice.pool.filter((die) => die.st === status).length;
+  state.dice.pool.filter((die) => die.status === status).length;
 
 async function newGameWithEverythingOn(page) {
   await startGameWithEverythingOn(page);
@@ -215,7 +215,7 @@ async function checkFailedActionAndUncaughtError(page) {
         window.QBUI.state.turn = 99;
         throw new Error("smoke: deliberate action failure");
       },
-      { a: "smokeFail" },
+      { action: "smokeFail" },
     );
   });
   const state = await readState(page);
@@ -244,7 +244,7 @@ async function checkFailedActionAndUncaughtError(page) {
     log.errors
       .map(
         (record) =>
-          record.a +
+          record.action +
           "/" +
           record.message.slice(0, 40) +
           (record.rolledBack ? " (rolled back)" : ""),
@@ -254,7 +254,7 @@ async function checkFailedActionAndUncaughtError(page) {
   if (
     log.errors.length !== 2 ||
     !log.errors[0].rolledBack ||
-    log.errors[0].during?.a !== "smokeFail" ||
+    log.errors[0].during?.action !== "smokeFail" ||
     !log.errors[1].lastAction
   )
     debugFailures.push("errors not recorded as expected");
@@ -276,7 +276,7 @@ async function checkReloadKeepsHistory(page, actionsBefore) {
   await page.click(SEL.DEBUG_BUTTON);
   const log = await debugLog(page);
   const pageLoads = log.actions.filter(
-    (record) => record.a === "pageLoad",
+    (record) => record.action === "pageLoad",
   ).length;
   console.log(
     "log from the setup screen: state",
@@ -311,11 +311,11 @@ async function checkBrokenAutosave(page) {
     "broken save in log: turn",
     log.brokenAutosave?.turn,
     "boot error:",
-    log.errors.find((record) => record.a === "boot-render")?.message,
+    log.errors.find((record) => record.action === "boot-render")?.message,
   );
   if (
     log.brokenAutosave?.turn !== 3 ||
-    !log.errors.some((record) => record.a === "boot-render")
+    !log.errors.some((record) => record.action === "boot-render")
   )
     debugFailures.push("broken autosave not captured");
   await page.click(SEL.MODAL_CLOSE);

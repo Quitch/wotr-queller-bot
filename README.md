@@ -1,4 +1,4 @@
-# Queller Bot Runner — sources (version 59, 14 Sep 2026)
+# Queller Bot Runner — sources (version 60, 15 Sep 2026)
 
 `python3 build.py` concatenates `src/` into `index.html` (the single-file artifact; the Artifact host adds the doctype/head/body).
 

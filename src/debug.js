@@ -5,7 +5,7 @@
 (function () {
   const engine = window.QB,
     FLOW = window.QB_FLOW;
-  const FORMAT = "queller-debug/1";
+  const FORMAT = "queller-debug/2"; // 2: records carry action/time instead of a/t
   const LIMITS = { actions: 300, errors: 30, walks: 8, states: 5 };
   const store = {
     actions: [],
@@ -25,6 +25,7 @@
     try {
       store.storage.set(
         JSON.stringify({
+          format: FORMAT,
           actions: store.actions,
           errors: store.errors,
           walks: store.walks,
@@ -34,6 +35,19 @@
       // Storage full or unavailable: the in-memory log still works for this page load.
     }
   }
+  // A stored history from format 1 named a record's action `a` and its time `t`; nested records (during, lastAction) too.
+  const FORMAT_1_FIELDS = { a: "action", t: "time" };
+  function upgradeRecord(record) {
+    if (!record || typeof record !== "object") return record;
+    for (const [from, to] of Object.entries(FORMAT_1_FIELDS))
+      if (from in record && !(to in record)) {
+        record[to] = record[from];
+        delete record[from];
+      }
+    for (const nested of ["during", "lastAction"])
+      if (record[nested]) upgradeRecord(record[nested]);
+    return record;
+  }
   // storage: {get():string|null, set(string)} — localStorage in the app, anything in tests
   function restore(storage) {
     store.storage = storage || null;
@@ -41,9 +55,13 @@
     try {
       const parsed = JSON.parse(storage.get() || "null");
       if (parsed) {
-        store.actions = (parsed.actions || []).slice(-LIMITS.actions);
-        store.errors = (parsed.errors || []).slice(-LIMITS.errors);
-        store.walks = (parsed.walks || []).slice(-LIMITS.walks);
+        const upgrade =
+          parsed.format === FORMAT
+            ? (list) => list
+            : (list) => list.map(upgradeRecord);
+        store.actions = upgrade((parsed.actions || []).slice(-LIMITS.actions));
+        store.errors = upgrade((parsed.errors || []).slice(-LIMITS.errors));
+        store.walks = upgrade((parsed.walks || []).slice(-LIMITS.walks));
       }
     } catch {
       // Storage unavailable or the saved log is corrupt: start with an empty log.
@@ -68,10 +86,10 @@
         ? pool
             .map(
               (die) =>
-                (die.k === engine.DIE_KIND.FACTION ? "F:" : "") +
+                (die.kind === engine.DIE_KIND.FACTION ? "F:" : "") +
                 (die.face || "-").replace("/", "+") +
                 "/" +
-                die.st[0],
+                die.status[0],
             )
             .join(" ")
         : null,
@@ -120,7 +138,7 @@
   }
   function compactWalk(state, walk, note) {
     return {
-      t: Date.now(),
+      time: Date.now(),
       turn: state.turn,
       entry: walk.entry,
       page: walk.page,
@@ -152,8 +170,8 @@
       before &&
       before !== state.walk &&
       !before.done &&
-      record.a !== "undo" &&
-      record.a !== "load"
+      record.action !== "undo" &&
+      record.action !== "load"
     )
       recordWalk(state, before, { abandoned: true });
   }
@@ -163,12 +181,12 @@
 
   // begin/finishAction bracket a state-changing action (ui.js act()); action() records something that changed no game state.
   function begin(info, state) {
-    store.inflight = { t: Date.now(), ...(info || { a: "act" }) };
+    store.inflight = { time: Date.now(), ...(info || { action: "act" }) };
     store.preWalk = state ? state.walk : null;
     if (state) store.inflight.before = safeDigest(state);
   }
   function finishAction(state) {
-    const record = store.inflight || { t: Date.now(), a: "act" };
+    const record = store.inflight || { time: Date.now(), action: "act" };
     store.inflight = null;
     if (state) {
       record.after = safeDigest(state);
@@ -185,7 +203,7 @@
     return finishAction(state);
   }
   function error(thrown, info, state) {
-    const record = { t: Date.now(), ...info };
+    const record = { time: Date.now(), ...info };
     if (thrown && typeof thrown === "object") {
       record.message = String(thrown.message || thrown);
       record.name = thrown.name;
@@ -210,7 +228,7 @@
     }
   };
   const withTimes = (list) =>
-    list.map((record) => ({ when: iso(record.t), ...record }));
+    list.map((record) => ({ when: iso(record.time), ...record }));
   function summary(state, env, errors) {
     const lines = [];
     lines.push(

@@ -25,9 +25,9 @@ const ok = (condition, message) => {
   } else console.log("ok  ", line);
 };
 const die = (face, status) => ({
-  k: engine.DIE_KIND.ACTION,
+  kind: engine.DIE_KIND.ACTION,
   face,
-  st: status || DIE_STATE.AVAIL,
+  status: status || DIE_STATE.AVAIL,
 });
 // The answer a scenario gives when none of its rules match: No to every question, an empty battle form, "done" otherwise.
 function defaultAnswer(prompt) {
@@ -90,7 +90,8 @@ const lastTrailText = (state) =>
 const noUsableDie = (state) =>
   !state.dice.pool.some(
     (pooledDie) =>
-      pooledDie.st === DIE_STATE.RESERVED || pooledDie.st === DIE_STATE.AVAIL,
+      pooledDie.status === DIE_STATE.RESERVED ||
+      pooledDie.status === DIE_STATE.AVAIL,
   );
 
 function reservedMusterDieIsUsedOrSpent() {
@@ -131,7 +132,7 @@ function reservedMusterDieIsUsedOrSpent() {
   ]);
   ok(
     reservedOnlyState.walk.result === WALK_RESULT.ACTION &&
-      reservedOnlyState.dice.pool[0].st === DIE_STATE.USED &&
+      reservedOnlyState.dice.pool[0].status === DIE_STATE.USED &&
       reservedOnlyState.walk.trail.some(
         (entry) =>
           entry.kind === TRAIL.QUESTION &&
@@ -210,7 +211,7 @@ function ringUsedOnceOnlyWhenHeld() {
   driveWalk(noRingState, ringRules);
   ok(
     !noRingState.ringUsedThisTurn &&
-      !noRingState.log.some((entry) => /Elven Ring/.test(entry.t)),
+      !noRingState.log.some((entry) => /Elven Ring/.test(entry.text)),
     "no ring used when the Shadow holds none",
   );
   const oneRingState = stateWithEventAndMusterDice();
@@ -257,7 +258,7 @@ function militaryPhase5PlaysRevealedCardAndPalantirDraws() {
   );
   ok(
     militaryState.dice.pool.find((pooledDie) => pooledDie.face === "Event")
-      .st === DIE_STATE.USED,
+      .status === DIE_STATE.USED,
     "Event die spent",
   );
 }
@@ -356,11 +357,11 @@ function lidlessEyeMovesDiceNotItsOwn() {
   lidlessEyeState.walk = null;
   engine.startWalk(lidlessEyeState, "EV", "Event", {
     die: DIE_REQUIREMENT.EVENT,
-    dieObj: 3,
+    dieIndex: 3,
   });
   driveWalk(lidlessEyeState, [byType(PROMPT.CONFIRM, true)]);
   const huntDice = lidlessEyeState.dice.pool.filter(
-    (pooledDie) => pooledDie.st === DIE_STATE.HUNT,
+    (pooledDie) => pooledDie.status === DIE_STATE.HUNT,
   );
   const eventDie = lidlessEyeState.dice.pool[3];
   ok(
@@ -370,13 +371,13 @@ function lidlessEyeMovesDiceNotItsOwn() {
     "the two non-preferred dice changed to Eye and placed in the Hunt box",
   );
   ok(
-    eventDie.st === DIE_STATE.USED,
+    eventDie.status === DIE_STATE.USED,
     "the Event die that played the card was spent, not changed",
   );
   ok(
     lidlessEyeState.dice.pool.filter(
       (pooledDie) =>
-        pooledDie.face === "Character" && pooledDie.st === DIE_STATE.AVAIL,
+        pooledDie.face === "Character" && pooledDie.status === DIE_STATE.AVAIL,
     ).length === 2,
     "preferred (Character) dice left alone while non-preferred ones existed",
   );
@@ -388,7 +389,7 @@ function lidlessEyeMovesDiceNotItsOwn() {
   });
   singleDieState.cards.hand = ["sa043"];
   singleDieState.dice.pool = [die("Event")];
-  singleDieState.walk = { dieObj: 0 };
+  singleDieState.walk = { dieIndex: 0 };
   ok(
     engine.precondition(singleDieState, "sa043") === false,
     "Lidless Eye unplayable when the only unused die is the one that would play it",
@@ -550,6 +551,90 @@ function battleOpenResetAndRunGuard() {
     "run() ends a walk that never reaches a prompt instead of leaving it in limbo",
   );
 }
+// JSON with every object's keys sorted, so two objects compare equal whatever the order their keys were added in.
+const canonical = (value) =>
+  JSON.stringify(value, (key, field) =>
+    field && typeof field === "object" && !Array.isArray(field)
+      ? Object.fromEntries(Object.entries(field).sort())
+      : field,
+  );
+// The field names a version-59 save used.
+function downgradeToVersion59(save) {
+  const rename = (object, from, to) => {
+    object[to] = object[from];
+    delete object[from];
+  };
+  for (const pooledDie of save.dice.pool) {
+    rename(pooledDie, "kind", "k");
+    rename(pooledDie, "status", "st");
+  }
+  rename(save.walk, "dieIndex", "dieObj");
+  rename(save.walk, "reservedDieIndex", "reserveDieObj");
+  for (const frame of save.walk.stack) rename(frame, "dieIndex", "dieObj");
+  rename(save, "situational", "situ");
+  for (const entry of save.log) rename(entry, "text", "t");
+  save.appVersion = 59;
+  return save;
+}
+// A version-59 save (dice {k, st}, walk dieObj/reserveDieObj, situ, log {t}) with an open die question migrates to the
+// current shape and plays on; an open choice prompt's options {v, l} become {value, label}.
+function migrateUpgradesVersion59Save() {
+  const state = phase5State(
+    { dice: false, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.dice.pool = [die("Muster", DIE_STATE.RESERVED), die("Army")];
+  state.minionReserved = true;
+  state.situational = { mtSiege: true };
+  engine.startPhase(state, PHASE.P5);
+  for (
+    let guard = 0;
+    state.walk?.prompt &&
+    state.walk.prompt.type !== PROMPT.DIE_CHECK &&
+    guard < 40;
+    guard++
+  )
+    engine.answer(state, true);
+  ok(
+    state.walk?.prompt?.type === PROMPT.DIE_CHECK,
+    "the walk reached a die question to save mid-way",
+  );
+  const before = canonical(state);
+  const upgraded = engine.migrate(
+    downgradeToVersion59(JSON.parse(JSON.stringify(state))),
+  );
+  upgraded.appVersion = state.appVersion;
+  ok(
+    canonical(upgraded) === before,
+    "a version-59 save migrates back to the current shape",
+  );
+  engine.answer(upgraded, true);
+  ok(
+    upgraded.walk && (upgraded.walk.done || upgraded.walk.prompt),
+    "the migrated walk answers on to the next prompt (" +
+      (upgraded.walk.prompt?.type || upgraded.walk.result) +
+      ")",
+  );
+  const choice = engine.migrate({
+    settings: {},
+    board: { nations: {} },
+    walk: {
+      dieObj: 1,
+      stack: [{ dieObj: 2 }],
+      prompt: {
+        type: PROMPT.CHOICE,
+        options: [{ v: "Isengard", l: "Isengard" }],
+      },
+    },
+  });
+  ok(
+    choice.walk.dieIndex === 1 &&
+      choice.walk.stack[0].dieIndex === 2 &&
+      choice.walk.prompt.options[0].value === "Isengard" &&
+      choice.walk.prompt.options[0].label === "Isengard",
+    "an open choice prompt's options and the stack frames are migrated",
+  );
+}
 // The scenarios, with the section of the change log each one guards.
 const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
@@ -564,6 +649,7 @@ const SCENARIOS = [
   ["6.6", tableTriggersDiscardOrAsk],
   ["6.7", callToBattleCardsIgnoreInitiative],
   ["7.3/7.4", battleOpenResetAndRunGuard],
+  ["v60", migrateUpgradesVersion59Save],
 ];
 function main() {
   for (const [number, scenario] of SCENARIOS) {
