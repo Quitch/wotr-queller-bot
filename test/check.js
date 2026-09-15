@@ -12,92 +12,116 @@ const fail = (message) => {
   fails++;
   console.log("FAIL", message);
 };
-// 1. every "PAGE.node" key in walk.js names a real node
-const walkSource = fs.readFileSync(
-  path.join(__dirname, "..", "src", "walk.js"),
-  "utf8",
-);
-for (const match of walkSource.matchAll(/"([A-Z0-9]+)\.([A-Za-z0-9]+)"/g)) {
-  const [, pageKey, nodeId] = match;
-  if (FLOW[pageKey] && !FLOW[pageKey].nodes[nodeId])
-    fail("walk.js refers to missing node " + pageKey + "." + nodeId);
-}
-// 2. every criterion on a card priority list is understood by criterionTest
-const state = engine.newState({
-  dice: true,
-  cards: true,
-  tracker: true,
-  wome: true,
-});
-for (const nodeKey of engine.CARD_CRITERIA_NODES) {
-  const [pageKey, nodeId] = nodeKey.split(".");
-  const node = FLOW[pageKey]?.nodes[nodeId];
-  if (!node) {
-    fail("card list " + nodeKey + " missing");
-    continue;
+// A "PAGE.node" string literal, as the walker's handler tables and jump specs use them.
+const NODE_KEY = /"([A-Z0-9]+)\.([A-Za-z0-9]+)"/g;
+// Every "PAGE.node" key in walk.js names a real node. Returns how many keys were checked, so a regex that stops matching is visible.
+function checkNodeKeysExist() {
+  const walkSource = fs.readFileSync(
+    path.join(__dirname, "..", "src", "walk.js"),
+    "utf8",
+  );
+  const keys = new Set();
+  for (const [, pageKey, nodeId] of walkSource.matchAll(NODE_KEY)) {
+    if (!FLOW[pageKey]) continue;
+    keys.add(pageKey + "." + nodeId);
+    if (!FLOW[pageKey].nodes[nodeId])
+      fail("walk.js refers to missing node " + pageKey + "." + nodeId);
   }
-  for (const criterion of NODE.extra(node).items)
-    if (
-      !engine.criterionTest(criterion, state, null, {
-        eventFull: false,
-        factionFull: false,
-      })
-    )
-      fail(nodeKey + ': criterionTest cannot resolve "' + criterion + '"');
+  return keys.size;
 }
-// 3. every grey box has a JUMPS entry; every decision has two arrows; every non-action box has a way out
-for (const pageKey in FLOW)
-  for (const nodeId in FLOW[pageKey].nodes) {
-    const node = FLOW[pageKey].nodes[nodeId];
-    const kind = NODE.kind(node);
-    const outEdges = FLOW[pageKey].edges.filter(
-      (edge) => EDGE.from(edge) === nodeId,
-    );
-    if (kind === NODE_KIND.JUMP && !engine.jumpSpec(NODE.text(node)))
-      fail(
-        "no JUMPS entry for " +
-          pageKey +
-          "." +
-          nodeId +
-          ' "' +
-          engine.normalizeText(NODE.text(node)) +
-          '"',
+// Every criterion on a card priority list is understood by criterionTest.
+function checkCardCriteriaResolve(state) {
+  for (const nodeKey of engine.CARD_CRITERIA_NODES) {
+    const [pageKey, nodeId] = nodeKey.split(".");
+    const node = FLOW[pageKey]?.nodes[nodeId];
+    if (!node) {
+      fail("card list " + nodeKey + " missing");
+      continue;
+    }
+    for (const criterion of NODE.extra(node).items)
+      if (
+        !engine.criterionTest(criterion, state, null, {
+          eventFull: false,
+          factionFull: false,
+        })
+      )
+        fail(nodeKey + ': criterionTest cannot resolve "' + criterion + '"');
+  }
+}
+// Every grey box has a JUMPS entry; every decision has two arrows; every non-action box has a way out.
+function checkFlowchartShape() {
+  for (const pageKey in FLOW)
+    for (const nodeId in FLOW[pageKey].nodes) {
+      const node = FLOW[pageKey].nodes[nodeId];
+      const kind = NODE.kind(node);
+      const outEdges = FLOW[pageKey].edges.filter(
+        (edge) => EDGE.from(edge) === nodeId,
       );
-    if (
-      (kind === NODE_KIND.DECISION || kind === NODE_KIND.FOLLOW_UP) &&
-      outEdges.length !== 2
-    )
-      fail(pageKey + "." + nodeId + " has " + outEdges.length + " arrows");
-    if (
-      !outEdges.length &&
-      ![NODE_KIND.ACTION, NODE_KIND.JUMP, NODE_KIND.NOTE].includes(kind)
-    )
-      fail(pageKey + "." + nodeId + " (" + kind + ") has no arrow out");
-  }
-// 4. every card flag key exists; every card the engine expects has its data
-for (const card of fakeWindow.QB_CARDS) {
-  if (card.pre) {
-    try {
-      engine.precondition(state, card.id);
-    } catch (error) {
-      fail(card.id + ' pre "' + card.pre + '": ' + error.message);
+      if (kind === NODE_KIND.JUMP && !engine.jumpSpec(NODE.text(node)))
+        fail(
+          "no JUMPS entry for " +
+            pageKey +
+            "." +
+            nodeId +
+            ' "' +
+            engine.normalizeText(NODE.text(node)) +
+            '"',
+        );
+      if (
+        (kind === NODE_KIND.DECISION || kind === NODE_KIND.FOLLOW_UP) &&
+        outEdges.length !== 2
+      )
+        fail(pageKey + "." + nodeId + " has " + outEdges.length + " arrows");
+      if (
+        !outEdges.length &&
+        ![NODE_KIND.ACTION, NODE_KIND.JUMP, NODE_KIND.NOTE].includes(kind)
+      )
+        fail(pageKey + "." + nodeId + " (" + kind + ") has no arrow out");
     }
-  }
-  if (card.cpre) {
-    try {
-      engine.combatPrecondition({ ...state, battle: { figures: {} } }, card);
-    } catch (error) {
-      fail(card.id + ' cpre "' + card.cpre + '": ' + error.message);
-    }
-  }
-  if (card.deck === "B" && !card.faction)
-    fail(card.id + " Call to Battle card without a faction");
-  if (card.effect && !Object.keys(engine.CARD_EFFECTS).includes(card.effect))
-    fail(card.id + " unknown effect " + card.effect);
-  if (card.effect === "recruitFaction" && !card.faction)
-    fail(card.id + " recruitFaction without a faction");
-  if (!!card.onTable !== /play on the table/i.test(card.cond || ""))
-    fail(card.id + " onTable flag disagrees with its condition text");
 }
-console.log(fails ? fails + " failure(s)" : "all checks passed");
-process.exit(fails ? 1 : 0);
+// Every card flag key exists; every card the engine expects has its data; onTable agrees with the condition text (a transcription guard).
+function checkCardFlags(state) {
+  for (const card of fakeWindow.QB_CARDS) {
+    if (card.pre) {
+      try {
+        engine.precondition(state, card.id);
+      } catch (error) {
+        fail(card.id + ' pre "' + card.pre + '": ' + error.message);
+      }
+    }
+    if (card.cpre) {
+      try {
+        engine.combatPrecondition({ ...state, battle: { figures: {} } }, card);
+      } catch (error) {
+        fail(card.id + ' cpre "' + card.cpre + '": ' + error.message);
+      }
+    }
+    if (card.deck === engine.DECK.CALL_TO_BATTLE && !card.faction)
+      fail(card.id + " Call to Battle card without a faction");
+    if (card.effect && !Object.keys(engine.CARD_EFFECTS).includes(card.effect))
+      fail(card.id + " unknown effect " + card.effect);
+    if (card.effect === engine.CARD_EFFECT.RECRUIT_FACTION && !card.faction)
+      fail(card.id + " recruitFaction without a faction");
+    if (!!card.onTable !== /play on the table/i.test(card.cond || ""))
+      fail(card.id + " onTable flag disagrees with its condition text");
+  }
+}
+function main() {
+  const state = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  const nodeKeys = checkNodeKeysExist();
+  checkCardCriteriaResolve(state);
+  checkFlowchartShape();
+  checkCardFlags(state);
+  console.log(
+    fails
+      ? fails + " failure(s)"
+      : "all checks passed (" + nodeKeys + " node keys checked)",
+  );
+  process.exit(fails ? 1 : 0);
+}
+main();
