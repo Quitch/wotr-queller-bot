@@ -1,5 +1,5 @@
 // ===== Flowchart walk engine =====
-import * as engine from "./engine.js";
+import * as engine from "./engine/index.js";
 import { FLOW, NODE, NODE_KIND, EDGE } from "./flow/index.js";
 
 const cardById = engine.cardById;
