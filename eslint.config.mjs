@@ -28,7 +28,7 @@ export default [
     },
   },
   {
-    files: ["*.mjs", "build.js"],
+    files: ["*.mjs", "build.js", "scripts/**/*.js"],
     languageOptions: {
       sourceType: "module",
       globals: { ...globals.node },

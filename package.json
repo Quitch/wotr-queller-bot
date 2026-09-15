@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "build": "node build.js",
+    "anchors": "node scripts/sync-anchors.js",
     "lint": "npm run lint:js && npm run lint:css && npm run lint:md && npm run format:check",
     "lint:js": "eslint .",
     "lint:css": "stylelint \"src/**/*.css\"",
