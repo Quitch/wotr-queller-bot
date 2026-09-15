@@ -1,0 +1,102 @@
+/* colour, shadow and font tokens: light, then dark by system preference, then dark by choice (the toggle wins) */
+:root {
+  --bg: #e9e5dc;
+  --surface: #f6f3ec;
+  --surface2: #ede8de;
+  --ink: #221e1b;
+  --muted: #4e4842;
+  --line: #cfc7b9;
+  --line2: #8f8574;
+  --accent: #7e2419;
+  --accent-ink: #fff7f2;
+  --gold: #8e6f22;
+  --focus: #3b6ea8;
+  --ok: #2a5731;
+  --warn: #6e4508;
+  --bad: #8a2820;
+  --nS: #d5e8d4;
+  --nSs: #82b366;
+  --nA: #f8cecc;
+  --nAs: #b85450;
+  --nD: #fff2cc;
+  --nDs: #d6b656;
+  --nd: #dae8fc;
+  --nds: #6c8ebf;
+  --nJ: #f2f0ea;
+  --nJs: #666;
+  --nP: #e1d5e7;
+  --nPs: #9673a6;
+  --nT: #ffe6cc;
+  --nTs: #d79b00;
+  --node-ink: #1d1a17;
+  --shadow: 0 1px 2px rgb(30 20 10 / 8%), 0 6px 18px -8px rgb(30 20 10 / 25%);
+  --font-display: "Cinzel", Georgia, "Times New Roman", serif;
+  --font-body: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17151a;
+    --surface: #211e25;
+    --surface2: #2a2630;
+    --ink: #e9e3d6;
+    --muted: #c4bdb0;
+    --line: #3d3843;
+    --line2: #7a7282;
+    --accent: #f0907f;
+    --accent-ink: #1a0d0b;
+    --gold: #cda24b;
+    --focus: #7fa9e0;
+    --ok: #7cc484;
+    --warn: #e0ac58;
+    --bad: #ee8577;
+    --nS: #2f4a2e;
+    --nSs: #82b366;
+    --nA: #5a2b28;
+    --nAs: #d0736a;
+    --nD: #4d4219;
+    --nDs: #d6b656;
+    --nd: #26384f;
+    --nds: #7fa0d4;
+    --nJ: #2d2a31;
+    --nJs: #8b8591;
+    --nP: #3e2f48;
+    --nPs: #b48cd0;
+    --nT: #5a3f1c;
+    --nTs: #e0a040;
+    --node-ink: #efe9dd;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 20px -10px rgb(0 0 0 / 60%);
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17151a;
+  --surface: #211e25;
+  --surface2: #2a2630;
+  --ink: #e9e3d6;
+  --muted: #c4bdb0;
+  --line: #3d3843;
+  --line2: #7a7282;
+  --accent: #f0907f;
+  --accent-ink: #1a0d0b;
+  --gold: #cda24b;
+  --focus: #7fa9e0;
+  --ok: #7cc484;
+  --warn: #e0ac58;
+  --bad: #ee8577;
+  --nS: #2f4a2e;
+  --nSs: #82b366;
+  --nA: #5a2b28;
+  --nAs: #d0736a;
+  --nD: #4d4219;
+  --nDs: #d6b656;
+  --nd: #26384f;
+  --nds: #7fa0d4;
+  --nJ: #2d2a31;
+  --nJs: #8b8591;
+  --nP: #3e2f48;
+  --nPs: #b48cd0;
+  --nT: #5a3f1c;
+  --nTs: #e0a040;
+  --node-ink: #efe9dd;
+  --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 20px -10px rgb(0 0 0 / 60%);
+}

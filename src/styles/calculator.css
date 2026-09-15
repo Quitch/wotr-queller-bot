@@ -1,0 +1,19 @@
+/* calculator */
+.calc {
+  font-size: 0.9rem;
+}
+.calc .out {
+  margin-top: 14px;
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+.calc .out .n {
+  font-family: var(--font-display);
+  font-size: 2rem;
+}
+.calc .out ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 0.85rem;
+}

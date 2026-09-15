@@ -1,0 +1,55 @@
+/* header */
+.top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  padding-block: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.brand {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.brand h1 {
+  font-size: 1.25rem;
+}
+.brand .sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.status {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  font-size: 0.85rem;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--line2);
+  border-radius: 999px;
+  background: var(--surface);
+  font-variant-numeric: tabular-nums;
+}
+.chip b {
+  font-weight: 600;
+}
+.chip.strat-corruption {
+  border-color: var(--accent);
+}
+.chip.strat-military {
+  border-color: var(--gold);
+}
+.tools {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}

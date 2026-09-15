@@ -1,0 +1,151 @@
+/* the walkthrough: phase buttons, the prompt card, the idle and result boxes */
+.phasebar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 12px;
+}
+.phasebar .lbl {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-right: 4px;
+}
+.prompt {
+  border-radius: 10px;
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  position: relative;
+  margin-bottom: 12px;
+}
+.prompt .eyebrow {
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.prompt .eyebrow .sw {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgb(0 0 0 / 25%);
+  display: inline-block;
+}
+.prompt .q {
+  font-size: 1.15rem;
+  line-height: 1.5;
+  margin: 0 0 12px;
+  max-width: 70ch;
+}
+.prompt.k-D {
+  background: var(--nD);
+  border-color: var(--nDs);
+}
+.prompt.k-d {
+  background: var(--nd);
+  border-color: var(--nds);
+}
+.prompt.k-A {
+  background: var(--nA);
+  border-color: var(--nAs);
+}
+.prompt.k-T {
+  background: var(--nT);
+  border-color: var(--nTs);
+}
+.prompt.k-P {
+  background: var(--nP);
+  border-color: var(--nPs);
+}
+.prompt.k-J {
+  background: var(--nJ);
+  border-color: var(--nJs);
+}
+.prompt.k-S {
+  background: var(--nS);
+  border-color: var(--nSs);
+}
+.prompt.k-D,
+.prompt.k-d,
+.prompt.k-A,
+.prompt.k-T,
+.prompt.k-P,
+.prompt.k-J,
+.prompt.k-S {
+  color: var(--node-ink);
+}
+.prompt .bold-note {
+  font-size: 0.8rem;
+  margin: -6px 0 10px;
+  max-width: 75ch;
+}
+.ring-ico {
+  width: 1em;
+  height: 1em;
+  vertical-align: -0.15em;
+  color: var(--accent);
+  flex: 0 0 auto;
+}
+.prompt .q .ring-ico {
+  width: 1.1em;
+  height: 1.1em;
+}
+.prompt .help {
+  font-size: 0.85rem;
+  margin: -4px 0 10px;
+  max-width: 75ch;
+}
+.prompt ol {
+  margin: 0 0 12px;
+  padding-left: 22px;
+}
+.prompt ol li {
+  margin: 2px 0;
+}
+.prompt .answers {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.prompt .answers .btn {
+  background: rgb(255 255 255 / 55%);
+  color: var(--node-ink);
+}
+:root[data-theme="dark"] .prompt .answers .btn {
+  background: rgb(0 0 0 / 25%);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .prompt .answers .btn {
+    background: rgb(0 0 0 / 25%);
+  }
+}
+.prompt .steps {
+  font-size: 0.85rem;
+  margin: 0 0 10px;
+  padding-left: 18px;
+}
+.idle {
+  padding: 14px;
+  border: 1px dashed var(--line2);
+  border-radius: 10px;
+  color: var(--muted);
+}
+.result {
+  padding: 14px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  margin-bottom: 12px;
+}
+.result .big {
+  font-size: 1.15rem;
+  font-weight: 600;
+}
+.idle,
+.result {
+  max-width: 75ch;
+}

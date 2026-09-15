@@ -1,0 +1,67 @@
+/* the New game screen, notices and text areas */
+.setup {
+  max-width: 760px;
+  margin: 24px auto;
+}
+.setup .opt {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.setup .opt input {
+  margin-top: 5px;
+}
+.setup .opt.dis {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.setup .opt.dis input {
+  cursor: not-allowed;
+}
+.setup .opt b {
+  display: block;
+}
+.setup .opt span {
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+.opt .oo {
+  display: block;
+  padding-left: 1.25em;
+  margin-top: 4px;
+}
+.opt .oo b {
+  display: inline;
+  color: var(--ink);
+}
+.notice {
+  font-size: 0.8rem;
+  color: var(--muted);
+  max-width: 75ch;
+  line-height: 1.5;
+}
+.notice p {
+  margin: 0;
+}
+.notice p + p {
+  margin-top: 2.25em;
+}
+footer.notice {
+  margin-top: 28px;
+  border-top: 1px solid var(--line);
+  padding-top: 12px;
+}
+textarea {
+  width: 100%;
+  min-height: 140px;
+  font: inherit;
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  background: var(--surface2);
+  color: var(--ink);
+  border: 1px solid var(--line2);
+  border-radius: 6px;
+  padding: 8px;
+}

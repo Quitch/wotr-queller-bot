@@ -1,0 +1,37 @@
+/* element defaults and the page wrapper */
+* {
+  box-sizing: border-box;
+}
+html {
+  font-size: 15px;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-body);
+  line-height: 1.5;
+  padding-block: 0 32px;
+  padding-inline: 16px;
+}
+h1,
+h2,
+h3,
+h4 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  margin: 0;
+  text-wrap: balance;
+}
+button {
+  font: inherit;
+  color: inherit;
+}
+a {
+  color: var(--accent);
+}
+.wrap {
+  max-width: 1280px;
+  margin: 0 auto;
+}

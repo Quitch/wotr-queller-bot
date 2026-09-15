@@ -1,7 +1,10 @@
 // ===== Modals: glossary, flowcharts (SVG), rules, calculator, save/load, settings, jump-to =====
 import * as engine from "./qb.js";
-import { FLOW, NODE, NODE_KIND, EDGE } from "./flow.js";
-import { GLOSSARY, RULES, RULINGS, TURN } from "./ref.js";
+import { FLOW, NODE, NODE_KIND, EDGE } from "./flow/index.js";
+import { GLOSSARY } from "./ref/glossary.js";
+import { RULES } from "./ref/rules.js";
+import { RULINGS } from "./ref/rulings.js";
+import { TURN } from "./ref/turn.js";
 import * as debug from "./debug.js";
 // ui.js imports this module back (renderModal, closeModal, loadHTML, wireLoad). MODAL_CONTENT and MODAL_WIRERS below read MODAL
 // while this module evaluates, so ui.js must have finished first: main.js imports this module before ui.js (see the note there).

@@ -1,0 +1,37 @@
+/* motion, touch and screen-reader helpers */
+@media (prefers-reduced-motion: no-preference) {
+  .prompt {
+    animation: pop 0.18s ease-out;
+  }
+}
+/* touch: bigger inline term hit area, no iOS focus-zoom on form controls */
+@media (pointer: coarse) {
+  .term {
+    padding-block: 8px;
+    margin-block: -8px;
+    border-bottom: none;
+    text-decoration: underline dotted;
+    text-underline-offset: 2px;
+  }
+  select,
+  input[type="number"],
+  input[type="text"],
+  textarea,
+  .tracker select {
+    font-size: 16px;
+  }
+}
+@keyframes pop {
+  from {
+    transform: translateY(4px);
+    opacity: 0.6;
+  }
+  to {
+    transform: none;
+    opacity: 1;
+  }
+}
+.sr {
+  position: absolute;
+  left: -9999px;
+}

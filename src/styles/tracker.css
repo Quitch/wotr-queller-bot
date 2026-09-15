@@ -1,0 +1,102 @@
+/* the board tracker rows (shared by the battle form and the calculator) */
+.tracker {
+  display: flex;
+  flex-direction: column;
+  font-size: 0.88rem;
+}
+.tracker h3 {
+  font-family: var(--font-body);
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 14px 0 2px;
+  border-bottom: 1px solid var(--line2);
+  padding-bottom: 4px;
+  font-weight: 600;
+}
+.tracker h3:first-child {
+  margin-top: 0;
+}
+.tracker .row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  column-gap: 12px;
+  align-items: center;
+  min-height: 44px;
+  border-bottom: 1px dotted var(--line);
+}
+.tracker .row:last-child {
+  border-bottom: none;
+}
+.tracker .row > label,
+.tracker .row > span:first-child {
+  padding-block: 6px;
+  line-height: 1.3;
+}
+.tracker .row > label {
+  cursor: pointer;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  align-self: stretch;
+}
+.tracker label.row {
+  cursor: pointer;
+}
+.tracker label.row > span:first-child {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+}
+.tracker .row > input[type="checkbox"],
+.tracker .row > select,
+.tracker .row > .stepper,
+.tracker .row > b,
+.tracker .row > .btn {
+  justify-self: end;
+}
+.tracker .row > input[type="checkbox"] {
+  margin: 0 11px 0 0;
+}
+.tracker select {
+  width: 118px;
+  font: inherit;
+  padding: 2px 6px;
+  border: 1px solid var(--line2);
+  border-radius: 5px;
+  background: var(--surface2);
+  color: var(--ink);
+}
+.tracker .situ .row > span {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  width: 118px;
+  justify-content: space-between;
+}
+.stepper button {
+  width: 44px;
+  height: 44px;
+  border-radius: 5px;
+  border: 1px solid var(--line2);
+  background: var(--surface2);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  font-size: 1.1rem;
+}
+.stepper .n {
+  min-width: 26px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+abbr[title] {
+  text-decoration: underline dotted;
+  cursor: help;
+}

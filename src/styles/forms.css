@@ -1,0 +1,30 @@
+/* save slots and the battle form */
+.slot {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 6px 0;
+  border-top: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+.slot .t {
+  flex: 1;
+}
+.bform.tracker {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  column-gap: 28px;
+  font-size: 0.88rem;
+  margin-bottom: 14px;
+}
+.bform .full {
+  grid-column: 1/-1;
+}
+.bform .row:last-child {
+  border-bottom: 1px dotted var(--line);
+}
+@media (width <=700px) {
+  .bform.tracker {
+    grid-template-columns: 1fr;
+  }
+}

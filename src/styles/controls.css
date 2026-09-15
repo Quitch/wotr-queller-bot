@@ -1,0 +1,102 @@
+/* buttons, focus, the skip link and touch-sized form controls */
+.btn {
+  border: 1px solid var(--line2);
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1.2;
+}
+.btn:hover {
+  border-color: var(--ink);
+}
+*:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.skip {
+  position: absolute;
+  left: -9999px;
+  top: 8px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  padding: 12px 16px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 6px;
+  z-index: 70;
+}
+.skip:focus {
+  left: 16px;
+}
+input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  margin: 3px;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+}
+select {
+  min-height: 44px;
+}
+.answers .btn,
+.phasebar .btn:not(.small),
+.tools .btn,
+.modal header .btn,
+#start,
+#loadBtn,
+#debugBtn,
+#jumpGo,
+#loadTxtBtn,
+#dlBtn,
+#copyBtn,
+#dbgOpen,
+#dbgDl,
+#dbgCopy,
+#calcClear {
+  min-height: 44px;
+  min-width: 44px;
+}
+#newGameBtn {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.askctl {
+  min-height: 44px;
+  min-width: 180px;
+  font: inherit;
+  padding: 4px 8px;
+  border: 1px solid var(--line2);
+  border-radius: 5px;
+  background: var(--surface2);
+  color: var(--ink);
+  margin-top: 4px;
+}
+.btn.primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  border-color: var(--accent);
+  font-weight: 600;
+}
+.btn.ghost {
+  background: transparent;
+}
+.btn.small {
+  padding: 3px 12px;
+  font-size: 0.8rem;
+  min-height: 44px;
+  min-width: 44px;
+}
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn.yes {
+  border-color: var(--ok);
+}
+.btn.no {
+  border-color: var(--bad);
+}

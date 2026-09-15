@@ -1,0 +1,19 @@
+/* log */
+.log {
+  font-family: var(--font-mono);
+  font-size: 0.76rem;
+  max-height: 220px;
+  overflow: auto;
+  margin: 0;
+  padding: 8px 10px;
+  background: var(--surface2);
+  border-radius: 8px;
+  list-style: none;
+  color: var(--muted);
+}
+.log li {
+  padding: 1px 0;
+}
+.log li.c {
+  color: var(--ink);
+}

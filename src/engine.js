@@ -1,5 +1,5 @@
 // ===== Queller Runner engine: state, dice, cards, playability =====
-import { CARDS } from "./cards.js";
+import { CARDS } from "./cards/index.js";
 
 const cardById = {};
 // Initiative as a number: "3-5" counts as 4, no initiative as 0.

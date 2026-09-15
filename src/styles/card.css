@@ -1,0 +1,53 @@
+/* a card face */
+.card {
+  border: 1px solid var(--line2);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+  color: var(--ink);
+  margin: 6px 0 12px;
+  font-size: 0.88rem;
+  max-width: 520px;
+}
+.card .ct {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.card .ct b {
+  font-family: var(--font-display);
+  font-size: 1rem;
+}
+.card .tag {
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.card .cond {
+  font-weight: 600;
+  margin: 4px 0;
+}
+.card p {
+  margin: 0;
+}
+.card p + p {
+  margin-top: 1.5em;
+}
+.card .combat {
+  border-top: 1px dashed var(--line2);
+  margin-top: 8px;
+  padding-top: 6px;
+}
+.card .combat.only {
+  border-top: none;
+  margin-top: 4px;
+  padding-top: 0;
+}
+.card .halfnote {
+  display: block;
+  margin-top: 8px;
+  text-align: right;
+}

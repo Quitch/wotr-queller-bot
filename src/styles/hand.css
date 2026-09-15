@@ -1,0 +1,56 @@
+/* the cards panel: hand, decks, table */
+.hand {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.hand ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: contents;
+}
+.back {
+  width: 34px;
+  height: 48px;
+  border-radius: 5px;
+  background: linear-gradient(135deg, #4b1f1b, #2a1210);
+  border: 1px solid #7a3b34;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #f6e3c4;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.back.s {
+  background: linear-gradient(135deg, #1e2a44, #10182a);
+  border-color: #3c5182;
+  color: #dce6fa;
+}
+.back.f {
+  background: linear-gradient(135deg, #3f3a1a, #221f0e);
+  border-color: #7a6f2a;
+  color: #f3eab8;
+}
+.tablecards {
+  font-size: 0.85rem;
+}
+.tablecards .tc {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 4px 0;
+  border-top: 1px dotted var(--line);
+  flex-wrap: wrap;
+}
+.tablecards .tc b {
+  flex: 1;
+}
+.tablecards .rem {
+  flex-basis: 100%;
+  font-size: 0.78rem;
+  margin: 2px 0 4px;
+}

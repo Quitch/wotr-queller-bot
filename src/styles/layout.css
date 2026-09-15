@@ -1,0 +1,72 @@
+/* the game screen's grid and panels */
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 20px;
+  padding-top: 18px;
+}
+.grid main > section + section {
+  margin-top: 14px;
+}
+@media (width <=900px) {
+  .grid {
+    grid-template-columns: 1fr;
+  }
+}
+.toprow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding-top: 18px;
+}
+.toprow > section:only-child {
+  grid-column: 1/-1;
+}
+@media (width <=900px) {
+  .toprow {
+    grid-template-columns: 1fr;
+  }
+}
+.toprow + .grid {
+  padding-top: 20px;
+}
+.grid.nowalk {
+  grid-template-columns: 1fr;
+}
+.grid.nowalk .side {
+  flex-flow: row wrap;
+  align-items: flex-start;
+}
+.grid.nowalk .side > section {
+  flex: 1 1 300px;
+  max-width: 520px;
+}
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+}
+.panel h2.ph {
+  font-size: 0.8rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.panel h2.ph .r {
+  margin-left: auto;
+  font-family: var(--font-body);
+  letter-spacing: 0;
+  text-transform: none;
+  font-weight: 400;
+}
+.side {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}

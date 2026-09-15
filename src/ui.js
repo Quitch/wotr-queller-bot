@@ -1,7 +1,7 @@
 // ===== UI =====
 import * as engine from "./qb.js";
-import { FLOW, NODE, NODE_KIND } from "./flow.js";
-import { GLOSSARY, GLOSSARY_ALIASES } from "./ref.js";
+import { FLOW, NODE, NODE_KIND } from "./flow/index.js";
+import { GLOSSARY, GLOSSARY_ALIASES } from "./ref/glossary.js";
 import * as debug from "./debug.js";
 import { renderModal, closeModal, loadHTML, wireLoad } from "./modals.js";
 

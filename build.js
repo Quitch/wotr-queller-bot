@@ -27,7 +27,7 @@ async function bundle(entry, options) {
 }
 // The whole page: fonts, the stylesheet, the app root, then the script with the build time defined into it.
 async function buildPage(builtAt) {
-  const css = await bundle("src/styles.css");
+  const css = await bundle("src/styles/index.css");
   const js = await bundle("src/main.js", {
     format: "iife",
     define: { QB_BUILT: JSON.stringify(builtAt) }, // shown in the debug log

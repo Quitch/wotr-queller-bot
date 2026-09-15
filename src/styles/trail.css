@@ -1,0 +1,72 @@
+/* trail */
+.trail {
+  font-size: 0.85rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+  max-height: 280px;
+  overflow: auto;
+}
+.trail li {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0;
+  align-items: flex-start;
+  border-bottom: 1px dotted var(--line);
+}
+.trail .k {
+  flex: 0 0 66px;
+  font-size: 0.68rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding-top: 3px;
+}
+.trail .a {
+  margin-left: auto;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.trail .why {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.trail li.auto .txt {
+  color: var(--muted);
+}
+.trail li.t-skip .a {
+  color: var(--warn);
+}
+.trail li.t-jump .txt,
+.trail li.t-ret .txt,
+.trail li.t-back .txt {
+  font-style: italic;
+}
+.trail li.t-end {
+  border-bottom: none;
+  font-weight: 600;
+}
+details summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 8px 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+}
+.more {
+  margin-top: 12px;
+  border-top: 1px dotted var(--line);
+  padding-top: 8px;
+}
+.more .mlbl {
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+  margin-bottom: 6px;
+}

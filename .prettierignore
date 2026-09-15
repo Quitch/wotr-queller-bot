@@ -1,4 +1,4 @@
 node_modules/
 index.html
-src/anchors.json
+src/flow/anchors.json
 package-lock.json
