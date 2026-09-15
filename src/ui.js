@@ -25,12 +25,37 @@
     modal = null,
     shownCard = null;
   const find = (selector) => document.querySelector(selector);
+  const HTML_ESCAPES = {
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+  };
   const escapeHTML = (text) =>
-    String(text).replace(
-      /[&<>"]/g,
-      (character) =>
-        ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character],
-    );
+    String(text).replace(/[&<>"]/g, (character) => HTML_ESCAPES[character]);
+  // *term* in card and flowchart text: a glossary term (or plain italics).
+  const MARKUP_TERM = /\*([^*]+)\*/g;
+  // The modals modals.js renders (the `name` passed to openModal).
+  const MODAL = {
+    GLOSSARY: "glossary",
+    FLOW: "flow",
+    RULES: "rules",
+    CALC: "calc",
+    SAVE: "save",
+    SETTINGS: "settings",
+    JUMP: "jump",
+    HELP: "help",
+    DEBUG: "debug",
+    ASK: "ask",
+  };
+  const UNDO_DEPTH = 60; // snapshots kept for Undo
+  const LOG_ROWS_SHOWN = 40;
+  const TOOLTIP = {
+    MAX_WIDTH: 360,
+    VIEWPORT_MARGIN: 12,
+    EDGE_MARGIN: 8,
+    GAP: 8,
+  };
   function termKey(term) {
     term = term.toLowerCase().replace(/\s+/g, " ").trim();
     if (GLOSSARY[term]) return term;
@@ -44,7 +69,7 @@
   function formatText(text) {
     if (text == null) return "";
     return escapeHTML(text)
-      .replace(/\*([^*]+)\*/g, (match, term) => {
+      .replace(MARKUP_TERM, (match, term) => {
         const key = termKey(term);
         return key
           ? '<button type="button" class="term" data-term="' +
@@ -83,7 +108,7 @@
   }
   function snapshot() {
     history.push(JSON.stringify(state));
-    if (history.length > 60) history.shift();
+    if (history.length > UNDO_DEPTH) history.shift();
   }
   function commit() {
     if (state) state.appVersion = engine.VERSION;
@@ -202,7 +227,7 @@
       const term = event.target.closest(".term");
       if (term) {
         hideTip();
-        openModal("glossary", term.dataset.term);
+        openModal(MODAL.GLOSSARY, term.dataset.term);
       }
     });
     document.addEventListener("keydown", (event) => {
@@ -261,7 +286,7 @@
         : ".") +
       " Please export a debug log and send it with a description of what you were doing.</span>" +
       '<span class="eb"><button type="button" class="btn small" id="errbarLog">Export debug log</button><button type="button" class="btn small ghost" id="errbarClose" aria-label="Dismiss this message">Dismiss</button></span></div>';
-    document.getElementById("errbarLog").onclick = () => openModal("debug");
+    document.getElementById("errbarLog").onclick = () => openModal(MODAL.DEBUG);
     document.getElementById("errbarClose").onclick = () => bar.remove();
   }
   let tipEl = null;
@@ -272,18 +297,25 @@
       "<b>" +
       escapeHTML(key) +
       "</b>" +
-      escapeHTML(GLOSSARY[key]).replace(/\*([^*]+)\*/g, "<i>$1</i>");
+      escapeHTML(GLOSSARY[key]).replace(MARKUP_TERM, "<i>$1</i>");
     const rect = term.getBoundingClientRect();
-    const width = Math.min(360, window.innerWidth - 24);
+    const width = Math.min(
+      TOOLTIP.MAX_WIDTH,
+      window.innerWidth - 2 * TOOLTIP.VIEWPORT_MARGIN,
+    );
     tipEl.style.maxWidth = width + "px";
-    let x = Math.min(rect.left, window.innerWidth - width - 12),
-      y = rect.bottom + 8;
-    tipEl.style.left = Math.max(8, x) + "px";
+    let x = Math.min(
+        rect.left,
+        window.innerWidth - width - TOOLTIP.VIEWPORT_MARGIN,
+      ),
+      y = rect.bottom + TOOLTIP.GAP;
+    tipEl.style.left = Math.max(TOOLTIP.EDGE_MARGIN, x) + "px";
     tipEl.style.top = y + "px";
     tipEl.hidden = false;
     const height = tipEl.offsetHeight;
-    if (y + height > window.innerHeight - 8)
-      tipEl.style.top = Math.max(8, rect.top - height - 8) + "px";
+    if (y + height > window.innerHeight - TOOLTIP.EDGE_MARGIN)
+      tipEl.style.top =
+        Math.max(TOOLTIP.EDGE_MARGIN, rect.top - height - TOOLTIP.GAP) + "px";
   }
   function hideTip() {
     if (tipEl) tipEl.hidden = true;
@@ -491,19 +523,33 @@
       area.innerHTML = loadHTML();
       wireLoad(area);
     };
-    find("#debugBtn").onclick = () => openModal("debug");
+    find("#debugBtn").onclick = () => openModal(MODAL.DEBUG);
   }
+  const PHASE_LABEL = {
+    [PHASE.SETUP]: "Setup",
+    [PHASE.P1]: "Phase 1",
+    [PHASE.P2]: "Phase 2",
+    [PHASE.P3]: "Phase 3",
+    [PHASE.P4]: "Phase 4",
+    [PHASE.P5]: "Phase 5",
+    [PHASE.P6]: "Phase 6",
+  };
+  // The phase a walk's end point names ("Phase 5" → p5).
+  const PHASE_BY_LABEL = Object.fromEntries(
+    Object.entries(PHASE_LABEL).map(([phase, label]) => [label, phase]),
+  );
+  // The header's tool buttons: [modal, label, extra class].
+  const TOOL_BUTTONS = [
+    [MODAL.SAVE, "Save / Load"],
+    [MODAL.GLOSSARY, "Glossary"],
+    [MODAL.FLOW, "Flowcharts"],
+    [MODAL.RULES, "Rules"],
+    [MODAL.CALC, "Army value"],
+    [MODAL.HELP, "Help"],
+    [MODAL.SETTINGS, "Settings", "ghost"],
+  ];
   function headerHTML() {
-    const phaseLabel =
-      {
-        setup: "Setup",
-        p1: "Phase 1",
-        p2: "Phase 2",
-        p3: "Phase 3",
-        p4: "Phase 4",
-        p5: "Phase 5",
-        p6: "Phase 6",
-      }[state.phase] || state.phase;
+    const phaseLabel = PHASE_LABEL[state.phase] || state.phase;
     return (
       '<header class="top"><div class="brand"><h1>Queller Bot Runner</h1><span class="sub">Shadow player</span></div>' +
       '<div class="status"><span class="chip">Turn <b>' +
@@ -525,7 +571,18 @@
       "</div>" +
       '<nav class="tools" aria-label="Tools"><button class="btn" id="undoBtn" ' +
       (history.length ? "" : "disabled") +
-      ' title="Undo the last action">Undo</button><button class="btn" data-modal="save">Save / Load</button><button class="btn" data-modal="glossary">Glossary</button><button class="btn" data-modal="flow">Flowcharts</button><button class="btn" data-modal="rules">Rules</button><button class="btn" data-modal="calc">Army value</button><button class="btn" data-modal="help">Help</button><button class="btn ghost" data-modal="settings">Settings</button><button class="btn ghost" id="newGameBtn">New game</button></nav></header>'
+      ' title="Undo the last action">Undo</button>' +
+      TOOL_BUTTONS.map(
+        ([modalName, label, extraClass]) =>
+          '<button class="btn' +
+          (extraClass ? " " + extraClass : "") +
+          '" data-modal="' +
+          modalName +
+          '">' +
+          label +
+          "</button>",
+      ).join("") +
+      '<button class="btn ghost" id="newGameBtn">New game</button></nav></header>'
     );
   }
   const capitalize = (text) =>
@@ -1182,7 +1239,7 @@
     );
   }
   function logHTML() {
-    const items = state.log.slice(-40).reverse();
+    const items = state.log.slice(-LOG_ROWS_SHOWN).reverse();
     return (
       '<div class="panel" style="margin-top:14px"><h2 class="ph">Log <span class="r">' +
       state.log.length +
@@ -1289,6 +1346,13 @@
           "</button></li>"
       : '<li class="' + cls + '" title="' + title + '">' + inner + "</li>";
   }
+  // Table cards that matter at a Hunt roll, and what to do with them.
+  const HUNT_ROLL_ADVICE = {
+    [CARD.FLOCKS_OF_CREBAIN]:
+      "Flocks of Crebain on the table — discard it before the roll for +1 to every Hunt die",
+    [CARD.BALROG]:
+      "Balrog of Moria on the table — discard it for an extra Hunt tile when the Fellowship moves into, out of or through Moria while declared or revealed",
+  };
   function diceHTML() {
     const dice = state.dice,
       available = engine.availableDice(state);
@@ -1340,19 +1404,11 @@
         ? "<span>Rings held: <b>" + state.board.rings + "</b></span>"
         : "") +
       "</div>";
-    const huntCards = state.cards.table.filter(
-      (id) => id === CARD.BALROG || id === CARD.FLOCKS_OF_CREBAIN,
-    );
+    const huntCards = state.cards.table.filter((id) => HUNT_ROLL_ADVICE[id]);
     if (huntCards.length)
       html +=
         '<div class="notice" style="margin-top:8px">At a Hunt roll: ' +
-        huntCards
-          .map((id) =>
-            id === CARD.FLOCKS_OF_CREBAIN
-              ? "Flocks of Crebain on the table — discard it before the roll for +1 to every Hunt die"
-              : "Balrog of Moria on the table — discard it for an extra Hunt tile when the Fellowship moves into, out of or through Moria while declared or revealed",
-          )
-          .join("; ") +
+        huntCards.map((id) => HUNT_ROLL_ADVICE[id]).join("; ") +
         ".</div>";
     return html + "</section>";
   }
@@ -1649,6 +1705,7 @@
     "fs.companions": [0, 7],
     nazgul: [0, 8],
   };
+  const DEFAULT_STEP_LIMIT = [0, 99];
   // A tracker change: apply it, forget cached card checks it may affect, and discard table cards whose condition it triggers (asking when the app cannot tell).
   function trackerChange(path, value) {
     let asks = [];
@@ -1702,7 +1759,9 @@
           (button.onclick = () =>
             openModal(
               button.dataset.modal,
-              button.dataset.modal === "flow" ? { current: true } : undefined,
+              button.dataset.modal === MODAL.FLOW
+                ? { current: true }
+                : undefined,
             )),
       );
     document
@@ -1732,7 +1791,10 @@
           const input = find("#bf-nazLead");
           const value = Math.max(
             0,
-            Math.min(8, (+input.value || 0) + +button.dataset.d),
+            Math.min(
+              STEP_LIMITS.nazgul[1],
+              (+input.value || 0) + +button.dataset.d,
+            ),
           );
           input.value = value;
           find("#bf-nazLead-n").textContent = value;
@@ -1776,7 +1838,7 @@
       (button) =>
         (button.onclick = () => {
           const path = button.dataset.step;
-          const limits = STEP_LIMITS[path] || [0, 99];
+          const limits = STEP_LIMITS[path] || DEFAULT_STEP_LIMIT;
           trackerChange(
             path,
             Math.min(
@@ -1864,14 +1926,8 @@
     if (result === WALK_RESULT.STRATEGY) {
       state.phase = PHASE.P1;
     } else if (phaseFromResult(result)) {
-      const name = phaseFromResult(result);
-      const map = {
-        "Phase 2": PHASE.P2,
-        "Phase 3": PHASE.P3,
-        "Phase 4": PHASE.P4,
-        "Phase 5": PHASE.P5,
-      };
-      if (map[name]) state.phase = map[name];
+      const phase = PHASE_BY_LABEL[phaseFromResult(result)];
+      if (phase) state.phase = phase;
     }
   }
   function onPhase(id) {
@@ -1906,7 +1962,7 @@
           return;
         }
         if (id === PHASE_ACTION.JUMP_TO) {
-          openModal("jump");
+          openModal(MODAL.JUMP);
           return;
         }
         if (id === PHASE.SETUP) {
@@ -1975,6 +2031,9 @@
     cardHTML,
     CARD_HALF,
     NODE_KIND_NAME,
+    MODAL,
+    UNDO_DEPTH,
+    MARKUP_TERM,
     checkboxRowHTML,
     numberRowHTML,
     openModal,
@@ -1991,11 +2050,11 @@
   };
   function openModal(name, arg) {
     modal = { name, arg };
-    if (name !== "ask") debug.action({ a: "modal", name }, state);
+    if (name !== MODAL.ASK) debug.action({ a: "modal", name }, state);
     window.QBUI.renderModal();
   }
   function ask(spec) {
-    openModal("ask", spec);
+    openModal(MODAL.ASK, spec);
   }
   function askNewGame() {
     ask({

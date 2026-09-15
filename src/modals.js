@@ -9,7 +9,11 @@
     GLOSSARY = window.QB_GLOSSARY,
     debug = window.QB_DEBUG;
   const esc = ui.escapeHTML,
-    fmt = ui.formatText;
+    fmt = ui.formatText,
+    MODAL = ui.MODAL,
+    { PHASE } = engine;
+  const DEFAULT_FLOW_PAGE = "C14";
+  const ASK_NUMBER_MAX = 20;
   const CALC_DEFAULTS = {
     reg: 0,
     elite: 0,
@@ -19,7 +23,7 @@
     strong: false,
     sortie: false,
   };
-  let flowPage = "C14",
+  let flowPage = DEFAULT_FLOW_PAGE,
     calc = { ...CALC_DEFAULTS };
 
   let opener = null,
@@ -36,7 +40,7 @@
     el.id = "modal";
     const [title, body, narrow] = modalContent(modal);
     const headerButtons =
-      modal.name === "calc"
+      modal.name === MODAL.CALC
         ? '<button type="button" class="btn" id="calcClear">Clear</button>'
         : "";
     el.innerHTML =
@@ -82,7 +86,7 @@
       region.setAttribute("aria-label", title + " content");
     });
     wireModal(modal);
-    if (modal.name === "glossary" && modal.arg) {
+    if (modal.name === MODAL.GLOSSARY && modal.arg) {
       const term = el.querySelector('[data-gl="' + modal.arg + '"]');
       if (term) {
         term.scrollIntoView({ block: "start" });
@@ -103,7 +107,7 @@
   };
   function modalContent(modal) {
     switch (modal.name) {
-      case "glossary":
+      case MODAL.GLOSSARY:
         return [
           "Glossary of terms",
           '<div class="body"><p class="notice">Words in italics on the flowcharts are defined here. Hover a term anywhere in the app for its definition; click it to open this list.</p><dl class="gl">' +
@@ -122,9 +126,9 @@
             "</dl></div>",
           true,
         ];
-      case "rules":
+      case MODAL.RULES:
         return ["General rules", rulesHTML(), true];
-      case "flow":
+      case MODAL.FLOW:
         if (modal.arg?.current) {
           flowPage = currentPage();
           modal.arg = null;
@@ -159,19 +163,19 @@
             "</div>",
           false,
         ];
-      case "calc":
+      case MODAL.CALC:
         return ["Army value calculator", calcHTML(), true];
-      case "save":
+      case MODAL.SAVE:
         return ["Save and load", saveHTML(), true];
-      case "settings":
+      case MODAL.SETTINGS:
         return ["Settings", settingsHTML(), true];
-      case "jump":
+      case MODAL.JUMP:
         return ["Walk from another start point", jumpHTML(), true];
-      case "help":
+      case MODAL.HELP:
         return ["Help", helpHTML(), true];
-      case "debug":
+      case MODAL.DEBUG:
         return ["Debug log", debugHTML(), true];
-      case "ask": {
+      case MODAL.ASK: {
         const spec = modal.arg;
         let input = "";
         if (spec.input === "select")
@@ -190,7 +194,9 @@
           input =
             '<p><label for="askInput">' +
             esc(spec.inputLabel) +
-            '</label><br><input id="askInput" class="askctl" type="number" min="0" max="20" value="' +
+            '</label><br><input id="askInput" class="askctl" type="number" min="0" max="' +
+            ASK_NUMBER_MAX +
+            '" value="' +
             (spec.value || 1) +
             '"></p>';
         return [
@@ -219,15 +225,15 @@
     }
     return ["", ""];
   }
+  // The page the flowchart viewer opens on: the walk's page, else the strategy's page for the current phase.
   function currentPage() {
     const state = ui.state;
-    if (!state) return "C14";
+    if (!state) return DEFAULT_FLOW_PAGE;
     if (state.walk && !state.walk.done && FLOW[state.walk.page])
       return state.walk.page;
-    const strategyPrefix = state.strategy === "military" ? "M" : "C";
-    return state.phase === "p5" || state.phase === "p6"
-      ? strategyPrefix + "5"
-      : strategyPrefix + "14";
+    return state.phase === PHASE.P5 || state.phase === PHASE.P6
+      ? engine.phase5Page(state)
+      : engine.phasePage(state);
   }
   function helpHTML() {
     return (
@@ -236,7 +242,9 @@
       "<h4>A turn</h4><p>The buttons at the top of the walkthrough are the green start points of the flowcharts, in turn order: Phase 1 (dice and cards), Phase 2 (strategy check, corruption strategy only), Phase 3 (Hunt box), Phase 4 (roll), then \u201cPhase 5\u201d each time Queller is eligible to act. When a battle starts, use \u201cBattle\u201d for the first round; the button becomes \u201cBattle (next round)\u201d while the battle continues. \u201cPhase 6\u201d is the victory check; the next turn then begins at Phase 1.</p>" +
       "<h4>Answering</h4><p>Each step is coloured like the paper flowchart and named in the line above it: a decision asks a question, an action tells you what Queller does (press Done, or Not possible if the game rules prevent it), a step is something to do before continuing. Italic terms show their definition when you hover or focus them; press Enter to open the glossary at that term.</p>" +
       "<h4>The board tracker</h4><p>Keep it up to date: it answers questions about the Fellowship, minions, nations and factions for you, and decides which of Queller\u2019s cards can be played without showing you the rest of the hand. Card checks it asks you about are remembered for the turn; press Forget if the board has changed.</p>" +
-      "<h4>Mistakes</h4><p>Undo reverses your last action (up to 60 steps). The game is saved automatically in this browser; Save / Load keeps named copies or moves a game to another device.</p>" +
+      "<h4>Mistakes</h4><p>Undo reverses your last action (up to " +
+      ui.UNDO_DEPTH +
+      " steps). The game is saved automatically in this browser; Save / Load keeps named copies or moves a game to another device.</p>" +
       "<h4>Reporting a bug</h4><p>If the app itself goes wrong — a step that makes no sense, a card or die handled wrongly, a button that does nothing — open Settings and press Export debug log. The log holds the game state, the last actions you took and any errors; send it with a short description of what you expected. It also shows Queller’s hidden cards, so only read it if you do not mind seeing them.</p>" +
       "<h4>Abbreviations</h4><p>WoME: Warriors of Middle-earth. VP: victory points. FP: Free Peoples.</p></div></div>"
     );
@@ -289,6 +297,30 @@
     return html;
   }
   // ---------- flowchart SVG ----------
+  const SVG_COLOUR = {
+    ARROW: "#333",
+    LABEL_TEXT: "#333",
+    HATCH: "#999",
+    GROUP_STROKE: "#999",
+    BACKGROUND: "#fff",
+    LABEL_BACKGROUND: "#fff",
+    VISITED_SHADE: "#3a332c",
+    CURRENT_OUTLINE: "#8A2A22",
+    RING: "#7E2419",
+    RING_BACKGROUND: "#fff",
+    TEXT: "#1d1a17",
+    GROUP_TEXT: "#555",
+  };
+  const FLOW_GEOMETRY = {
+    PAGE_MARGIN: 20, // space kept right of and below the last box
+    JOG: 20, // how far an arrow steps out of a box before turning
+    ON_EDGE_TOLERANCE: 0.5, // an anchor this close to a box edge is on it
+    STRAIGHT_TOLERANCE: 1, // two points this close are joined by a straight line
+    SIDE_INSET_X: 8, // arrows meet a box at least this far from its left/right corners
+    SIDE_INSET_Y: 6, // and this far from its top/bottom corners
+    LABEL_CHAR_WIDTH: 5.6, // the label background's width per character
+    LABEL_PAD: 8,
+  };
   const NODE_STYLE = {
     [NODE_KIND.START]: { fill: "#d5e8d4", stroke: "#82b366" },
     [NODE_KIND.ACTION]: { fill: "#f8cecc", stroke: "#b85450" },
@@ -330,10 +362,16 @@
       '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Flowchart: ' +
       esc(page.name) +
       '. Use Show as text for a readable version." viewBox="0 0 ' +
-      (maxX + 20) +
+      (maxX + FLOW_GEOMETRY.PAGE_MARGIN) +
       " " +
-      (maxY + 20) +
-      '" width="100%" style="font-family:Helvetica,Arial,sans-serif;font-size:11px"><defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#333"/></marker><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#999" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="#fff"/>';
+      (maxY + FLOW_GEOMETRY.PAGE_MARGIN) +
+      '" width="100%" style="font-family:Helvetica,Arial,sans-serif;font-size:11px"><defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="' +
+      SVG_COLOUR.ARROW +
+      '"/></marker><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="' +
+      SVG_COLOUR.HATCH +
+      '" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="' +
+      SVG_COLOUR.BACKGROUND +
+      '"/>';
     // edges first, so the boxes are drawn over them
     let labels = "";
     for (const edge of page.edges) {
@@ -350,11 +388,15 @@
       svg +=
         '<polyline points="' +
         points.map((point) => point.join(",")).join(" ") +
-        '" fill="none" stroke="#333" stroke-width="1.2" marker-end="url(#arr)"/>';
+        '" fill="none" stroke="' +
+        SVG_COLOUR.ARROW +
+        '" stroke-width="1.2" marker-end="url(#arr)"/>';
       const label = EDGE.label(edge);
       if (label && !EDGE.hidesLabel(edge)) {
         const [labelX, labelY] = midpoint(points);
-        const labelWidth = label.length * 5.6 + 8;
+        const labelWidth =
+          label.length * FLOW_GEOMETRY.LABEL_CHAR_WIDTH +
+          FLOW_GEOMETRY.LABEL_PAD;
         labels +=
           '<rect x="' +
           (labelX - labelWidth / 2) +
@@ -362,11 +404,15 @@
           (labelY - 7) +
           '" width="' +
           labelWidth +
-          '" height="13" rx="2" fill="#fff"/><text x="' +
+          '" height="13" rx="2" fill="' +
+          SVG_COLOUR.LABEL_BACKGROUND +
+          '"/><text x="' +
           labelX +
           '" y="' +
           (labelY + 3) +
-          '" text-anchor="middle" font-size="10" fill="#333">' +
+          '" text-anchor="middle" font-size="10" fill="' +
+          SVG_COLOUR.LABEL_TEXT +
+          '">' +
           esc(label) +
           "</text>";
       }
@@ -409,7 +455,9 @@
             width +
             '" height="' +
             height +
-            '" rx="8" fill="none" stroke="#999" stroke-dasharray="4 3"/>';
+            '" rx="8" fill="none" stroke="' +
+            SVG_COLOUR.GROUP_STROKE +
+            '" stroke-dasharray="4 3"/>';
       } else if (kind === NODE_KIND.JUMP)
         shape =
           '<rect x="' +
@@ -459,7 +507,10 @@
           stroke +
           '"/>';
       if (wasVisited && !isCurrent && kind !== NODE_KIND.NOTE) {
-        const shade = 'fill="#3a332c" fill-opacity=".22" stroke="none"';
+        const shade =
+          'fill="' +
+          SVG_COLOUR.VISITED_SHADE +
+          '" fill-opacity=".22" stroke="none"';
         const rx = kind === NODE_KIND.STEP || kind === NODE_KIND.JUMP ? 0 : 8;
         shape +=
           kind === NODE_KIND.START || kind === NODE_KIND.ACTION
@@ -498,7 +549,9 @@
           (width + 10) +
           '" height="' +
           (height + 10) +
-          '" rx="12" fill="none" stroke="#8A2A22" stroke-width="3"/>';
+          '" rx="12" fill="none" stroke="' +
+          SVG_COLOUR.CURRENT_OUTLINE +
+          '" stroke-width="3"/>';
       let inner;
       const bold = nodeExtra?.bold;
       const pad = kind === NODE_KIND.NOTE ? 0 : 4;
@@ -515,7 +568,9 @@
         (height - 2 * pad + extraHeight) +
         '"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;display:flex;align-items:' +
         (nodeExtra?.items || id === "grp" ? "flex-start" : "center") +
-        ";justify-content:center;text-align:center;color:#1d1a17;line-height:1.15;font-size:11px;overflow:hidden;" +
+        ";justify-content:center;text-align:center;color:" +
+        SVG_COLOUR.TEXT +
+        ";line-height:1.15;font-size:11px;overflow:hidden;" +
         (bold ? "font-weight:700;" : "") +
         '"><div style="width:100%">' +
         label +
@@ -525,7 +580,11 @@
           (x + width - 18) +
           "," +
           (y - 8) +
-          ') scale(0.75)" style="color:#7E2419"><title>Elven Ring condition (rule 36)</title><circle cx="12" cy="13.5" r="9.5" fill="#fff"/>' +
+          ') scale(0.75)" style="color:' +
+          SVG_COLOUR.RING +
+          '"><title>Elven Ring condition (rule 36)</title><circle cx="12" cy="13.5" r="9.5" fill="' +
+          SVG_COLOUR.RING_BACKGROUND +
+          '"/>' +
           ui.RING_PATH +
           "</g>"
         : "";
@@ -535,7 +594,9 @@
           (x - 2) +
           "," +
           (y + 8) +
-          ') scale(0.85)" style="color:#7E2419"><title>Elven Ring condition (rule 36)</title>' +
+          ') scale(0.85)" style="color:' +
+          SVG_COLOUR.RING +
+          '"><title>Elven Ring condition (rule 36)</title>' +
           ui.RING_PATH +
           "</g>";
       svg += '<g data-node="' + id + '">' + shape + inner + mark + "</g>";
@@ -624,7 +685,9 @@
       );
     if (id === "grp")
       return (
-        '<div style="text-align:left;padding:5px 8px;color:#555">' +
+        '<div style="text-align:left;padding:5px 8px;color:' +
+        SVG_COLOUR.GROUP_TEXT +
+        '">' +
         esc(text) +
         "</div>"
       );
@@ -634,14 +697,14 @@
     const text = NODE.text(node),
       nodeExtra = NODE.extra(node);
     let html = esc(text)
-      .replace(/\*([^*]+)\*/g, "<i>$1</i>")
+      .replace(ui.MARKUP_TERM, "<i>$1</i>")
       .replaceAll("\n", "<br>");
     if (nodeExtra?.t2)
       html =
         "<b>" +
         html +
         "</b> or " +
-        esc(nodeExtra.t2).replace(/\*([^*]+)\*/g, "<i>$1</i>");
+        esc(nodeExtra.t2).replace(ui.MARKUP_TERM, "<i>$1</i>");
     if (nodeExtra?.items)
       html =
         '<div style="text-align:left;width:100%"><b style="display:block;text-align:center">' +
@@ -652,7 +715,7 @@
         nodeExtra.items
           .map(
             (item) =>
-              "<li>" + esc(item).replace(/\*([^*]+)\*/g, "<i>$1</i>") + "</li>",
+              "<li>" + esc(item).replace(ui.MARKUP_TERM, "<i>$1</i>") + "</li>",
           )
           .join("") +
         "</" +
@@ -696,12 +759,40 @@
       dy = py - centreY;
     if (Math.abs(dy) * width > Math.abs(dx) * height) {
       return dy > 0
-        ? [clamp(px, x + 8, x + width - 8), y + height]
-        : [clamp(px, x + 8, x + width - 8), y];
+        ? [
+            clamp(
+              px,
+              x + FLOW_GEOMETRY.SIDE_INSET_X,
+              x + width - FLOW_GEOMETRY.SIDE_INSET_X,
+            ),
+            y + height,
+          ]
+        : [
+            clamp(
+              px,
+              x + FLOW_GEOMETRY.SIDE_INSET_X,
+              x + width - FLOW_GEOMETRY.SIDE_INSET_X,
+            ),
+            y,
+          ];
     }
     return dx > 0
-      ? [x + width, clamp(py, y + 6, y + height - 6)]
-      : [x, clamp(py, y + 6, y + height - 6)];
+      ? [
+          x + width,
+          clamp(
+            py,
+            y + FLOW_GEOMETRY.SIDE_INSET_Y,
+            y + height - FLOW_GEOMETRY.SIDE_INSET_Y,
+          ),
+        ]
+      : [
+          x,
+          clamp(
+            py,
+            y + FLOW_GEOMETRY.SIDE_INSET_Y,
+            y + height - FLOW_GEOMETRY.SIDE_INSET_Y,
+          ),
+        ];
   }
   // anchor towards a draw.io waypoint: leave from the side the point lies beyond (horizontal when it is outside the box's x-range), like draw.io's orthogonal router
   function waypointAnchor(box, px, py) {
@@ -711,20 +802,25 @@
     if (outX)
       return [
         px < x ? x : x + width,
-        py >= y + 6 && py <= y + height - 6 ? py : y + height / 2,
+        py >= y + FLOW_GEOMETRY.SIDE_INSET_Y &&
+        py <= y + height - FLOW_GEOMETRY.SIDE_INSET_Y
+          ? py
+          : y + height / 2,
       ];
     if (outY)
       return [
-        px >= x + 8 && px <= x + width - 8 ? px : x + width / 2,
+        px >= x + FLOW_GEOMETRY.SIDE_INSET_X &&
+        px <= x + width - FLOW_GEOMETRY.SIDE_INSET_X
+          ? px
+          : x + width / 2,
         py < y ? y : y + height,
       ];
     return anchor(box, px, py);
   }
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
-  const JOG = 20; // how far an arrow steps out of a box before turning
   const onTopOrBottomEdge = (box, point) =>
-    Math.abs(point[1] - box.y) < 0.5 ||
-    Math.abs(point[1] - box.y - box.height) < 0.5; // an anchor there means a vertical exit/entry
+    Math.abs(point[1] - box.y) < FLOW_GEOMETRY.ON_EDGE_TOLERANCE ||
+    Math.abs(point[1] - box.y - box.height) < FLOW_GEOMETRY.ON_EDGE_TOLERANCE; // an anchor there means a vertical exit/entry
   // A point on a box from a draw.io anchor (fractions of the width and height).
   const anchorAt = (box, anchorFraction) => [
     box.x + box.width * anchorFraction[0],
@@ -745,8 +841,8 @@
   // Which way an edge leaves a box: -1 from the top (vertical) or left edge, +1 from the bottom or right.
   function exitDirection(box, point, vertical) {
     const nearStart = vertical
-      ? Math.abs(point[1] - box.y) < 0.5
-      : Math.abs(point[0] - box.x) < 0.5;
+      ? Math.abs(point[1] - box.y) < FLOW_GEOMETRY.ON_EDGE_TOLERANCE
+      : Math.abs(point[0] - box.x) < FLOW_GEOMETRY.ON_EDGE_TOLERANCE;
     return nearStart ? -1 : 1;
   }
   // A box's position and size fields along each axis.
@@ -801,8 +897,10 @@
       if (waypoints?.length) {
         for (const waypoint of waypoints) {
           if (
-            Math.abs(waypoint[0] - previous[0]) > 1 &&
-            Math.abs(waypoint[1] - previous[1]) > 1
+            Math.abs(waypoint[0] - previous[0]) >
+              FLOW_GEOMETRY.STRAIGHT_TOLERANCE &&
+            Math.abs(waypoint[1] - previous[1]) >
+              FLOW_GEOMETRY.STRAIGHT_TOLERANCE
           )
             points.push(
               exitVertical
@@ -814,10 +912,10 @@
         }
       }
       if (
-        Math.abs(end[0] - previous[0]) > 1 &&
-        Math.abs(end[1] - previous[1]) > 1
+        Math.abs(end[0] - previous[0]) > FLOW_GEOMETRY.STRAIGHT_TOLERANCE &&
+        Math.abs(end[1] - previous[1]) > FLOW_GEOMETRY.STRAIGHT_TOLERANCE
       ) {
-        const jog = JOG;
+        const jog = FLOW_GEOMETRY.JOG;
         const exitDir = exitDirection(fromBox, start, exitVertical),
           entryDir = exitDirection(toBox, end, entryVertical);
         if (
@@ -895,16 +993,17 @@
       let previous = start;
       for (const waypoint of waypoints) {
         if (
-          Math.abs(waypoint[0] - previous[0]) > 1 &&
-          Math.abs(waypoint[1] - previous[1]) > 1
+          Math.abs(waypoint[0] - previous[0]) >
+            FLOW_GEOMETRY.STRAIGHT_TOLERANCE &&
+          Math.abs(waypoint[1] - previous[1]) > FLOW_GEOMETRY.STRAIGHT_TOLERANCE
         )
           points.push([waypoint[0], previous[1]]);
         points.push(waypoint);
         previous = waypoint;
       }
       if (
-        Math.abs(end[0] - previous[0]) > 1 &&
-        Math.abs(end[1] - previous[1]) > 1
+        Math.abs(end[0] - previous[0]) > FLOW_GEOMETRY.STRAIGHT_TOLERANCE &&
+        Math.abs(end[1] - previous[1]) > FLOW_GEOMETRY.STRAIGHT_TOLERANCE
       )
         points.push([previous[0], end[1]]);
       points.push(end);
@@ -921,11 +1020,19 @@
           Math.abs(toCentre[1] - fromCentre[1]))
     ) {
       const start = [
-          clamp(toCentre[0], fromBox.x + 8, fromBox.x + fromBox.width - 8),
+          clamp(
+            toCentre[0],
+            fromBox.x + FLOW_GEOMETRY.SIDE_INSET_X,
+            fromBox.x + fromBox.width - FLOW_GEOMETRY.SIDE_INSET_X,
+          ),
           fromBox.y + fromBox.height,
         ],
         finish = [
-          clamp(fromCentre[0], toBox.x + 8, toBox.x + toBox.width - 8),
+          clamp(
+            fromCentre[0],
+            toBox.x + FLOW_GEOMETRY.SIDE_INSET_X,
+            toBox.x + toBox.width - FLOW_GEOMETRY.SIDE_INSET_X,
+          ),
           toBox.y,
         ];
       const midY = (start[1] + finish[1]) / 2;
@@ -939,11 +1046,19 @@
         Math.abs(toCentre[1] - fromCentre[1])
     ) {
       const start = [
-          clamp(toCentre[0], fromBox.x + 8, fromBox.x + fromBox.width - 8),
+          clamp(
+            toCentre[0],
+            fromBox.x + FLOW_GEOMETRY.SIDE_INSET_X,
+            fromBox.x + fromBox.width - FLOW_GEOMETRY.SIDE_INSET_X,
+          ),
           fromBox.y,
         ],
         finish = [
-          clamp(fromCentre[0], toBox.x + 8, toBox.x + toBox.width - 8),
+          clamp(
+            fromCentre[0],
+            toBox.x + FLOW_GEOMETRY.SIDE_INSET_X,
+            toBox.x + toBox.width - FLOW_GEOMETRY.SIDE_INSET_X,
+          ),
           toBox.y + toBox.height,
         ];
       const midY = (start[1] + finish[1]) / 2;
@@ -954,11 +1069,19 @@
     if (right) {
       const start = [
           fromBox.x + fromBox.width,
-          clamp(toCentre[1], fromBox.y + 6, fromBox.y + fromBox.height - 6),
+          clamp(
+            toCentre[1],
+            fromBox.y + FLOW_GEOMETRY.SIDE_INSET_Y,
+            fromBox.y + fromBox.height - FLOW_GEOMETRY.SIDE_INSET_Y,
+          ),
         ],
         finish = [
           toBox.x,
-          clamp(fromCentre[1], toBox.y + 6, toBox.y + toBox.height - 6),
+          clamp(
+            fromCentre[1],
+            toBox.y + FLOW_GEOMETRY.SIDE_INSET_Y,
+            toBox.y + toBox.height - FLOW_GEOMETRY.SIDE_INSET_Y,
+          ),
         ];
       const midX = (start[0] + finish[0]) / 2;
       return Math.abs(start[1] - finish[1]) < 1
@@ -967,11 +1090,19 @@
     }
     const start = [
         fromBox.x,
-        clamp(toCentre[1], fromBox.y + 6, fromBox.y + fromBox.height - 6),
+        clamp(
+          toCentre[1],
+          fromBox.y + FLOW_GEOMETRY.SIDE_INSET_Y,
+          fromBox.y + fromBox.height - FLOW_GEOMETRY.SIDE_INSET_Y,
+        ),
       ],
       finish = [
         toBox.x + toBox.width,
-        clamp(fromCentre[1], toBox.y + 6, toBox.y + toBox.height - 6),
+        clamp(
+          fromCentre[1],
+          toBox.y + FLOW_GEOMETRY.SIDE_INSET_Y,
+          toBox.y + toBox.height - FLOW_GEOMETRY.SIDE_INSET_Y,
+        ),
       ];
     const midX = (start[0] + finish[0]) / 2;
     return Math.abs(start[1] - finish[1]) < 1
@@ -980,6 +1111,16 @@
   }
   // ---------- calculator ----------
   const CALC_MAX = { reg: 10, elite: 10, lead: 10, cotw: 5 };
+  // The army value rules (glossary: *value*).
+  const ARMY_VALUE = {
+    ELITE_HITS: 2,
+    MAX_COMBAT_DICE: 5,
+    MAX_LEADERSHIP: 5,
+    STRONGEST_UNITS: 5, // a Stronghold defender counts the hits of its five strongest units
+    FORTIFICATION_BONUS: 1,
+    STRONGHOLD_MULTIPLIER: 1.5,
+    SORTIE_MULTIPLIER: 0.5,
+  };
   function calcHTML() {
     const number = (key, label) =>
       ui.numberRowHTML(
@@ -998,7 +1139,13 @@
     return (
       '<div class="body"><p class="notice">' +
       fmt(
-        "The *value* of an army per the glossary. Hits: 1 per Regular, 2 per Elite. Combat dice: one per Army unit, maximum 5. Leadership: maximum 5 and not more than the number of Army units.",
+        "The *value* of an army per the glossary. Hits: 1 per Regular, " +
+          ARMY_VALUE.ELITE_HITS +
+          " per Elite. Combat dice: one per Army unit, maximum " +
+          ARMY_VALUE.MAX_COMBAT_DICE +
+          ". Leadership: maximum " +
+          ARMY_VALUE.MAX_LEADERSHIP +
+          " and not more than the number of Army units.",
       ) +
       '</p><div class="calc tracker">' +
       number("reg", "Regular units") +
@@ -1011,9 +1158,11 @@
       checkbox("fort", "Defends in a Fortification or City region") +
       checkbox(
         "strong",
-        "Defends in a Stronghold (×1.5, five strongest units’ hits)",
+        "Defends in a Stronghold (×" +
+          ARMY_VALUE.STRONGHOLD_MULTIPLIER +
+          ", five strongest units’ hits)",
       ) +
-      checkbox("sortie", "Sortie (×0.5)") +
+      checkbox("sortie", "Sortie (×" + ARMY_VALUE.SORTIE_MULTIPLIER + ")") +
       '<div class="out">' +
       calcOut() +
       '</div><p class="notice" style="margin-top:10px">' +
@@ -1026,30 +1175,35 @@
   function calcOut() {
     const units = calc.reg + calc.elite;
     const lines = [];
-    let hits = calc.reg + 2 * calc.elite;
+    let hits = calc.reg + ARMY_VALUE.ELITE_HITS * calc.elite;
     if (calc.strong) {
-      const top = Math.min(5, units);
+      const top = Math.min(ARMY_VALUE.STRONGEST_UNITS, units);
       const eliteCounted = Math.min(top, calc.elite);
-      hits = eliteCounted * 2 + (top - eliteCounted);
+      hits = eliteCounted * ARMY_VALUE.ELITE_HITS + (top - eliteCounted);
       lines.push("Hits (five strongest units): " + hits);
     } else lines.push("Hits: " + hits);
-    const dice = Math.min(5, units + calc.cotw);
+    const dice = Math.min(ARMY_VALUE.MAX_COMBAT_DICE, units + calc.cotw);
     lines.push("Combat dice: " + dice);
-    const lead = Math.min(5, Math.min(calc.lead, units));
+    const lead = Math.min(
+      ARMY_VALUE.MAX_LEADERSHIP,
+      Math.min(calc.lead, units),
+    );
     lines.push("Leadership: " + lead);
     let value = hits + dice + lead + calc.cotw;
     if (calc.cotw) lines.push("Captains of the West: +" + calc.cotw);
     if (calc.fort) {
-      value += 1;
-      lines.push("Fortification/City: +1");
+      value += ARMY_VALUE.FORTIFICATION_BONUS;
+      lines.push("Fortification/City: +" + ARMY_VALUE.FORTIFICATION_BONUS);
     }
     if (calc.strong) {
-      value = Math.floor(value * 1.5);
-      lines.push("Stronghold: ×1.5 rounded down");
+      value = Math.floor(value * ARMY_VALUE.STRONGHOLD_MULTIPLIER);
+      lines.push(
+        "Stronghold: ×" + ARMY_VALUE.STRONGHOLD_MULTIPLIER + " rounded down",
+      );
     }
     if (calc.sortie) {
-      value = Math.floor(value * 0.5);
-      lines.push("Sortie: ×0.5 rounded down");
+      value = Math.floor(value * ARMY_VALUE.SORTIE_MULTIPLIER);
+      lines.push("Sortie: ×" + ARMY_VALUE.SORTIE_MULTIPLIER + " rounded down");
     }
     return (
       '<div class="n">' +
@@ -1165,7 +1319,7 @@
     if (modal)
       modalName =
         modal.name +
-        (modal.name === "ask" && modal.arg ? ": " + modal.arg.title : "");
+        (modal.name === MODAL.ASK && modal.arg ? ": " + modal.arg.title : "");
     const activeEl = document.activeElement;
     let active = null;
     if (activeEl && activeEl !== document.body) {
@@ -1320,7 +1474,7 @@
       ],
       onPick: (choice) => {
         if (choice === "ok") replace();
-        else ui.openModal("save");
+        else ui.openModal(MODAL.SAVE);
       },
     });
   }
@@ -1516,7 +1670,7 @@
           textarea: ui.find("#loadTxt"),
         });
     const debugOpenBtn = ui.find("#dbgOpen");
-    if (debugOpenBtn) debugOpenBtn.onclick = () => ui.openModal("debug");
+    if (debugOpenBtn) debugOpenBtn.onclick = () => ui.openModal(MODAL.DEBUG);
     wireDebug(el);
     ui.wireLoad(el);
     el.querySelectorAll("[data-set]").forEach(
