@@ -11,6 +11,7 @@ const engine = fakeWindow.QB,
     CARD,
     DIE_REQUIREMENT,
     FP_STANCE,
+    MINION_STATUS,
     WALK_RESULT,
     TRAIL,
   } = engine;
@@ -144,7 +145,7 @@ function reservedMusterDieIsUsedOrSpent() {
     "Will-of-the-West check auto-answered No for a die already set aside; minion mustered",
   );
   ok(
-    reservedOnlyState.board.chars.saruman === true,
+    reservedOnlyState.board.chars.saruman === MINION_STATUS.IN_PLAY,
     "(6.3) muster action updated the tracker (Saruman)",
   );
 }
@@ -237,7 +238,7 @@ function militaryPhase5PlaysRevealedCardAndPalantirDraws() {
   militaryState.cards.decks.S = ["sa019"];
   militaryState.board.fs.revealed = true;
   militaryState.cards.table.push(CARD.PALANTIR);
-  militaryState.board.chars.saruman = true;
+  militaryState.board.chars.saruman = MINION_STATUS.IN_PLAY;
   militaryState.dice.pool = [die("Event"), die("Army")]; // no Character die → "Play card using event die"
   engine.startPhase(militaryState, PHASE.P5);
   const seen = driveWalk(militaryState, [byType(PROMPT.CONFIRM, true)]);
@@ -322,8 +323,8 @@ function actionsUpdateTheTracker() {
   });
   driveWalk(witchKingState, [[/Mustered Witch King/, true]]);
   ok(
-    witchKingState.board.chars.witchKing === true,
-    'Witch King ticked after "Mustered Witch King"',
+    witchKingState.board.chars.witchKing === MINION_STATUS.IN_PLAY,
+    'Witch King in play after "Mustered Witch King"',
   );
   const hillmenState = phase5State({
     dice: true,
@@ -438,7 +439,7 @@ function tableTriggersDiscardOrAsk() {
     CARD.THREATS_AND_PROMISES,
     CARD.FLOCKS_OF_CREBAIN,
   ];
-  tableState.board.chars.saruman = true;
+  tableState.board.chars.saruman = MINION_STATUS.IN_PLAY;
   let asks = engine.tableTriggers(tableState, {
     key: "nations.rohan",
     from: FP_STANCE.PASSIVE,
@@ -466,8 +467,8 @@ function tableTriggersDiscardOrAsk() {
   );
   engine.tableTriggers(tableState, {
     key: "chars.saruman",
-    from: true,
-    to: false,
+    from: MINION_STATUS.IN_PLAY,
+    to: MINION_STATUS.ELIMINATED,
   });
   ok(
     !tableState.cards.table.includes(CARD.PALANTIR),
@@ -566,6 +567,9 @@ function migrateUpgradesOldSaves() {
   oldSave.board.nations.isengard = false;
   delete oldSave.board.nations.se;
   delete oldSave.board.rings;
+  oldSave.board.chars.saruman = true;
+  oldSave.board.chars.mouth = false;
+  delete oldSave.board.chars.witchKing;
   oldSave.shownCard = "sa002";
   oldSave.lastAction = { action: "answer" };
   const migrated = engine.migrate(oldSave);
@@ -584,6 +588,12 @@ function migrateUpgradesOldSaves() {
       !("shownCard" in migrated) &&
       !("lastAction" in migrated),
     "rings added, shownCard and lastAction dropped",
+  );
+  ok(
+    migrated.board.chars.saruman === MINION_STATUS.IN_PLAY &&
+      migrated.board.chars.mouth === MINION_STATUS.AVAILABLE &&
+      migrated.board.chars.witchKing === MINION_STATUS.AVAILABLE,
+    "boolean minions became statuses (true → in play, false or missing → available)",
   );
   const current = engine.newState({ dice: true });
   const before = JSON.stringify(current);
@@ -651,7 +661,7 @@ function wornWithSorrowAsksAndWormtongueOnSaruman() {
     wome: false,
   });
   state.cards.table = [CARD.WORN_WITH_SORROW, CARD.WORMTONGUE];
-  state.board.chars.saruman = true;
+  state.board.chars.saruman = MINION_STATUS.IN_PLAY;
   state.board.fs.revealed = true;
   state.board.fs.inFPSettlement = true;
   const asks = engine.tableTriggers(state, {
@@ -665,7 +675,11 @@ function wornWithSorrowAsksAndWormtongueOnSaruman() {
       /Worn with Sorrow and Toil/.test(asks[0].q),
     "Worn with Sorrow and Toil asked about when the Fellowship is declared in a Free Peoples settlement",
   );
-  engine.tableTriggers(state, { key: "chars.saruman", from: true, to: false });
+  engine.tableTriggers(state, {
+    key: "chars.saruman",
+    from: MINION_STATUS.IN_PLAY,
+    to: MINION_STATUS.ELIMINATED,
+  });
   ok(
     !state.cards.table.includes(CARD.WORMTONGUE) &&
       state.cards.discards.C.includes(CARD.WORMTONGUE),
@@ -748,6 +762,191 @@ function musterChoiceCardAutoAnswered() {
     "a card with a fixed muster region answers No",
   );
 }
+// A Muster 2 walk with the tracker on and one Muster die, driven to its end with every question answered No.
+function walkMuster2(setUp, settings = {}) {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: true, wome: false, ...settings },
+    STRATEGY.MILITARY,
+  );
+  setUp(state);
+  state.dice.pool = [die("Muster")];
+  state.walk = null;
+  engine.startWalk(state, "MU", "Muster 2", {
+    die: DIE_REQUIREMENT.MUSTER,
+    dieIndex: 0,
+  });
+  driveWalk(state, [[/^Pass/, "no"]]);
+  return state;
+}
+const trailQuestion = (state, pattern) =>
+  state.walk.trail.find(
+    (entry) => entry.kind === TRAIL.QUESTION && pattern.test(entry.text),
+  );
+// The Mouth of Sauron follows his card: all Free Peoples nations At War, or the Fellowship on the Mordor track. Every
+// Shadow nation at war is not enough, and the Mordor track is enough on its own.
+function mouthOfSauronNeedsFreePeoplesAtWarOrMordor() {
+  const state = phase5State({
+    dice: true,
+    cards: false,
+    tracker: true,
+    wome: false,
+  });
+  for (const nation of engine.SHADOW_NATIONS) state.board.nations[nation] = 0;
+  state.board.chars.saruman = MINION_STATUS.IN_PLAY;
+  state.board.chars.witchKing = MINION_STATUS.IN_PLAY;
+  ok(
+    engine.minionsAvailable(state).length === 0,
+    "all Shadow nations at war does not offer the Mouth of Sauron",
+  );
+  state.board.fs.mordor = true;
+  let minions = engine.minionsAvailable(state);
+  ok(
+    minions.length === 1 &&
+      minions[0].key === "mouth" &&
+      /Mordor/.test(minions[0].why),
+    "the Fellowship on the Mordor track offers the Mouth of Sauron",
+  );
+  state.board.fs.mordor = false;
+  for (const nation of engine.FP_NATIONS)
+    state.board.nations[nation] = FP_STANCE.WAR;
+  minions = engine.minionsAvailable(state);
+  ok(
+    minions.length === 1 &&
+      minions[0].key === "mouth" &&
+      /Free Peoples/.test(minions[0].why),
+    "all Free Peoples nations at war offers the Mouth of Sauron",
+  );
+  state.board.nations.dwarves = FP_STANCE.ACTIVE;
+  ok(
+    engine.minionsAvailable(state).length === 0,
+    "one Free Peoples nation short of war withholds him again",
+  );
+  const mordorWalk = walkMuster2((walkState) => {
+    walkState.board.chars.saruman = MINION_STATUS.IN_PLAY;
+    walkState.board.chars.witchKing = MINION_STATUS.IN_PLAY;
+    walkState.board.fs.mordor = true;
+  });
+  const recruit = trailQuestion(mordorWalk, /Able to recruit a minion/);
+  ok(
+    recruit?.auto &&
+      recruit.answer === "Yes" &&
+      mordorWalk.board.chars.mouth === MINION_STATUS.IN_PLAY,
+    "a Muster 2 walk musters the Mouth of Sauron when the Fellowship is in Mordor",
+  );
+  const noMordorWalk = walkMuster2((walkState) => {
+    for (const nation of engine.SHADOW_NATIONS)
+      walkState.board.nations[nation] = 0;
+    walkState.board.chars.saruman = MINION_STATUS.IN_PLAY;
+    walkState.board.chars.witchKing = MINION_STATUS.IN_PLAY;
+  });
+  ok(
+    trailQuestion(noMordorWalk, /Able to recruit a minion/)?.answer === "No" &&
+      noMordorWalk.board.chars.mouth === MINION_STATUS.AVAILABLE,
+    "a Muster 2 walk does not muster him on Shadow nations at war alone",
+  );
+  state.board.chars.mouth = MINION_STATUS.ELIMINATED;
+  ok(
+    engine.diceCount(state) === engine.BASE_ACTION_DICE + 2,
+    "an eliminated Mouth of Sauron adds no die",
+  );
+}
+// An eliminated Character is removed from the game (rulebook): a minion set to eliminated is never offered again, the
+// Will of the West check knows a minion was recruited, and the Palantír and Wormtongue leave the table with Saruman.
+function eliminatedMinionIsNeverMusteredAgain() {
+  const state = phase5State({
+    dice: true,
+    cards: false,
+    tracker: true,
+    wome: false,
+  });
+  state.board.nations.isengard = 0;
+  state.board.chars.saruman = MINION_STATUS.ELIMINATED;
+  ok(
+    engine.minionsAvailable(state).length === 0,
+    "an eliminated Saruman is not offered with Isengard at war",
+  );
+  const walk = walkMuster2((walkState) => {
+    walkState.board.nations.isengard = 0;
+    walkState.board.chars.saruman = MINION_STATUS.ELIMINATED;
+  });
+  ok(
+    trailQuestion(walk, /Able to recruit a minion/)?.answer === "No" &&
+      walk.board.chars.saruman === MINION_STATUS.ELIMINATED,
+    "a Muster 2 walk does not muster an eliminated Saruman",
+  );
+  const witchKingWalk = walkMuster2((walkState) => {
+    walkState.board.nations.isengard = 0;
+    walkState.board.nations.sauron = 0;
+    walkState.board.nations.gondor = FP_STANCE.WAR;
+    walkState.board.chars.saruman = MINION_STATUS.ELIMINATED;
+  });
+  const wotw = trailQuestion(witchKingWalk, /Will of the West/);
+  ok(
+    wotw?.auto && wotw.answer === "No" && /eliminated/.test(wotw.why),
+    "the Will of the West check answers No because a minion was recruited and eliminated",
+  );
+  ok(
+    witchKingWalk.board.chars.witchKing === MINION_STATUS.IN_PLAY &&
+      witchKingWalk.board.chars.saruman === MINION_STATUS.ELIMINATED,
+    "the Witch King is mustered instead",
+  );
+  const noTracker = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  noTracker.board.chars.saruman = MINION_STATUS.ELIMINATED;
+  noTracker.dice.pool = [die("Muster")];
+  noTracker.walk = null;
+  engine.startWalk(noTracker, "MU", "Muster 2", {
+    die: DIE_REQUIREMENT.MUSTER,
+    dieIndex: 0,
+  });
+  const seen = driveWalk(noTracker, [
+    [/Able to recruit a minion/, true],
+    [/Will of the West/, false],
+  ]);
+  const choice = seen.find((prompt) => prompt?.type === PROMPT.CHOICE);
+  const labels = (choice?.options || []).map((option) => option.label);
+  ok(
+    choice &&
+      /not eliminated/.test(choice.text) &&
+      !labels.some((label) => /Saruman/.test(label)) &&
+      labels.some((label) =>
+        /Mouth of Sauron \(all Free Peoples nations At War, or the Fellowship on the Mordor track\)/.test(
+          label,
+        ),
+      ),
+    "without the tracker the minion choice omits an eliminated Saruman and states the Mouth's condition",
+  );
+  const tableState = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  tableState.cards.table = [CARD.WORMTONGUE, CARD.PALANTIR];
+  tableState.board.chars.saruman = MINION_STATUS.IN_PLAY;
+  engine.tableTriggers(tableState, {
+    key: "chars.saruman",
+    from: MINION_STATUS.IN_PLAY,
+    to: MINION_STATUS.AVAILABLE,
+  });
+  ok(
+    tableState.cards.table.includes(CARD.WORMTONGUE) &&
+      tableState.cards.table.includes(CARD.PALANTIR),
+    "setting Saruman back to available discards nothing",
+  );
+  engine.tableTriggers(tableState, {
+    key: "chars.saruman",
+    from: MINION_STATUS.AVAILABLE,
+    to: MINION_STATUS.ELIMINATED,
+  });
+  ok(
+    !tableState.cards.table.includes(CARD.WORMTONGUE) &&
+      !tableState.cards.table.includes(CARD.PALANTIR),
+    "setting Saruman to eliminated discards Wormtongue and the Palantír",
+  );
+}
 // The scenarios, with the section of the change log each one guards.
 const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
@@ -767,6 +966,8 @@ const SCENARIOS = [
   ["6.6", wornWithSorrowAsksAndWormtongueOnSaruman],
   ["7.1", reservedDieCannotBeReservedAgain],
   ["muster", musterChoiceCardAutoAnswered],
+  ["muster", mouthOfSauronNeedsFreePeoplesAtWarOrMordor],
+  ["muster", eliminatedMinionIsNeverMusteredAgain],
 ];
 function main() {
   for (const [number, scenario] of SCENARIOS) {

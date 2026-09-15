@@ -233,28 +233,32 @@ function chooseNationToAdvance(state, node, facts) {
     choice: walk.nationChoice || "none",
   });
 }
-// "Minion priority" without the tracker: the player says which minion can be mustered (with dice on, the app knows who is in play).
+// "Minion priority" without the tracker: the player says which minion can be mustered (with dice on, the app knows
+// which minions are in play or eliminated, and offers only the available ones).
 function askMinionChoice(state, node) {
   const chars = state.board.chars,
     minionsKnown = state.settings.dice;
+  const offered = (key) =>
+    !minionsKnown || chars[key] === engine.MINION_STATUS.AVAILABLE;
   const options = [];
-  if (!(minionsKnown && chars.saruman))
+  if (offered("saruman"))
     options.push({ value: "Saruman", label: "Saruman (Isengard At War)" });
-  if (!(minionsKnown && chars.witchKing))
+  if (offered("witchKing"))
     options.push({
       value: "Witch King",
       label: "Witch King (Sauron At War and a Free Peoples nation At War)",
     });
-  if (!(minionsKnown && chars.mouth))
+  if (offered("mouth"))
     options.push({
       value: "Mouth of Sauron",
-      label: "Mouth of Sauron (all Shadow nations At War)",
+      label:
+        "Mouth of Sauron (all Free Peoples nations At War, or the Fellowship on the Mordor track)",
     });
   options.push({ value: "", label: "None can be mustered" });
   promptChoice(
     state,
     node,
-    "Minion priority: which is the first of these that can be mustered (not already in play)?",
+    "Minion priority: which is the first of these that can be mustered (available: not in play and not eliminated)?",
     options,
     "minionPick",
   );

@@ -138,7 +138,11 @@ export function randomBoard(state) {
   board.fs.inFPSettlement = rnd() < CHANCE.IN_FP_SETTLEMENT;
   board.fs.atStart = rnd() < CHANCE.AT_START;
   board.fs.companions = Math.floor(rnd() * BOARD_RANGE.COMPANIONS);
-  for (const key in board.chars) board.chars[key] = rnd() < CHANCE.FLAG_ON;
+  const minionStatuses = Object.values(engine.MINION_STATUS);
+  for (const key in board.chars)
+    board.chars[key] = engine.MINIONS.includes(key)
+      ? minionStatuses[Math.floor(rnd() * minionStatuses.length)]
+      : rnd() < CHANCE.FLAG_ON;
   for (const key of engine.SHADOW_NATIONS)
     board.nations[key] = Math.floor(rnd() * BOARD_RANGE.SHADOW_NATION_STEPS);
   const stances = Object.values(engine.FP_STANCE);

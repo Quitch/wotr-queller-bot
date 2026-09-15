@@ -27,7 +27,7 @@ async function startShowcaseGame(page) {
       const state = window.QBUI.state;
       state.strategy = engine.STRATEGY.CORRUPTION;
       state.phase = engine.PHASE.P5;
-      state.board.chars.saruman = true;
+      state.board.chars.saruman = engine.MINION_STATUS.IN_PLAY;
       state.cards.table.push(
         engine.CARD.FLOCKS_OF_CREBAIN,
         engine.CARD.BALROG,

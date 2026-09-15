@@ -1,11 +1,12 @@
 // The dice: recovering, the Hunt box, rolling, finding and spending a die, and the Elven Ring change.
-import { huntCap, shadowFactionInPlay } from "./board.js";
+import { huntCap, minionInPlay, shadowFactionInPlay } from "./board.js";
 import {
   BASE_ACTION_DICE,
   DIE_KIND,
   DIE_REQUIREMENT,
   DIE_STATE,
   FACE,
+  MINIONS,
   STRATEGY,
   isFactionRequirement,
 } from "./constants.js";
@@ -29,12 +30,8 @@ export const FACTION_FACES = [
   FACE.WILD,
 ];
 export function diceCount(state) {
-  const chars = state.board.chars;
   return (
-    BASE_ACTION_DICE +
-    (chars.saruman ? 1 : 0) +
-    (chars.witchKing ? 1 : 0) +
-    (chars.mouth ? 1 : 0)
+    BASE_ACTION_DICE + MINIONS.filter((key) => minionInPlay(state, key)).length
   );
 }
 export function recoverDice(state) {

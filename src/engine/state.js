@@ -5,6 +5,8 @@ import {
   BASE_ACTION_DICE,
   DECK,
   FP_STANCE,
+  MINIONS,
+  MINION_STATUS,
   PHASE,
   SHADOW_NATIONS,
   STARTING_COMPANIONS,
@@ -45,9 +47,9 @@ const newFellowship = () => ({
   companions: STARTING_COMPANIONS,
 });
 const newCharacters = () => ({
-  saruman: false,
-  witchKing: false,
-  mouth: false,
+  saruman: MINION_STATUS.AVAILABLE,
+  witchKing: MINION_STATUS.AVAILABLE,
+  mouth: MINION_STATUS.AVAILABLE,
   gandalfWhite: false,
   aragorn: false,
 });
@@ -131,12 +133,22 @@ function migrateNations(nations) {
       nations[nation] = SHADOW_NATION_START[nation];
   }
 }
+// Older saves (up to version 60) kept each minion as a boolean (true = in play); now the field is a MINION_STATUS.
+function migrateMinions(chars) {
+  const statuses = new Set(Object.values(MINION_STATUS));
+  for (const key of MINIONS) {
+    if (typeof chars[key] === "boolean")
+      chars[key] = chars[key] ? MINION_STATUS.IN_PLAY : MINION_STATUS.AVAILABLE;
+    else if (!statuses.has(chars[key])) chars[key] = MINION_STATUS.AVAILABLE;
+  }
+}
 export function migrate(save) {
   if (save.settings && save.settings.tracker === undefined) {
     save.settings.tracker = save.settings.walk !== false;
     delete save.settings.walk;
   }
   if (save.board?.nations) migrateNations(save.board.nations);
+  if (save.board?.chars) migrateMinions(save.board.chars);
   if (save.board && save.board.rings === undefined) save.board.rings = 0;
   delete save.shownCard;
   delete save.lastAction;

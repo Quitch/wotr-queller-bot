@@ -1,17 +1,19 @@
 // Decision handlers for the Character and Army pages: (state, node, facts), each answering a box from the state or asking the player.
+import { minionInPlay } from "../../engine/index.js";
 import { answerAuto, answerFromTracker, ask } from "./common.js";
 import { decideWitchKingInPlay } from "./phase-5.js";
 
 // ---- Character
 function decideNazgulInPlay(state, node, { board }) {
+  const witchKing = minionInPlay(state, "witchKing");
   answerFromTracker(
     state,
     node,
-    board.chars.witchKing || board.nazgul > 0,
+    witchKing || board.nazgul > 0,
     "tracker: " +
       board.nazgul +
       " Nazgûl" +
-      (board.chars.witchKing ? ", Witch King in play" : ""),
+      (witchKing ? ", Witch King in play" : ""),
   );
 }
 function decideNazgulOnMap(state, node, { trackerOn, board }) {
@@ -19,8 +21,8 @@ function decideNazgulOnMap(state, node, { trackerOn, board }) {
     return answerAuto(state, node, false, "no Nazgûl on the map");
   ask(state, node);
 }
-function decideMouthInPlay(state, node, { trackerOn, board }) {
-  if (trackerOn && !board.chars.mouth)
+function decideMouthInPlay(state, node, { trackerOn }) {
+  if (trackerOn && !minionInPlay(state, "mouth"))
     return answerAuto(state, node, false, "Mouth of Sauron not in play");
   ask(state, node);
 }

@@ -20,10 +20,10 @@ function decideUsableCharacterCombatCard(state, node, { cardsOn }) {
     );
   ask(state, node);
 }
-function decideWitchKingFirstRound(state, node, { trackerOn, board, walk }) {
+function decideWitchKingFirstRound(state, node, { trackerOn, walk }) {
   if (walk.battleRound !== 1)
     return answerAuto(state, node, false, "not the first round");
-  if (trackerOn && !board.chars.witchKing)
+  if (trackerOn && !engine.minionInPlay(state, "witchKing"))
     return answerAuto(state, node, false, "Witch King not in play");
   ask(state, node, "Army includes the Witch King (this is the first round)");
 }

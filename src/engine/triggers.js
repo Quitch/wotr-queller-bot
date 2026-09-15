@@ -1,5 +1,11 @@
 // Table cards whose discard condition the board tracker can see, checked after every tracker change.
-import { CARD, FP_NATIONS, FP_STANCE, FP_STANCE_RANK } from "./constants.js";
+import {
+  CARD,
+  FP_NATIONS,
+  FP_STANCE,
+  FP_STANCE_RANK,
+  MINION_STATUS,
+} from "./constants.js";
 import { discardCard } from "./hand.js";
 
 const FP_NATION_KEY = new RegExp(
@@ -7,8 +13,9 @@ const FP_NATION_KEY = new RegExp(
 ); // a tracker change key for a Free Peoples nation
 // Table cards whose discard condition the board tracker can see. `outcome(state, change)` returns {discard: reason} (discard now),
 // {ask: question} (the player must decide) or null (nothing happens).
+// Only "eliminated" counts: moving Saruman back to "available" is a correction and discards nothing.
 const sarumanEliminated = (change) =>
-  change.key === "chars.saruman" && !change.to
+  change.key === "chars.saruman" && change.to === MINION_STATUS.ELIMINATED
     ? { discard: "Saruman eliminated" }
     : null;
 const TABLE_TRIGGERS = [

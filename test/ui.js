@@ -4,7 +4,7 @@
 import * as fakeWindow from "./load.js";
 const engine = fakeWindow.QB,
   ui = fakeWindow.QB_UI,
-  { PHASE, TRAIL, WALK_RESULT, DECK, FP_STANCE } = engine;
+  { PHASE, TRAIL, WALK_RESULT, DECK, FP_STANCE, MINION_STATUS } = engine;
 const TERM_BUTTON = (key, label) =>
   '<button type="button" class="term" data-term="' +
   key +
@@ -99,7 +99,7 @@ function checkBoardPaths() {
     fakeWindow.boardValue("fs.progress") === 4 &&
       fakeWindow.boardValue("rings") === 0 &&
       fakeWindow.boardValue("nations.gondor") === FP_STANCE.PASSIVE &&
-      fakeWindow.boardValue("chars.saruman") === false,
+      fakeWindow.boardValue("chars.saruman") === MINION_STATUS.AVAILABLE,
     "dotted paths read the board",
   );
   ok(

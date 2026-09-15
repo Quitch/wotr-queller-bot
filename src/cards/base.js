@@ -703,7 +703,7 @@ export const BASE_CARDS = [
     pre: "saruman",
     cpre: "nazLead2",
     reminder:
-      "Draws a card automatically after an Event die plays an Event card. Discarded automatically if Saruman is unticked; the Free Peoples player can force its discard with a Will of the West die, or any die plus an Elven Ring.",
+      "Draws a card automatically after an Event die plays an Event card. Discarded automatically when Saruman is set to eliminated in the tracker; the Free Peoples player can force its discard with a Will of the West die, or any die plus an Elven Ring.",
   },
   {
     id: "sa046",
@@ -802,7 +802,7 @@ export const BASE_CARDS = [
     pre: "saruman",
     cpre: "nazLead1",
     reminder:
-      "Discarded automatically when Rohan leaves passive in the tracker or Saruman is unticked.",
+      "Discarded automatically when Rohan leaves passive in the tracker or Saruman is set to eliminated in the tracker.",
   },
   {
     id: "sa052",

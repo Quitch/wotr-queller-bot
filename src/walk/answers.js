@@ -111,7 +111,7 @@ function answerRing(state, prompt, value) {
 }
 // The board consequences of an action the player carried out (the tracker keeps up).
 function musterMinionOnBoard(state, minionKey) {
-  state.board.chars[minionKey] = true;
+  state.board.chars[minionKey] = engine.MINION_STATUS.IN_PLAY;
   state.playable = {};
   engine.log(
     state,
