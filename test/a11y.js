@@ -342,7 +342,7 @@ async function checkDarkNativeControls(page) {
         ),
       };
     });
-  const expect = async (what, value) => {
+  const expectScheme = async (what, value) => {
     const s = await schemes();
     check(
       s.selects.length > 0 && s.checkboxes.length > 0,
@@ -372,16 +372,16 @@ async function checkDarkNativeControls(page) {
     }, theme);
   try {
     await page.emulateMedia({ colorScheme: "dark" });
-    await expect("dark media, no data-theme", "dark");
+    await expectScheme("dark media, no data-theme", "dark");
     await setTheme("light");
-    await expect("dark media, data-theme=light", "light");
+    await expectScheme("dark media, data-theme=light", "light");
     await page.emulateMedia({ colorScheme: "light" });
     await setTheme("dark");
-    await expect("light media, data-theme=dark", "dark");
+    await expectScheme("light media, data-theme=dark", "dark");
   } finally {
     await setTheme(null);
     await page.emulateMedia({ colorScheme: "light" });
-    await expect("light media, no data-theme (cleanup)", "light");
+    await expectScheme("light media, no data-theme (cleanup)", "light");
   }
   console.log(
     "note: the open select popup is drawn by the browser and cannot be captured; the computed color-scheme is the guard",
