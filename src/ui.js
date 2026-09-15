@@ -1180,10 +1180,12 @@
       '<div class="combat' +
       (eventShownAbove ? "" : " only") +
       '"><div class="ct"><b style="font-size:.9rem">' +
-      escapeHTML(card.ct) +
+      escapeHTML(card.combatTitle) +
       '</b><span class="tag">combat</span></div>' +
-      (card.cc ? '<div class="cond">' + escapeHTML(card.cc) + "</div>" : "") +
-      paragraphsHTML(card.ctext) +
+      (card.combatCond
+        ? '<div class="cond">' + escapeHTML(card.combatCond) + "</div>"
+        : "") +
+      paragraphsHTML(card.combatText) +
       "</div>"
     );
   }
@@ -1193,7 +1195,7 @@
     const tag = cardTag(card);
     const showEvent =
         half !== CARD_HALF.COMBAT || card.deck === DECK.CALL_TO_BATTLE,
-      showCombat = half !== CARD_HALF.EVENT && !!card.ct;
+      showCombat = half !== CARD_HALF.EVENT && !!card.combatTitle;
     let html =
       '<div class="card' +
       (half ? " half" : "") +

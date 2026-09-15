@@ -1239,9 +1239,12 @@
     [
       phraseStartsWith("strategy card which cancels"),
       () => (card) =>
-        card.deck === DECK.STRATEGY && card.ct === "Swarm of Bats",
+        card.deck === DECK.STRATEGY && card.combatTitle === "Swarm of Bats",
     ],
-    [phraseIs("durin's bane"), () => (card) => card.ct === "Durin's Bane"],
+    [
+      phraseIs("durin's bane"),
+      () => (card) => card.combatTitle === "Durin's Bane",
+    ],
     [
       phraseIs("call to battle card"),
       () => (card) => card.deck === DECK.CALL_TO_BATTLE,

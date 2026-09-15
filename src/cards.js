@@ -1,6 +1,7 @@
 // Shadow card data — transcribed from claude/wotr_shadow_cards_and_dice.json (project doc).
 // Fields: id, set, deck (C=Character, S=Strategy, F=Faction Event, B=Call to Battle),
-// type (die that plays it: Character/Army/Muster), title, cond, text, ct (combat title), cc (combat cond), ctext, init, faction.
+// type (die that plays it: Character/Army/Muster), title, cond and text (the event half), combatTitle, combatCond
+// and combatText (the combat half, on the cards that have one), init, faction.
 // Behaviour flags (read by engine.js — never derived from the card text):
 //  onTable      the card stays on the table when played as an event
 //  revealed     event half needs the Fellowship revealed ("uses the term Fellowship revealed" in the priority lists)
@@ -20,9 +21,9 @@ window.QB_CARDS = [
     title: "Balrog of Moria",
     cond: "Play on the table.",
     text: 'You may discard "Balrog of Moria" to draw an additional Hunt tile if the Fellowship moves into, out of, or through Moria while being declared or revealed. If the tile shows an Eye, discard it without effect; otherwise follow the rules for a successful Hunt.\n\nIgnore any "Reveal" icon on the drawn tile if the Fellowship has been declared in a Free Peoples City or Stronghold.\n\nOr, you may discard "Balrog of Moria" to use its Combat card effect as if you were playing the card from your hand.',
-    ct: "Durin's Bane",
-    cc: "Play if the defending Army is within two regions of Moria.",
-    ctext:
+    combatTitle: "Durin's Bane",
+    combatCond: "Play if the defending Army is within two regions of Moria.",
+    combatText:
       "Before the Combat Roll, roll an additional attack using three Combat dice. Score hits on 4+ and apply the result immediately.",
     init: 2,
     onTable: true,
@@ -40,9 +41,9 @@ window.QB_CARDS = [
     title: "A New Power Is Rising",
     cond: "Play if Saruman is in play.",
     text: "Recruit two Isengard Regular units in each of North and South Dunland and two Isengard units (Regular or Elite) in Orthanc.",
-    ct: "Great Host",
-    cc: null,
-    ctext:
+    combatTitle: "Great Host",
+    combatCond: null,
+    combatText:
       "If, after removing casualties from the Combat roll and Leader re-roll, your Army units are at least twice as many as the enemy Army units, score one automatic hit.",
     init: 7,
     pre: "saruman",
@@ -55,9 +56,9 @@ window.QB_CARDS = [
     title: "Candles of Corpses",
     cond: "Play if the Fellowship is not in a region containing a Free Peoples Settlement.",
     text: "Roll three dice and add one Corruption point on each result of 4+.\n\nIf Gollum is the Guide, add one Corruption point on each result of '6' instead.",
-    ct: "Dread and Despair",
-    cc: "Play if the total Nazgûl Leadership is 1 or more.",
-    ctext:
+    combatTitle: "Dread and Despair",
+    combatCond: "Play if the total Nazgûl Leadership is 1 or more.",
+    combatText:
       "Before the Combat roll, forfeit one or more points of Nazgûl Leadership.\n\nDuring his Combat roll, the Free Peoples player rolls one Combat die less (to a minimum of one) for every point you have chosen to forfeit.",
     init: 3,
     corruption: true,
@@ -72,9 +73,9 @@ window.QB_CARDS = [
     title: "Cruel Weather",
     cond: "Play if the Fellowship is on step 1 or higher on the Fellowship Track.",
     text: "Move the Fellowship to an adjacent region.",
-    ct: "Cruel as Death",
-    cc: "Play if the total Nazgûl Leadership is 2 or more.",
-    ctext:
+    combatTitle: "Cruel as Death",
+    combatCond: "Play if the total Nazgûl Leadership is 2 or more.",
+    combatText:
       "Forfeit two points of Nazgûl Leadership to add 1 to all dice on your Combat roll.",
     init: 3,
     pre: "fsProgress1",
@@ -88,9 +89,10 @@ window.QB_CARDS = [
     title: "Denethor's Folly",
     cond: "Play on the table if Minas Tirith is under siege by a Shadow Army.",
     text: 'When you play this card, immediately eliminate one Free Peoples Leader in Minas Tirith.\n\nWhen "Denethor\'s Folly" is in play, the Free Peoples player cannot use Combat cards for battles fought in Minas Tirith.\n\nThe Free Peoples player can force "Denethor\'s Folly" to be discarded using a Will of the West Action die result, or any Action die result if Gandalf or Aragorn is in Minas Tirith.',
-    ct: "Devilry of Orthanc",
-    cc: "Play if an Isengard Army unit is in the battle and the defending Army is in a Stronghold.",
-    ctext: "Add 1 to all dice on your Combat roll.",
+    combatTitle: "Devilry of Orthanc",
+    combatCond:
+      "Play if an Isengard Army unit is in the battle and the defending Army is in a Stronghold.",
+    combatText: "Add 1 to all dice on your Combat roll.",
     init: 3,
     onTable: true,
     pre: "mtSiege",
@@ -106,9 +108,10 @@ window.QB_CARDS = [
     title: "Dreadful Spells",
     cond: "Play if a Shadow Army containing Nazgûl is adjacent to, or is in the same region as, a Free Peoples Army.",
     text: "Roll a number of dice equal to the number of Nazgûl (up to a maximum of 5) and score one hit for every result of 5+.",
-    ct: "Devilry of Orthanc",
-    cc: "Play if an Isengard Army unit is in the battle and the defending Army is in a Stronghold.",
-    ctext: "Add 1 to all dice on your Combat roll.",
+    combatTitle: "Devilry of Orthanc",
+    combatCond:
+      "Play if an Isengard Army unit is in the battle and the defending Army is in a Stronghold.",
+    combatText: "Add 1 to all dice on your Combat roll.",
     init: 3,
     pre: "nazNearFP",
     cpre: "isengardStronghold",
@@ -121,9 +124,9 @@ window.QB_CARDS = [
     title: "Flocks of Crebain",
     cond: "Play on the table.",
     text: 'Before you make a Hunt roll, you may discard "Flocks of Crebain" to add 1 to all dice on that Hunt roll (including re-rolls).\n\nYou must discard this card from the table immediately if the Fellowship is declared in an unconquered Free Peoples City or Stronghold.',
-    ct: "They are Terrible",
-    cc: "Play if the total Nazgûl Leadership is 1 or more.",
-    ctext:
+    combatTitle: "They are Terrible",
+    combatCond: "Play if the total Nazgûl Leadership is 1 or more.",
+    combatText:
       "Forfeit one point of Nazgûl Leadership to add 1 to all dice on your Leader re-roll.",
     init: 4,
     onTable: true,
@@ -139,9 +142,9 @@ window.QB_CARDS = [
     title: "Foul Thing from the Deep",
     cond: "Play if the Fellowship is not in a region containing a Free Peoples Settlement.",
     text: "Draw a Hunt tile.\n\nIf the tile shows an Eye or is a Fellowship Special tile, discard it without effect.\n\nOtherwise, follow the rules for a successful Hunt, except that the Free Peoples player must reduce Hunt Damage (if any) by eliminating a random Companion (unless there are no Companions in the Fellowship) before using the Ring.",
-    ct: "They are Terrible",
-    cc: "Play if the total Nazgûl Leadership is 1 or more.",
-    ctext:
+    combatTitle: "They are Terrible",
+    combatCond: "Play if the total Nazgûl Leadership is 1 or more.",
+    combatText:
       "Forfeit one point of Nazgûl Leadership to add 1 to all dice on your Leader re-roll.",
     init: 4,
     tile: true,
@@ -156,9 +159,10 @@ window.QB_CARDS = [
     title: "Give It to Uss!",
     cond: null,
     text: 'The "Give it to Uss!" special Hunt tile is now in play.\n\nAdd the tile to the Hunt Pool when the Fellowship is on the Mordor Track.',
-    ct: "One for the Dark Lord",
-    cc: "Play if the defending Army is in the same region as the Fellowship.",
-    ctext: "Add 1 to all dice on your Combat roll and Leader re-roll.",
+    combatTitle: "One for the Dark Lord",
+    combatCond:
+      "Play if the defending Army is in the same region as the Fellowship.",
+    combatText: "Add 1 to all dice on your Combat roll and Leader re-roll.",
     init: 3,
     tile: true,
     cpre: "defInFs",
@@ -171,9 +175,9 @@ window.QB_CARDS = [
     title: "Grond, Hammer of the Underworld",
     cond: "Play if the Witch-King is in play and is with a Shadow Army besieging a Stronghold.",
     text: "Attack that Stronghold. The siege lasts for three Combat rounds instead of one. During the first round, the Free Peoples player cannot use a Combat card unless a Companion is in the battle.",
-    ct: "Dread and Despair",
-    cc: "Play if the total Nazgûl Leadership is 1 or more.",
-    ctext:
+    combatTitle: "Dread and Despair",
+    combatCond: "Play if the total Nazgûl Leadership is 1 or more.",
+    combatText:
       "Before the Combat roll, forfeit one or more points of Nazgûl Leadership.\n\nDuring his Combat roll, the Free Peoples player rolls one Combat die less (to a minimum of one) for every point you have chosen to forfeit.",
     init: 3,
     pre: "wkBesieging",
@@ -187,9 +191,9 @@ window.QB_CARDS = [
     title: "Half-orcs and Goblin-men",
     cond: 'Play if Isengard is "At War."',
     text: "Recruit one Isengard unit (Regular or Elite) in a region where a Shadow Army is present.",
-    ct: "We Come to Kill",
-    cc: "Play if a Shadow Elite unit is in the battle.",
-    ctext:
+    combatTitle: "We Come to Kill",
+    combatCond: "Play if a Shadow Elite unit is in the battle.",
+    combatText:
       "After removing casualties from the Combat roll and Leader re-roll, roll an additional attack using only the Shadow Elite units (up to a maximum of five) and score one hit for each result of 5+.",
     init: 7,
     pre: "isengardAtWar",
@@ -203,9 +207,9 @@ window.QB_CARDS = [
     title: "Hill-trolls",
     cond: 'Play if Sauron is "At War."',
     text: "Replace two Sauron Regular units anywhere on the game board with two Sauron Elite units.",
-    ct: "We Come to Kill",
-    cc: "Play if a Shadow Elite unit is in the battle.",
-    ctext:
+    combatTitle: "We Come to Kill",
+    combatCond: "Play if a Shadow Elite unit is in the battle.",
+    combatText:
       "After removing casualties from the Combat roll and Leader re-roll, roll an additional attack using only the Shadow Elite units (up to a maximum of five) and score one hit for each result of 5+.",
     init: 7,
     pre: "sauronAtWar",
@@ -219,9 +223,9 @@ window.QB_CARDS = [
     title: "Horde From the East",
     cond: 'Play if the Southrons & Easterlings are "At War".',
     text: "Recruit five Southron & Easterling Regular units in a free region inside the Southron and Easterling Nation. This region must be adjacent to the eastern edge of the map.",
-    ct: "Deadly Strife",
-    cc: null,
-    ctext:
+    combatTitle: "Deadly Strife",
+    combatCond: null,
+    combatText:
       "Both Armies add 2 to all dice on their Combat roll and Leader re-roll.",
     init: 3,
     pre: "seAtWar",
@@ -234,9 +238,9 @@ window.QB_CARDS = [
     title: "Isildur's Bane",
     cond: "Play if the Fellowship is not in a region containing a Free Peoples Settlement.",
     text: "Draw a Hunt tile.\n\nIf the tile shows an Eye or is a Fellowship special tile, discard it without effect.\n\nOtherwise, follow the rules for a successful Hunt, except that Hunt Damage may not be reduced in any way before using the Ring.",
-    ct: "Cruel as Death",
-    cc: "Play if the total Nazgûl Leadership is 2 or more.",
-    ctext:
+    combatTitle: "Cruel as Death",
+    combatCond: "Play if the total Nazgûl Leadership is 2 or more.",
+    combatText:
       "Forfeit two points of Nazgûl Leadership to add 1 to all dice on your Combat roll.",
     init: 3,
     tile: true,
@@ -251,9 +255,9 @@ window.QB_CARDS = [
     title: "Lure of the Ring",
     cond: "Play if the Fellowship is revealed.",
     text: "Randomly select one Companion in the Fellowship by drawing a Companion counter.\n\nThe Free Peoples player must choose either to add Corruption equal to the Companion's Level, or to eliminate him.\n\nIf Gollum is the Guide, add one Corruption point instead.",
-    ct: "They are Terrible",
-    cc: "Play if the total Nazgûl Leadership is 1 or more.",
-    ctext:
+    combatTitle: "They are Terrible",
+    combatCond: "Play if the total Nazgûl Leadership is 1 or more.",
+    combatText:
       "Forfeit one point of Nazgûl Leadership to add 1 to all dice on your Leader re-roll.",
     init: 4,
     revealed: true,
@@ -269,9 +273,9 @@ window.QB_CARDS = [
     title: "Many Kings to the Service of Mordor",
     cond: null,
     text: "Recruit two Southron & Easterling Regular units in each of three different Southron & Easterling Settlements.",
-    ct: "Great Host",
-    cc: null,
-    ctext:
+    combatTitle: "Great Host",
+    combatCond: null,
+    combatText:
       "If, after removing casualties from the Combat roll and Leader re-roll, your Army units are at least twice as many as the enemy Army units, score one automatic hit.",
     init: 7,
   },
@@ -283,9 +287,9 @@ window.QB_CARDS = [
     title: "Monsters Roused",
     cond: null,
     text: "Recruit one Sauron Regular unit in each of Angmar, Ettenmoors and Weather Hills, and one Sauron Elite unit in Trollshaws.",
-    ct: "Desperate Battle",
-    cc: null,
-    ctext:
+    combatTitle: "Desperate Battle",
+    combatCond: null,
+    combatText:
       "Both Armies add 1 to all dice on their Combat roll and Leader re-roll.",
     init: 3,
   },
@@ -297,9 +301,9 @@ window.QB_CARDS = [
     title: "Morgul Wound",
     cond: "Play if the Fellowship is revealed.",
     text: "If the Fellowship's current Corruption is three or less, add two Corruption points, otherwise add one Corruption point.",
-    ct: "Black Breath",
-    cc: "Play if a Nazgûl is in the battle.",
-    ctext:
+    combatTitle: "Black Breath",
+    combatCond: "Play if a Nazgûl is in the battle.",
+    combatText:
       "If your Leader re-roll scores at least one hit, you may additionally eliminate one Free Peoples Leader participating in the battle. Alternatively, you can choose to eliminate a Companion in the battle, if the number of hits equals or exceeds the Companion's Level.",
     init: 6,
     revealed: true,
@@ -315,9 +319,9 @@ window.QB_CARDS = [
     title: "Musterings of Long-planned War",
     cond: 'Play if all Shadow Nations are "At War."',
     text: "Recruit five Southron & Easterling Regular units in Gorgoroth and five Sauron Regular units in Nurn.",
-    ct: "Desperate Battle",
-    cc: null,
-    ctext:
+    combatTitle: "Desperate Battle",
+    combatCond: null,
+    combatText:
       "Both Armies add 1 to all dice on their Combat roll and Leader re-roll.",
     init: 3,
     pre: "allAtWar",
@@ -330,9 +334,9 @@ window.QB_CARDS = [
     title: "Nazgûl Search",
     cond: "Play if the Fellowship is on step 1 or higher on the Fellowship Track.",
     text: "Move any or all of the Nazgûl.\n\nThen, if at least one Nazgûl is in the region with the Fellowship, the Fellowship is revealed.",
-    ct: "Foul Stench",
-    cc: "Play if the total Nazgûl Leadership is 1 or more.",
-    ctext:
+    combatTitle: "Foul Stench",
+    combatCond: "Play if the total Nazgûl Leadership is 1 or more.",
+    combatText:
       "If the Nazgûl Leadership equals or exceeds the total Free Peoples Leadership, the Free Peoples Leader re-roll is cancelled.",
     init: 3,
     pre: "fsProgress1",
@@ -346,9 +350,9 @@ window.QB_CARDS = [
     title: "Olog-hai",
     cond: 'Play if Sauron is "At War."',
     text: "Recruit one Sauron unit (Regular or Elite) in a region where a Shadow Army is present.",
-    ct: "We Come to Kill",
-    cc: "Play if a Shadow Elite unit is in the battle.",
-    ctext:
+    combatTitle: "We Come to Kill",
+    combatCond: "Play if a Shadow Elite unit is in the battle.",
+    combatText:
       "After removing casualties from the Combat roll and Leader re-roll, roll an additional attack using only the Shadow Elite units (up to a maximum of five) and score one hit for each result of 5+.",
     init: 7,
     pre: "sauronAtWar",
@@ -362,9 +366,10 @@ window.QB_CARDS = [
     title: "On, On They Went",
     cond: null,
     text: 'The "On, On They Went" special Hunt tile is now in play.\n\nAdd the tile to the Hunt Pool when the Fellowship is on the Mordor Track.',
-    ct: "One for the Dark Lord",
-    cc: "Play if the defending Army is in the same region as the Fellowship.",
-    ctext: "Add 1 to all dice on your Combat roll and Leader re-roll.",
+    combatTitle: "One for the Dark Lord",
+    combatCond:
+      "Play if the defending Army is in the same region as the Fellowship.",
+    combatText: "Add 1 to all dice on your Combat roll and Leader re-roll.",
     init: 3,
     tile: true,
     cpre: "defInFs",
@@ -377,9 +382,9 @@ window.QB_CARDS = [
     title: "Orc Patrol",
     cond: "Play if the Fellowship is not in a region containing a Free Peoples Settlement.",
     text: "Draw a Hunt tile.\n\nIf the tile shows an Eye or is a Fellowship Special tile, discard it without effect.\n\nOtherwise, follow the rules for a successful Hunt.",
-    ct: "Cruel as Death",
-    cc: "Play if the total Nazgûl Leadership is 2 or more.",
-    ctext:
+    combatTitle: "Cruel as Death",
+    combatCond: "Play if the total Nazgûl Leadership is 2 or more.",
+    combatText:
       "Forfeit two points of Nazgûl Leadership to add 1 to all dice on your Combat roll.",
     init: 3,
     tile: true,
@@ -394,9 +399,9 @@ window.QB_CARDS = [
     title: "Orcs Multiplying Again",
     cond: null,
     text: "Recruit three Sauron Regular units in Dol Guldur and three Sauron Regular units in Mount Gundabad.",
-    ct: "Onslaught",
-    cc: null,
-    ctext:
+    combatTitle: "Onslaught",
+    combatCond: null,
+    combatText:
       "After removing casualties from the Combat roll and Leader re-roll, you may inflict and apply up to four additional hits against your units. Roll one die for each hit you inflicted to your units and score one hit against the enemy on each result of 4+.",
     init: 7,
   },
@@ -408,9 +413,9 @@ window.QB_CARDS = [
     title: "Pits of Mordor",
     cond: 'Play if Sauron is "At War."',
     text: "Recruit two Sauron Regular units in each of three different Sauron Strongholds.",
-    ct: "Desperate Battle",
-    cc: null,
-    ctext:
+    combatTitle: "Desperate Battle",
+    combatCond: null,
+    combatText:
       "Both Armies add 1 to all dice on their Combat roll and Leader re-roll.",
     init: 3,
     pre: "sauronAtWar",
@@ -423,9 +428,9 @@ window.QB_CARDS = [
     title: "Rage of the Dunlendings",
     cond: 'Play if Isengard is "At War".',
     text: "Recruit two Isengard Regular units in a free region adjacent to North or South Dunland.\n\nYou may also move to this region up to four Isengard units (Regular or Elite) from North Dunland and/or South Dunland.",
-    ct: "Relentless Assault",
-    cc: null,
-    ctext:
+    combatTitle: "Relentless Assault",
+    combatCond: null,
+    combatText:
       "Before the Combat roll, you may inflict and apply up to two hits against your units. Add 1 to all dice on your Combat roll for each hit you inflicted.",
     init: 3,
     pre: "isengardAtWar",
@@ -438,9 +443,9 @@ window.QB_CARDS = [
     title: "Rage of the Dunlendings",
     cond: "Play if the Hillmen of Dunland faction is in play.",
     text: "Recruit up to four Dunlendings and add them to a Shadow Army in either North or South Dunland (respecting the stacking limit). You may then move or attack with that Army.",
-    ct: "Relentless Assault",
-    cc: null,
-    ctext:
+    combatTitle: "Relentless Assault",
+    combatCond: null,
+    combatText:
       "Before the Combat roll, you may inflict and apply up to two hits against your units. Add 1 to all dice on your Combat roll for each hit you inflicted.",
     init: 3,
     faction: "Dunlendings",
@@ -454,9 +459,9 @@ window.QB_CARDS = [
     title: "Return of the Witch-king",
     cond: "Play if the Witch-king is in play.",
     text: "Move the Witch-king to Angmar and recruit two Sauron Regular units and one Sauron Elite unit there.",
-    ct: "Swarm of Bats",
-    cc: null,
-    ctext:
+    combatTitle: "Swarm of Bats",
+    combatCond: null,
+    combatText:
       "Cancel the effects of the Combat Card played by the Free Peoples player.\n\nIf the Free Peoples player did not play a card, add 1 to all dice on your Leader re-roll.",
     init: 0,
     pre: "witchKing",
@@ -469,9 +474,9 @@ window.QB_CARDS = [
     title: "Return to Valinor",
     cond: "Play if you control at least one Elven Stronghold.",
     text: "For each region with an Elven Stronghold which is not under siege, roll a number of dice equal to the number of Elven Army units in that region (up to a maximum of 5) and score one hit against that army for each result of '6.'",
-    ct: "Deadly Strife",
-    cc: null,
-    ctext:
+    combatTitle: "Deadly Strife",
+    combatCond: null,
+    combatText:
       "Both Armies add 2 to all dice on their Combat roll and Leader re-roll.",
     init: 3,
     pre: "elvenStronghold",
@@ -484,9 +489,10 @@ window.QB_CARDS = [
     title: "Shadows Gather",
     cond: null,
     text: "Move one Shadow Army up to three regions: the movement must end in a region already occupied by another Shadow Army (that must not be under siege). The traversed regions must be free for the purposes of Army movement, and no Shadow units may be picked up or dropped off along the way (other than, possibly, splitting the Army initially).",
-    ct: "Mûmakil",
-    cc: "Play if a Southrons & Easterlings Elite unit is in the battle.",
-    ctext:
+    combatTitle: "Mûmakil",
+    combatCond:
+      "Play if a Southrons & Easterlings Elite unit is in the battle.",
+    combatText:
       "Add 1 to all dice on your Combat roll. If, after the Leader re-roll, you scored more total hits than your opponent (including hits from any Free Peoples pre-Combat attack from a Combat card), score one additional hit.",
     init: "3-5",
     cpre: "seElite",
@@ -499,9 +505,9 @@ window.QB_CARDS = [
     title: "Shadows on the Misty Mountains",
     cond: null,
     text: "Recruit two Sauron units (Regular or Elite) and one Nazgûl either in Mount Gram or in Moria.",
-    ct: "Onslaught",
-    cc: null,
-    ctext:
+    combatTitle: "Onslaught",
+    combatCond: null,
+    combatText:
       "After removing casualties from the Combat roll and Leader re-roll, you may inflict and apply up to four additional hits against your units. Roll one die for each hit you inflicted to your units and score one hit against the enemy on each result of 4+.",
     init: 7,
   },
@@ -513,9 +519,10 @@ window.QB_CARDS = [
     title: "Shelob's Lair",
     cond: null,
     text: 'The "Shelob\'s Lair" special Hunt tile is now in play.\n\nAdd the tile to the Hunt Pool when the Fellowship is on the Mordor Track.',
-    ct: "One for the Dark Lord",
-    cc: "Play if the defending Army is in the same region as the Fellowship.",
-    ctext: "Add 1 to all dice on your Combat roll and Leader re-roll.",
+    combatTitle: "One for the Dark Lord",
+    combatCond:
+      "Play if the defending Army is in the same region as the Fellowship.",
+    combatText: "Add 1 to all dice on your Combat roll and Leader re-roll.",
     init: 3,
     tile: true,
     cpre: "defInFs",
@@ -528,9 +535,9 @@ window.QB_CARDS = [
     title: "Stormcrow",
     cond: 'Play if either the Fellowship or a Companion is inside the borders of a Free Peoples Nation not "At War."',
     text: "Move that Nation's Political Counter back one step on the Political Track.\n\nThen, the Free Peoples player must eliminate one Leader or Army unit of that Nation (Regular or Elite).",
-    ct: "Great Host",
-    cc: null,
-    ctext:
+    combatTitle: "Great Host",
+    combatCond: null,
+    combatText:
       "If, after removing casualties from the Combat roll and Leader re-roll, your Army units are at least twice as many as the enemy Army units, score one automatic hit.",
     init: 7,
     pre: "fpNotWar",
@@ -543,9 +550,9 @@ window.QB_CARDS = [
     title: "The Black Captain Commands",
     cond: "Play if the Witch-king is in play.",
     text: "You may either recruit two Nazgûl in the region containing the Witch-king, or move any or all of the Nazgûl.\n\nThen, you may move or attack with an Army containing the Witch-king.",
-    ct: "Foul Stench",
-    cc: "Play if the total Nazgûl Leadership is 1 or more.",
-    ctext:
+    combatTitle: "Foul Stench",
+    combatCond: "Play if the total Nazgûl Leadership is 1 or more.",
+    combatText:
       "If the Nazgûl Leadership equals or exceeds the total Free Peoples Leadership, the Free Peoples Leader re-roll is cancelled.",
     init: 3,
     pre: "witchKing",
@@ -559,9 +566,9 @@ window.QB_CARDS = [
     title: "The Breaking of the Fellowship",
     cond: "Play if the Fellowship is revealed.",
     text: 'Draw a Hunt tile.\n\nIf the tile shows an Eye or is a Fellowship Special tile, discard it without effect.\n\nOtherwise, the Free Peoples player must separate a number of Companions equal to the number on the tile (if possible), placing them in the same region as the Fellowship. Ignore any "Reveal" or "Stop" icons on the tile.\n\nIf Gollum is the Guide, add one Corruption point instead.',
-    ct: "Dread and Despair",
-    cc: "Play if the total Nazgûl Leadership is 1 or more.",
-    ctext:
+    combatTitle: "Dread and Despair",
+    combatCond: "Play if the total Nazgûl Leadership is 1 or more.",
+    combatText:
       "Before the Combat roll, forfeit one or more points of Nazgûl Leadership.\n\nDuring his Combat roll, the Free Peoples player rolls one Combat die less (to a minimum of one) for every point you have chosen to forfeit.",
     init: 3,
     revealed: true,
@@ -578,9 +585,9 @@ window.QB_CARDS = [
     title: "Corsairs of Umbar",
     cond: 'Play if the Southrons & Easterlings are "At War".',
     text: "Move one Shadow Army from Umbar to a Gondor coastal region.\n\nIf there is a Free Peoples Army in the region, a battle starts. The attacking Shadow Army cannot cease the attack, unless the Free Peoples Army was already under siege.",
-    ct: "Deadly Strife",
-    cc: null,
-    ctext:
+    combatTitle: "Deadly Strife",
+    combatCond: null,
+    combatText:
       "Both Armies add 2 to all dice on their Combat roll and Leader re-roll.",
     init: 3,
     pre: "seAtWar",
@@ -593,9 +600,9 @@ window.QB_CARDS = [
     title: "The Corsairs Are Upon Us!",
     cond: "Play if the Corsairs of Umbar faction is in play.",
     text: "You may move any or all of the Ships. Then, you may move one Army from a region containing a Ship to a region free for the purposes of Army movement which also contains a Ship.\n\nYou may then move or attack with that Army.\n\nIf a battle starts, during the first round the Free Peoples player cannot play a Combat Card.",
-    ct: "Deadly Strife",
-    cc: null,
-    ctext:
+    combatTitle: "Deadly Strife",
+    combatCond: null,
+    combatText:
       "Both Armies add 2 to all dice on their Combat roll and Leader re-roll.",
     init: 3,
     faction: "Corsairs",
@@ -609,9 +616,9 @@ window.QB_CARDS = [
     title: "The Day Without Dawn",
     cond: 'Play if all Shadow Nations are "At War".',
     text: "Discard all unused Free Peoples Action dice that show a Will of the West result.",
-    ct: "Relentless Assault",
-    cc: null,
-    ctext:
+    combatTitle: "Relentless Assault",
+    combatCond: null,
+    combatText:
       "Before the Combat roll, you may inflict and apply up to two hits against your units. Add 1 to all dice on your Combat roll for each hit you inflicted.",
     init: 3,
     pre: "allAtWar",
@@ -624,9 +631,9 @@ window.QB_CARDS = [
     title: "The Fighting Uruk-hai",
     cond: "Play if Saruman is in play, and if an Army containing an Isengard unit is besieging a Stronghold.",
     text: "Attack that Stronghold. The siege lasts for three Combat rounds instead of one. During the first round, the Free Peoples player cannot use a Combat card unless a Companion is in the battle.",
-    ct: "Onslaught",
-    cc: null,
-    ctext:
+    combatTitle: "Onslaught",
+    combatCond: null,
+    combatText:
       "After removing casualties from the Combat roll and Leader re-roll, you may inflict and apply up to four additional hits against your units. Roll one die for each hit you inflicted to your units and score one hit against the enemy on each result of 4+.",
     init: 7,
     pre: "isenBesieging",
@@ -639,9 +646,9 @@ window.QB_CARDS = [
     title: "The King is Revealed",
     cond: "Play if Aragorn is in play.",
     text: "Recruit five Sauron Regular units and a Nazgûl in Minas Morgul.",
-    ct: "Relentless Assault",
-    cc: null,
-    ctext:
+    combatTitle: "Relentless Assault",
+    combatCond: null,
+    combatText:
       "Before the Combat roll, you may inflict and apply up to two hits against your units. Add 1 to all dice on your Combat roll for each hit you inflicted.",
     init: 3,
     pre: "aragorn",
@@ -654,9 +661,9 @@ window.QB_CARDS = [
     title: "The Lidless Eye",
     cond: null,
     text: 'Change up to three unused Shadow Action Dice results into "Eye" results.\n\nPlace these dice in the Hunt Box immediately.',
-    ct: "Words of Power",
-    cc: "Play if a Nazgûl is in the battle.",
-    ctext:
+    combatTitle: "Words of Power",
+    combatCond: "Play if a Nazgûl is in the battle.",
+    combatText:
       "Choose a Companion. That Companion's Leadership and special abilities are cancelled for this Combat round.",
     init: 1,
     pre: "unusedDice",
@@ -671,9 +678,9 @@ window.QB_CARDS = [
     title: "The Nazgûl Strike",
     cond: "Play if the Fellowship is on step 1 or higher on the Fellowship Track.",
     text: "Move any or all of the Nazgûl.\n\nThen, if at least one Nazgûl is in the region with the Fellowship, you may either discard one Free Peoples Character Event card from the table or roll for the Hunt (as if the Free Peoples player had moved the Fellowship).",
-    ct: "Black Breath",
-    cc: "Play if a Nazgûl is in the battle.",
-    ctext:
+    combatTitle: "Black Breath",
+    combatCond: "Play if a Nazgûl is in the battle.",
+    combatText:
       "If your Leader re-roll scores at least one hit, you may additionally eliminate one Free Peoples Leader participating in the battle. Alternatively, you can choose to eliminate a Companion in the battle, if the number of hits equals or exceeds the Companion's Level.",
     init: 6,
     pre: "fsProgress1",
@@ -687,9 +694,9 @@ window.QB_CARDS = [
     title: "The Palantír of Orthanc",
     cond: "Play on the table if Saruman is in play.",
     text: 'When "The Palantír of Orthanc" is in play, after you use an Event Action die result to play an Event card, immediately draw another card from either one of your decks.\n\nThe Free Peoples player can force "The Palantír of Orthanc" to be discarded by either using a Will of the West Action die result, or using any Action die result and one Elven Ring. You must discard this card if Saruman is eliminated.',
-    ct: "Cruel as Death",
-    cc: "Play if the total Nazgûl Leadership is 2 or more.",
-    ctext:
+    combatTitle: "Cruel as Death",
+    combatCond: "Play if the total Nazgûl Leadership is 2 or more.",
+    combatText:
       "Forfeit two points of Nazgûl Leadership to add 1 to all dice on your Combat roll.",
     init: 3,
     onTable: true,
@@ -706,9 +713,10 @@ window.QB_CARDS = [
     title: "The Ring is Mine!",
     cond: null,
     text: 'The "The Ring Is Mine!" special Hunt tile is now in play.\n\nAdd the tile to the Hunt Pool when the Fellowship is on the Mordor Track.',
-    ct: "One for the Dark Lord",
-    cc: "Play if the defending Army is in the same region as the Fellowship.",
-    ctext: "Add 1 to all dice on your Combat roll and Leader re-roll.",
+    combatTitle: "One for the Dark Lord",
+    combatCond:
+      "Play if the defending Army is in the same region as the Fellowship.",
+    combatText: "Add 1 to all dice on your Combat roll and Leader re-roll.",
     init: 3,
     tile: true,
     cpre: "defInFs",
@@ -721,9 +729,9 @@ window.QB_CARDS = [
     title: "The Ringwraiths are Abroad",
     cond: null,
     text: "Move any or all of the Nazgûl.\n\nThen, you may either move two Armies each containing a Nazgûl, or attack with one Army containing a Nazgûl.",
-    ct: "Words of Power",
-    cc: "Play if a Nazgûl is in the battle.",
-    ctext:
+    combatTitle: "Words of Power",
+    combatCond: "Play if a Nazgûl is in the battle.",
+    combatText:
       "Choose a Companion. That Companion's Leadership and special abilities are cancelled for this Combat round.",
     init: 1,
     cpre: "nazInBattle",
@@ -736,9 +744,9 @@ window.QB_CARDS = [
     title: "The Shadow is Moving",
     cond: 'Play if all Shadow Nations are "At War."',
     text: "Move up to four different Shadow Armies one region each.",
-    ct: "Swarm of Bats",
-    cc: null,
-    ctext:
+    combatTitle: "Swarm of Bats",
+    combatCond: null,
+    combatText:
       "Cancel the effects of the Combat card played by the Free Peoples player.\n\nIf the Free Peoples player did not play a card, add 1 to all dice on your Leader re-roll.",
     init: 0,
     pre: "allAtWar",
@@ -751,9 +759,10 @@ window.QB_CARDS = [
     title: "The Shadow Lengthens",
     cond: null,
     text: "Move two Shadow Armies up to two regions: each movement must end in a region already occupied by another Shadow Army (that must not be under siege). The traversed regions must be free for the purposes of Army movement, and no Shadow units may be picked up or dropped off along the way (other than, possibly, splitting the Army initially).",
-    ct: "Mûmakil",
-    cc: "Play if a Southrons & Easterlings Elite unit is in the battle.",
-    ctext:
+    combatTitle: "Mûmakil",
+    combatCond:
+      "Play if a Southrons & Easterlings Elite unit is in the battle.",
+    combatText:
       "Add 1 to all dice on your Combat roll. If, after the Leader re-roll, you scored more total hits than your opponent (including hits from any Free Peoples pre-Combat attack from a Combat card), score one additional hit.",
     init: "3-5",
     cpre: "seElite",
@@ -766,9 +775,10 @@ window.QB_CARDS = [
     title: "Threats and Promises",
     cond: "Play on the table.",
     text: 'When "Threats and Promises" is in play, the Free Peoples player cannot advance a passive Nation on the Political Track using a Muster Action die result.\n\nYou must discard this card from the table as soon as a Free Peoples Nation advances on the Political Track either due to an attack or due to a Companion\'s special ability.',
-    ct: "Devilry of Orthanc",
-    cc: "Play if an Isengard Army unit is in the battle and the defending Army is in a Stronghold.",
-    ctext: "Add 1 to all dice on your Combat roll.",
+    combatTitle: "Devilry of Orthanc",
+    combatCond:
+      "Play if an Isengard Army unit is in the battle and the defending Army is in a Stronghold.",
+    combatText: "Add 1 to all dice on your Combat roll.",
     init: 3,
     onTable: true,
     cpre: "isengardStronghold",
@@ -783,9 +793,9 @@ window.QB_CARDS = [
     title: "Wormtongue",
     cond: "Play on the table if Saruman is in play.",
     text: "When \"Wormtongue\" is in play, Rohan cannot be activated except by an appropriate Companion, or by the Fellowship being declared in Edoras or Helm's Deep, or by an attack on Edoras or Helm's Deep.\n\nYou must discard this card from the table as soon as Rohan is activated, or if Saruman is eliminated.",
-    ct: "Foul Stench",
-    cc: "Play if the total Nazgûl Leadership is 1 or more.",
-    ctext:
+    combatTitle: "Foul Stench",
+    combatCond: "Play if the total Nazgûl Leadership is 1 or more.",
+    combatText:
       "If the Nazgûl Leadership equals or exceeds the total Free Peoples Leadership, the Free Peoples Leader re-roll is cancelled.",
     init: 3,
     onTable: true,
@@ -802,9 +812,9 @@ window.QB_CARDS = [
     title: "Worn with Sorrow and Toil",
     cond: "Play on the table.",
     text: 'When "Worn with Sorrow and Toil" is in play, if a Companion in the Fellowship is taken as a casualty you may also discard one of the Free Peoples player\'s Character Event cards from his hand (choosing it randomly) or from the table.\n\nYou must discard this card from the table immediately if the Fellowship is declared in an unconquered Free Peoples City or Stronghold.',
-    ct: "Words of Power",
-    cc: "Play if a Nazgûl is in the battle.",
-    ctext:
+    combatTitle: "Words of Power",
+    combatCond: "Play if a Nazgûl is in the battle.",
+    combatText:
       "Choose a Companion. That Companion's Leadership and special abilities are cancelled for this Combat round.",
     init: 1,
     onTable: true,
@@ -821,9 +831,10 @@ window.QB_CARDS = [
     title: "Not on Anybody's Side",
     cond: "Play on the Table if any Free Peoples Faction is in play.",
     text: 'No Faction Event card or Call to Battle card of the Ent or Eagle Factions can be played.\n\nThe Free Peoples player can force "Not on Anybody\'s Side" to be discarded by using a Will of the West Action Die result, or any Action die if Gandalf the White is in play.',
-    ct: "Devilry of Orthanc",
-    cc: "Play if an Isengard Army unit is in the battle and the defending Army is in a Stronghold.",
-    ctext: "Add 1 to all dice on your Combat roll.",
+    combatTitle: "Devilry of Orthanc",
+    combatCond:
+      "Play if an Isengard Army unit is in the battle and the defending Army is in a Stronghold.",
+    combatText: "Add 1 to all dice on your Combat roll.",
     init: 3,
     onTable: true,
     pre: "fpFaction",
@@ -839,9 +850,9 @@ window.QB_CARDS = [
     title: "Strongly Guarded",
     cond: "Play on the table.",
     text: 'No Free Peoples Faction may move into a region containing a Stronghold controlled by the Shadow player or attack a Shadow Army in such a region, and their Call to Battle effects may not be used in such battles.\n\nThe Free Peoples player can force "Strongly Guarded" to be discarded by using a Will of the West Action Die result, or any Action die and one Elven Ring.',
-    ct: "Deadly Strife",
-    cc: null,
-    ctext:
+    combatTitle: "Deadly Strife",
+    combatCond: null,
+    combatText:
       "Both Armies add 2 to all dice on their Combat roll and Leader re-roll.",
     init: 3,
     onTable: true,
@@ -856,9 +867,9 @@ window.QB_CARDS = [
     title: "Great Winged Creatures",
     cond: 'Play if all Shadow Nations are "At War."',
     text: "Recruit a Nazgûl in each Shadow Army containing at least one Nazgûl (excluding the Witch-king).",
-    ct: "Relentless Assault",
-    cc: null,
-    ctext:
+    combatTitle: "Relentless Assault",
+    combatCond: null,
+    combatText:
       "Before the Combat roll, you may inflict and apply up to two hits against your units. Add 1 to all dice on your Combat roll for each hit you inflicted.",
     init: 3,
     pre: "allAtWar",

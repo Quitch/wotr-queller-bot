@@ -1,3 +1,10 @@
+// Reference text shown in the Help, Rules and glossary modals — the Queller Learning Guide's terms, its numbered
+// rules, the rulings and the turn sequence. Data only; ui.js and modals.js render it.
+//   QB_GLOSSARY          {term: definition}; QB_GLOSSARY_ALIASES maps other spellings to a term
+//   QB_RULES             [[section, [[number, text], ...]], ...] — the rule numbers the flowcharts refer to
+//   QB_RULINGS           [[question, answer], ...]
+//   QB_TURN              [[phase, text], ...]
+// In any text, *term* marks a glossary term (rendered as a tooltip link) and "\n•" starts a bullet line.
 window.QB_GLOSSARY = {
   adjacent:
     "Two regions are adjacent when an army can move directly from one to the other. A Shadow army that besieges a Stronghold is adjacent to the *garrison* inside the Stronghold. The *garrison* is adjacent to the besieging army (rule 5).",
