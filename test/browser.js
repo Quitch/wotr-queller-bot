@@ -54,10 +54,22 @@ const SEL = {
   RINGS_INCREASE: '[data-step="rings"][data-d="1"]',
   COMPANIONS_STEPPER: '[data-step="fs.companions"]',
   BROKEN_AUTOSAVE_NOTICE: '.setup [role="status"]',
+  LIVE_REGION: "#live",
+  MODAL_BODY: "#modal .body",
+  FLOW_TABS: "#modal .tabs",
+  FLOW_TAB: "#modal [data-fp]",
+  FLOW_TAB_ON: '#modal [data-fp][aria-pressed="true"]',
+  FLOW_WRAP: "#modal .flowwrap",
+  LOG: ".log",
+  TRAIL: ".trail",
+  TRAIL_DETAILS: "details[data-key]",
+  STEPPER_BUTTONS: ".stepper button",
+  PAGE_TITLE: ".brand h1",
   phase: (id) => '[data-phase="' + id + '"]',
   modal: (name) => '[data-modal="' + name + '"]',
   menuItem: (name) => '#modal .toolmenu [data-modal="' + name + '"]',
   option: (id) => "#opt-" + id,
+  flowTab: (key) => '#modal [data-fp="' + key + '"]',
 };
 // An autosave the app cannot render (no dice), so a reload falls back to the New game screen.
 const brokenAutosave = () =>
@@ -68,11 +80,14 @@ const brokenAutosave = () =>
   });
 
 // Serve the built page and open it. Returns {page, browser, server, errors, close}; errors collects page errors and
-// console errors when captureErrors is on; touch opens it as a touch device (a coarse pointer, mobile viewport).
+// console errors when captureErrors is on; touch opens it as a touch device (a coarse pointer, mobile viewport);
+// headless false and args are for a browser a screen reader can see.
 async function launchBuiltPage({
   viewport = VIEWPORT.DESKTOP,
   captureErrors = false,
   touch = false,
+  headless = true,
+  args = [],
 } = {}) {
   const html =
     '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"></head><body>' +
@@ -87,7 +102,7 @@ async function launchBuiltPage({
   });
   await new Promise((resolve) => server.listen(0, resolve));
   const url = "http://127.0.0.1:" + server.address().port + "/";
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({ headless, args });
   const context = await browser.newContext(
     touch ? { viewport, hasTouch: true, isMobile: true } : { viewport },
   );
@@ -115,6 +130,11 @@ async function startGameWithEverythingOn(page) {
     await page.check(SEL.option(option));
   await page.click(SEL.START);
 }
+// Start a game with every option on and open the Setup walk, so the game screen shows its first prompt.
+async function startGameAtSetupPrompt(page) {
+  await startGameWithEverythingOn(page);
+  await page.click(SEL.phase("setup"));
+}
 const readState = (page) => page.evaluate(() => window.QBUI.state);
 // True when the page body scrolls sideways (something is wider than the screen).
 const scrollsSideways = (page) =>
@@ -125,6 +145,17 @@ const scrollsSideways = (page) =>
 async function openFromToolsMenu(page, name) {
   await page.click(SEL.TOOLS_BUTTON);
   await page.click(SEL.menuItem(name));
+}
+const PHASES = ["p1", "p2", "p3", "p4", "p5"]; // the phase buttons, in turn order
+// The first answer button, or when no walk is open the next phase's button (the Setup walk can end without a log line).
+async function nextAnswerOrPhaseButton(page) {
+  const answer = await page.$(SEL.ANSWER_BUTTONS);
+  if (answer) return answer;
+  for (const phase of PHASES) {
+    const button = await page.$(SEL.phase(phase));
+    if (button) return button;
+  }
+  return null;
 }
 // Press the first answer button until the walk ends (ticking "near Moria" on a battle form).
 async function answerAll(page, max = MAX_ANSWERS) {
@@ -146,8 +177,10 @@ export {
   brokenAutosave,
   launchBuiltPage,
   startGameWithEverythingOn,
+  startGameAtSetupPrompt,
   readState,
   scrollsSideways,
   openFromToolsMenu,
+  nextAnswerOrPhaseButton,
   answerAll,
 };

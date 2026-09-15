@@ -20,8 +20,8 @@ export default [
     },
   },
   {
-    // Node test scripts (ES modules). `window` is the real one inside Playwright page.evaluate() callbacks in smoke.js
-    // and shot.js.
+    // Node test scripts (ES modules). `window` is the real one inside Playwright page.evaluate() callbacks in the four
+    // Playwright scripts (smoke.js, a11y.js, shot.js, reader.js).
     files: ["test/**/*.js"],
     languageOptions: {
       sourceType: "module",

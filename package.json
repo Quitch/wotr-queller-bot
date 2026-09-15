@@ -16,11 +16,14 @@
     "test": "node test/check.js && node test/verify.js && node test/debuglog.js && node test/render.js && node test/ui.js && node test/contrast.js && node test/fuzz.js 1",
     "coverage": "c8 --src src --all --exclude test --exclude scripts --exclude build.js -r text -r lcov npm test",
     "smoke": "node test/smoke.js",
+    "a11y": "node test/a11y.js",
+    "reader": "node test/reader.js",
     "verify": "npm run lint && npm test"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^10.0.1",
+    "@guidepup/guidepup": "^0.34.0",
     "c8": "^12.0.0",
     "esbuild": "^0.28.2",
     "eslint": "^10.10.0",
