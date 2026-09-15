@@ -7,7 +7,6 @@ import { readBattleForm } from "./battle-form.js";
 import { MODAL } from "./constants.js";
 import { find, onClickEach } from "./dom.js";
 import {
-  afterWalk,
   onAnswer,
   onCard,
   onPhase,
@@ -65,26 +64,6 @@ function wireBattleForm() {
     find("#bf-nazLead-n").textContent = value;
   });
 }
-function wireCountPrompt() {
-  const countOk = find("#cntOk");
-  if (!countOk) return;
-  countOk.onclick = () => {
-    const value = find("#cnt").value;
-    act(
-      () => {
-        engine.answer(state, value);
-        afterWalk();
-      },
-      {
-        action: "answer",
-        prompt: PROMPT.COUNT,
-        page: state.walk?.page,
-        node: state.walk?.node,
-        value,
-      },
-    );
-  };
-}
 function wireDiceSpend() {
   onClickEach("[data-spend]", (button) => spendDieClick(+button.dataset.spend));
 }
@@ -129,7 +108,6 @@ export function wire() {
   wirePhaseButtons();
   wireAnswerButtons();
   wireBattleForm();
-  wireCountPrompt();
   wireDiceSpend();
   wireTableCards();
   wireTracker();

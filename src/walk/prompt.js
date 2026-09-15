@@ -5,7 +5,6 @@ export const PENDING = Symbol("prompt open");
 // What the walk is asking the player (walk.prompt.type).
 export const PROMPT = {
   YES_NO: "yesno",
-  COUNT: "count",
   SITUATIONAL: "situ",
   CONFIRM: "confirm",
   DIE_CHECK: "diecheck",

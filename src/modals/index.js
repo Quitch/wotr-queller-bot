@@ -12,7 +12,8 @@ import { rules } from "./rules.js";
 import { saveLoad } from "./save.js";
 import { settings } from "./settings.js";
 
-registerModals({
+// The registrations by modal name (test/render.js builds every modal's content from them).
+export const MODAL_REGISTRATIONS = {
   [MODAL.GLOSSARY]: glossary,
   [MODAL.RULES]: rules,
   [MODAL.FLOW]: flowViewer,
@@ -23,7 +24,8 @@ registerModals({
   [MODAL.HELP]: help,
   [MODAL.DEBUG]: debugLog,
   [MODAL.ASK]: askDialog,
-});
+};
+registerModals(MODAL_REGISTRATIONS);
 
 export { renderModal, closeModal } from "./framework.js";
 export { loadHTML, wireLoad } from "./save.js";

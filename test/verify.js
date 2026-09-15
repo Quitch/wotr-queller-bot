@@ -87,6 +87,7 @@ function withTemporaryEdges(edges, extra, fn) {
 }
 const lastTrailText = (state) =>
   state.walk.trail[state.walk.trail.length - 1].text;
+const lastLogText = (state) => state.log[state.log.length - 1].text;
 const noUsableDie = (state) =>
   !state.dice.pool.some(
     (pooledDie) =>
@@ -551,6 +552,202 @@ function battleOpenResetAndRunGuard() {
     "run() ends a walk that never reaches a prompt instead of leaving it in limbo",
   );
 }
+// An older save (settings.walk, boolean Shadow nations, no rings, the fields since dropped) comes up to date; a
+// current save passes through unchanged.
+function migrateUpgradesOldSaves() {
+  const oldSave = JSON.parse(
+    JSON.stringify(
+      engine.newState({ dice: true, cards: true, tracker: true, wome: false }),
+    ),
+  );
+  delete oldSave.settings.tracker;
+  oldSave.settings.walk = false;
+  oldSave.board.nations.sauron = true;
+  oldSave.board.nations.isengard = false;
+  delete oldSave.board.nations.se;
+  delete oldSave.board.rings;
+  oldSave.shownCard = "sa002";
+  oldSave.lastAction = { action: "answer" };
+  const migrated = engine.migrate(oldSave);
+  ok(
+    migrated.settings.tracker === false && !("walk" in migrated.settings),
+    "settings.walk became settings.tracker",
+  );
+  ok(
+    migrated.board.nations.sauron === 0 &&
+      migrated.board.nations.isengard === engine.SHADOW_NATION_START.isengard &&
+      migrated.board.nations.se === engine.SHADOW_NATION_START.se,
+    "boolean Shadow nations became steps (true → at war, false or missing → the start)",
+  );
+  ok(
+    migrated.board.rings === 0 &&
+      !("shownCard" in migrated) &&
+      !("lastAction" in migrated),
+    "rings added, shownCard and lastAction dropped",
+  );
+  const current = engine.newState({ dice: true });
+  const before = JSON.stringify(current);
+  ok(
+    JSON.stringify(engine.migrate(current)) === before,
+    "a current save is unchanged by migrate",
+  );
+}
+// Drawing from an empty deck reshuffles its discards; with both empty nothing is drawn. Servants of Sauron tops up a
+// short Faction deck from the discards before it looks at three cards.
+function emptyDeckReshufflesDiscards() {
+  const state = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  const characterCards = state.cards.decks.C.slice(0, 3);
+  state.cards.decks.C = [];
+  state.cards.discards.C = characterCards.slice();
+  const drawn = engine.drawCard(state, engine.DECK.CHARACTER);
+  ok(
+    characterCards.includes(drawn) &&
+      state.cards.hand.length === 1 &&
+      state.cards.decks.C.length === 2 &&
+      state.cards.discards.C.length === 0 &&
+      state.log.some((entry) =>
+        /Reshuffled the Character discards/.test(entry.text),
+      ),
+    "an empty deck is rebuilt from its discards before the draw",
+  );
+  state.cards.decks.C = [];
+  ok(
+    engine.drawCard(state, engine.DECK.CHARACTER) === null &&
+      state.cards.hand.length === 1 &&
+      /Character deck is empty/.test(lastLogText(state)),
+    "with deck and discards both empty nothing is drawn",
+  );
+  const servants = engine.CARDS.find(
+    (card) => card.effect === engine.CARD_EFFECT.SERVANTS,
+  );
+  const factionCards = state.cards.decks.F.slice();
+  state.cards.decks.F = factionCards.slice(0, 2);
+  state.cards.discards.F = factionCards.slice(2);
+  state.cards.factionHand = [];
+  const entries = engine.resolveCardEffects(state, servants.id, {
+    combat: false,
+    die: null,
+    palantirBefore: false,
+  });
+  ok(
+    state.cards.factionHand.length === 1 &&
+      state.cards.discards.F.length === 0 &&
+      state.cards.decks.F.length === factionCards.length - 1 &&
+      entries.some((entry) => /keep one of 3 cards/.test(entry.text)),
+    "Servants of Sauron topped the two-card Faction deck up from the discards and looked at three",
+  );
+}
+// The tracker's table triggers: Worn with Sorrow and Toil asks like Flocks of Crebain; Wormtongue leaves when Saruman does.
+function wornWithSorrowAsksAndWormtongueOnSaruman() {
+  const state = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  state.cards.table = [CARD.WORN_WITH_SORROW, CARD.WORMTONGUE];
+  state.board.chars.saruman = true;
+  state.board.fs.revealed = true;
+  state.board.fs.inFPSettlement = true;
+  const asks = engine.tableTriggers(state, {
+    key: "fs.inFPSettlement",
+    from: false,
+    to: true,
+  });
+  ok(
+    asks.length === 1 &&
+      asks[0].card === CARD.WORN_WITH_SORROW &&
+      /Worn with Sorrow and Toil/.test(asks[0].q),
+    "Worn with Sorrow and Toil asked about when the Fellowship is declared in a Free Peoples settlement",
+  );
+  engine.tableTriggers(state, { key: "chars.saruman", from: true, to: false });
+  ok(
+    !state.cards.table.includes(CARD.WORMTONGUE) &&
+      state.cards.discards.C.includes(CARD.WORMTONGUE),
+    "Wormtongue discarded when Saruman is eliminated",
+  );
+}
+// A Muster die brought back from "set aside for a minion" cannot be set aside again (Rulings): the grey box is skipped
+// and the die, unused, is spent. The box is reached directly, since a walk that came from the reserve answers the
+// Will of the West check No and never gets there by its arrows.
+function reservedDieCannotBeReservedAgain() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.dice.pool = [die("Muster")];
+  state.walk = null;
+  engine.startWalk(state, "MU", "Muster 2", {
+    die: DIE_REQUIREMENT.MUSTER,
+    dieIndex: 0,
+  });
+  ok(
+    state.walk.prompt?.type === PROMPT.YES_NO,
+    "Muster 2 without the tracker asks about the minion",
+  );
+  state.walk.fromReserve = true;
+  state.walk.reservedDieIndex = 0;
+  state.walk.node = "saveDie";
+  state.walk.prompt = null;
+  engine.run(state);
+  ok(
+    state.walk.done &&
+      state.walk.trail.some(
+        (entry) =>
+          entry.kind === TRAIL.SKIP && /must be used now/.test(entry.why || ""),
+      ),
+    '"Save muster" skipped for a die that was already set aside',
+  );
+  ok(
+    state.dice.pool[0].status === DIE_STATE.USED &&
+      state.walk.result === WALK_RESULT.ACTION &&
+      !state.minionReserved,
+    "the die is spent rather than set aside again",
+  );
+}
+// "Card allows choice of muster location" is answered from the chosen card when the app holds the cards.
+function musterChoiceCardAutoAnswered() {
+  const walkMuster3 = (cardId) => {
+    const state = phase5State(
+      { dice: true, cards: true, tracker: true, wome: false },
+      STRATEGY.MILITARY,
+    );
+    state.cards.hand = [cardId];
+    state.dice.pool = [die("Muster")];
+    state.walk = null;
+    engine.startWalk(state, "MU", "Muster 3/Muster Event card", {
+      die: DIE_REQUIREMENT.MUSTER,
+      dieIndex: 0,
+    });
+    ok(
+      state.walk.prompt?.type === PROMPT.CONFIRM &&
+        state.walk.prompt.card === cardId,
+      "the Muster card's playability is confirmed first (" + cardId + ")",
+    );
+    state.walk.chosen = cardId;
+    engine.answer(state, true);
+    return state.walk.trail.find(
+      (entry) =>
+        entry.kind === TRAIL.QUESTION &&
+        /choice of muster location/.test(entry.text),
+    );
+  };
+  const choice = walkMuster3("sa018"); // Many Kings to the Service of Mordor: any muster region
+  ok(
+    choice?.auto && choice.answer === "Yes" && /Many Kings/.test(choice.why),
+    "a card that lets Queller choose the muster region answers Yes with the card named",
+  );
+  const noChoice = walkMuster3("sa019"); // Monsters Roused: a fixed region
+  ok(
+    noChoice?.auto && noChoice.answer === "No",
+    "a card with a fixed muster region answers No",
+  );
+}
 // The scenarios, with the section of the change log each one guards.
 const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
@@ -565,6 +762,11 @@ const SCENARIOS = [
   ["6.6", tableTriggersDiscardOrAsk],
   ["6.7", callToBattleCardsIgnoreInitiative],
   ["7.3/7.4", battleOpenResetAndRunGuard],
+  ["migrate", migrateUpgradesOldSaves],
+  ["decks", emptyDeckReshufflesDiscards],
+  ["6.6", wornWithSorrowAsksAndWormtongueOnSaruman],
+  ["7.1", reservedDieCannotBeReservedAgain],
+  ["muster", musterChoiceCardAutoAnswered],
 ];
 function main() {
   for (const [number, scenario] of SCENARIOS) {

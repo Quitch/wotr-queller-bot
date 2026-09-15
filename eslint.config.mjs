@@ -7,6 +7,7 @@ export default [
     ignores: [
       "node_modules/",
       "index.html", // build output of build.js
+      "coverage/", // c8 output of npm run coverage
     ],
   },
   js.configs.recommended,

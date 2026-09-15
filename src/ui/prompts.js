@@ -66,21 +66,6 @@ function renderYesNoPrompt(prompt, walk, node) {
     answers: YES_NO_BUTTONS,
   };
 }
-function renderCountPrompt(prompt) {
-  return {
-    body:
-      '<div class="eyebrow">Board question</div><p class="q">' +
-      formatText(prompt.text) +
-      '</p><p><label for="cnt">Number</label> <input type="number" id="cnt" class="askctl" min="' +
-      prompt.min +
-      '" max="' +
-      prompt.max +
-      '" value="' +
-      (prompt.value ?? 0) +
-      '" style="min-width:100px"></p>',
-    answers: '<button class="btn yes" id="cntOk">Continue</button>',
-  };
-}
 function renderChoicePrompt(prompt) {
   return {
     body:
@@ -225,9 +210,9 @@ function renderBattleFormPrompt(prompt) {
     answers: '<button class="btn yes" id="bfOk">Start the round</button>',
   };
 }
-const PROMPT_RENDERERS = {
+// One renderer per PROMPT type (test/check.js verifies the two match).
+export const PROMPT_RENDERERS = {
   [PROMPT.YES_NO]: renderYesNoPrompt,
-  [PROMPT.COUNT]: renderCountPrompt,
   [PROMPT.CHOICE]: renderChoicePrompt,
   [PROMPT.SITUATIONAL]: renderSituationalPrompt,
   [PROMPT.CONFIRM]: renderConfirmPrompt,

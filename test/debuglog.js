@@ -23,9 +23,8 @@ const storage = {
     stored.text = text;
   },
 };
-// The answer that moves a prompt on: No to every question, the minimum or first option otherwise.
+// The answer that moves a prompt on: No to every question, the first option otherwise.
 const ANSWERS = {
-  [PROMPT.COUNT]: (prompt) => prompt.min,
   [PROMPT.CHOICE]: (prompt) => prompt.options[0].value,
   [PROMPT.ROLL]: (prompt) => prompt.options[0],
   [PROMPT.PRIORITY]: () => "ok",

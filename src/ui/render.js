@@ -83,7 +83,8 @@ export function render() {
 }
 // The game screen: header, the dice and cards panels, the walkthrough, the board tracker and the footer.
 // With the full board tracker on, the dice and cards panels sit under the walkthrough in the left column; otherwise they share a top row.
-function gameHTML() {
+// Exported for test/render.js, which builds it without a DOM.
+export function gameHTML() {
   const below = state.settings.tracker;
   const panels =
     (state.settings.dice ? diceHTML() : "") +
