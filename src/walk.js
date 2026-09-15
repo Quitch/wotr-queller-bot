@@ -443,514 +443,686 @@
   }
 
   // ----- decisions -----
-  function handleDecision(state, node) {
-    const walk = state.walk,
-      id = walk.node,
-      page = walk.page,
-      nodeExtra = NODE.extra(node),
-      board = state.board,
-      cards = state.settings.cards,
-      dice = state.settings.dice;
-    if (nodeExtra.wome && !state.settings.wome)
-      return recordDecision(state, {
-        text: NODE.text(node),
-        ringCondition: nodeExtra.bold,
-        answer: false,
-        auto: true,
-        why: "WoME not in play",
-      });
-    const key = page + "." + id,
-      trackerOn = state.settings.tracker,
-      factionsKnown = trackerOn || (cards && state.settings.wome);
-    const answerAuto = (value, why) =>
-      recordDecision(state, {
-        text: NODE.text(node),
-        ringCondition: nodeExtra.bold,
-        answer: value,
-        auto: true,
-        why,
-      });
-    const answerFromTracker = (value, why) =>
-      trackerOn ? answerAuto(value, why) : ask(state, node);
-    const handCount = engine.handCounts(state);
-    const characterHand = () => engine.handCardsOfDeck(state, DECK.CHARACTER),
-      strategyHand = () => engine.handCardsOfDeck(state, DECK.STRATEGY);
-    // Evaluate which of `ids` are playable (asking the player as needed), keep them as this walk's candidates and answer "any playable?"
-    const playableCount = (ids, ctx, noun) => {
-      const playable = evalPlayable(state, ids, ctx);
-      if (playable === PENDING) return;
-      walk.cands = playable;
-      answerAuto(
-        playable.length > 0,
-        playable.length + " " + noun + (playable.length === 1 ? "" : "s"),
+  // Record an automatic answer to the current decision box and follow its arrow.
+  function answerAuto(state, node, answer, why) {
+    recordDecision(state, {
+      text: NODE.text(node),
+      ringCondition: NODE.extra(node).bold,
+      answer,
+      auto: true,
+      why,
+    });
+  }
+  // Answer from the tracker when it is on, otherwise put the question to the player.
+  function answerFromTracker(state, node, answer, why) {
+    if (state.settings.tracker) answerAuto(state, node, answer, why);
+    else ask(state, node);
+  }
+  // Evaluate which of `ids` are playable (asking the player as needed), keep them as this walk's candidates and answer "any playable?".
+  function answerByPlayableCount(state, node, ids, context, noun) {
+    const playable = evalPlayable(state, ids, context);
+    if (playable === PENDING) return PENDING;
+    state.walk.cands = playable;
+    answerAuto(
+      state,
+      node,
+      playable.length > 0,
+      playable.length + " " + noun + (playable.length === 1 ? "" : "s"),
+    );
+  }
+  // The facts a decision handler may need, gathered once per decision.
+  function decisionFacts(state) {
+    const cardsOn = state.settings.cards,
+      trackerOn = state.settings.tracker;
+    return {
+      trackerOn,
+      cardsOn,
+      diceOn: state.settings.dice,
+      wome: state.settings.wome,
+      factionsKnown: trackerOn || (cardsOn && state.settings.wome),
+      board: state.board,
+      walk: state.walk,
+      handCount: engine.handCounts(state),
+    };
+  }
+  const characterHand = (state) =>
+    engine.handCardsOfDeck(state, DECK.CHARACTER);
+  const strategyHand = (state) => engine.handCardsOfDeck(state, DECK.STRATEGY);
+
+  // ---- Phases 1-4
+  function decideHandOver6(state, node, { cardsOn, handCount }) {
+    if (cardsOn)
+      return answerAuto(
+        state,
+        node,
+        handCount.total > 6,
+        "hand: " + handCount.total,
+      );
+    ask(state, node);
+  }
+  function decideStrategyCardsOver1(state, node, { cardsOn, handCount }) {
+    if (cardsOn)
+      return answerAuto(
+        state,
+        node,
+        handCount.strategy > 1,
+        "Strategy cards: " + handCount.strategy,
+      );
+    ask(state, node);
+  }
+  function decideFactionHandOver4(state, node, { cardsOn, handCount }) {
+    if (cardsOn)
+      return answerAuto(
+        state,
+        node,
+        handCount.faction > 4,
+        "Faction cards: " + handCount.faction,
+      );
+    ask(state, node);
+  }
+  function decideCorruptionBelowVP(state, node, { board }) {
+    answerFromTracker(
+      state,
+      node,
+      board.corruption < board.shadowVP,
+      "Corruption " + board.corruption + " vs Shadow VP " + board.shadowVP,
+    );
+  }
+  function decideVPBelowCorruption(state, node, { board }) {
+    answerFromTracker(
+      state,
+      node,
+      board.shadowVP < board.corruption,
+      "Shadow VP " + board.shadowVP + " vs Corruption " + board.corruption,
+    );
+  }
+  function decideFellowshipAtStart(state, node, { board }) {
+    answerFromTracker(
+      state,
+      node,
+      board.fs.atStart && board.fs.progress === 0,
+      "tracker",
+    );
+  }
+  function decideFellowshipInMordor(state, node, { board }) {
+    answerFromTracker(state, node, board.fs.mordor, "tracker");
+  }
+  const decideProgressOver = (limit) =>
+    function decideProgress(state, node, { board }) {
+      answerFromTracker(
+        state,
+        node,
+        board.fs.progress > limit,
+        "Progress " + board.fs.progress,
       );
     };
-    switch (key) {
-      // ---- Phases 1-4
-      case "C14.more6":
-      case "M14.more6":
-        if (cards)
-          return answerAuto(handCount.total > 6, "hand: " + handCount.total);
-        return ask(state, node);
-      case "C14.strat1":
-        if (cards)
-          return answerAuto(
-            handCount.strategy > 1,
-            "Strategy cards: " + handCount.strategy,
-          );
-        return ask(state, node);
-      case "C14.more4f":
-      case "M14.more4f":
-        if (cards)
-          return answerAuto(
-            handCount.faction > 4,
-            "Faction cards: " + handCount.faction,
-          );
-        return ask(state, node);
-      case "C14.corrLow":
-        return answerFromTracker(
-          board.corruption < board.shadowVP,
-          "Corruption " + board.corruption + " vs Shadow VP " + board.shadowVP,
-        );
-      case "M14.vpLow":
-        return answerFromTracker(
-          board.shadowVP < board.corruption,
-          "Shadow VP " + board.shadowVP + " vs Corruption " + board.corruption,
-        );
-      case "C14.fsStart":
-      case "M14.fsStart":
-        return answerFromTracker(
-          board.fs.atStart && board.fs.progress === 0,
-          "tracker",
-        );
-      case "C14.fsMordor":
-      case "M14.fsMordor":
-        return answerFromTracker(board.fs.mordor, "tracker");
-      case "C14.prog4":
-        return answerFromTracker(
-          board.fs.progress > 4,
-          "Progress " + board.fs.progress,
-        );
-      case "M14.prog5":
-        return answerFromTracker(
-          board.fs.progress > 5,
-          "Progress " + board.fs.progress,
-        );
-      case "C14.winOr7":
-        if (dice && engine.diceCount(state) === engine.BASE_ACTION_DICE)
-          return answerAuto(
-            true,
-            "Shadow has " + engine.BASE_ACTION_DICE + " dice",
-          );
-        return ask(
-          state,
-          node,
-          "*Mobile* army adjacent to *target* which would win the game" +
-            (dice ? "" : " or Shadow only has 7 dice"),
-        );
-      // ---- Phase 5
-      case "C5.charMordor":
-      case "M5.charMordor":
-        if (!trackerOn && !cards) return ask(state, node);
-        {
-          const onMordorOrRevealed = boardFactYesNo(
-            state,
-            "mordor",
-            "Is the Fellowship on the Mordor track or revealed?",
-            board.fs.mordor || board.fs.revealed,
-          );
-          if (onMordorOrRevealed === PENDING) return;
-          if (!onMordorOrRevealed)
-            return answerAuto(
-              false,
-              "Fellowship not on the Mordor track or revealed",
-            );
-        }
-        if (cards)
-          return answerAuto(
-            handCount.character > 0,
-            "Character cards: " + handCount.character,
-          );
-        return ask(
-          state,
-          node,
-          "Character cards > 0? (the Fellowship is on the Mordor track or revealed)",
-        );
-      case "C5.wkNotMob":
-      case "M5.wkNotMob":
-      case "CH.wkJoin":
-        if (trackerOn && !board.chars.witchKing)
-          return answerAuto(false, "Witch King not in play");
-        return ask(state, node);
-      case "C5.minion":
-      case "M5.minion": {
-        // bold part: a minion can be mustered; plain part: Muster 2 can still advance a nation or recruit a faction
-        if (!trackerOn) break;
-        if (walk.sub === 0) {
-          const minions = engine.minionsAvailable(state);
-          if (minions.length)
-            return recordDecision(state, {
-              text: NODE.text(node),
-              ringCondition: true,
-              answer: true,
-              auto: true,
-              why: minions[0].name + ": " + minions[0].why,
-            });
-          trail(state, {
-            kind: TRAIL.QUESTION,
-            text: NODE.text(node),
-            answer: "No",
-            auto: true,
-            why: "no minion can be mustered (tracker)",
-          });
-          walk.sub = 1;
-        }
-        const seNotAtWar = !engine.shadowNationAtWar(state, "se"),
-          noFactionInPlay =
-            state.settings.wome && !engine.shadowFactionInPlay(state);
-        let why =
-          "S&E at war" + (state.settings.wome ? ", a faction is in play" : "");
-        if (seNotAtWar) why = "Southrons & Easterlings not at war";
-        else if (noFactionInPlay) why = "no faction recruited";
+  function decideWinOrSevenDice(state, node, { diceOn }) {
+    if (diceOn && engine.diceCount(state) === engine.BASE_ACTION_DICE)
+      return answerAuto(
+        state,
+        node,
+        true,
+        "Shadow has " + engine.BASE_ACTION_DICE + " dice",
+      );
+    ask(
+      state,
+      node,
+      "*Mobile* army adjacent to *target* which would win the game" +
+        (diceOn ? "" : " or Shadow only has 7 dice"),
+    );
+  }
+  // ---- Phase 5
+  // Character cards in hand while the Fellowship is on the Mordor track or revealed.
+  function decideCharacterCardsWithFellowshipOut(
+    state,
+    node,
+    { trackerOn, cardsOn, board, handCount },
+  ) {
+    if (!trackerOn && !cardsOn) return ask(state, node);
+    const onMordorOrRevealed = boardFactYesNo(
+      state,
+      "mordor",
+      "Is the Fellowship on the Mordor track or revealed?",
+      board.fs.mordor || board.fs.revealed,
+    );
+    if (onMordorOrRevealed === PENDING) return PENDING;
+    if (!onMordorOrRevealed)
+      return answerAuto(
+        state,
+        node,
+        false,
+        "Fellowship not on the Mordor track or revealed",
+      );
+    if (cardsOn)
+      return answerAuto(
+        state,
+        node,
+        handCount.character > 0,
+        "Character cards: " + handCount.character,
+      );
+    ask(
+      state,
+      node,
+      "Character cards > 0? (the Fellowship is on the Mordor track or revealed)",
+    );
+  }
+  function decideWitchKingInPlay(state, node, { trackerOn, board }) {
+    if (trackerOn && !board.chars.witchKing)
+      return answerAuto(state, node, false, "Witch King not in play");
+    ask(state, node);
+  }
+  // Two-part decision: bold part, a minion can be mustered; plain part, Muster 2 can still advance a nation or recruit a faction.
+  function decideMinionOrMuster2(state, node, { trackerOn, walk, wome }) {
+    if (!trackerOn) return askDecision(state, node);
+    if (walk.sub === 0) {
+      const minions = engine.minionsAvailable(state);
+      if (minions.length)
         return recordDecision(state, {
-          text: nodeExtra.t2,
-          ringCondition: false,
-          answer: seNotAtWar || noFactionInPlay,
+          text: NODE.text(node),
+          ringCondition: true,
+          answer: true,
           auto: true,
-          why,
+          why: minions[0].name + ": " + minions[0].why,
         });
-      }
-      case "C5.mordorWin": {
-        if (walk.sub === 0) {
-          if (trackerOn && board.fs.mordor)
-            return recordDecision(state, {
-              text: NODE.text(node),
-              ringCondition: true,
-              answer: true,
-              auto: true,
-              why: "Fellowship on the Mordor track",
-            });
-          return ask(state, node, "*Target* would win the game", {
-            sub: 1,
-            bold: true,
-          });
-        }
-        return ask(state, node, nodeExtra.t2, { sub: 2 });
-      }
-      case "C5.playChar":
-        if (cards)
-          return playableCount(
-            characterHand(),
-            "event",
-            "playable Character card",
-          );
-        return ask(state, node);
-      case "C5.allFac":
-        if (factionsKnown)
-          return answerAuto(engine.allShadowFactionsInPlay(state), "tracker");
-        return ask(state, node);
-      case "M5.revCard":
-        if (cards)
-          return playableCount(
-            characterHand().filter((i) => cardById[i].revealed),
-            "event",
-            "playable “Fellowship revealed” card",
-          );
-        return ask(state, node);
-      case "M5.playMuster":
-      case "MU.musterCard":
-        if (cards)
-          return playableCount(
-            strategyHand().filter((i) => cardById[i].type === "Muster"),
-            "event",
-            "playable Muster card",
-          );
-        return ask(state, node);
-      case "M5.anyCond":
-        if (trackerOn && board.fs.mordor)
-          return answerAuto(true, "Fellowship is in Mordor");
-        return ask(state, node, null, { items: nodeExtra.items, any: true });
-      // ---- Character
-      case "CH.nazInPlay":
-        return answerFromTracker(
-          board.chars.witchKing || board.nazgul > 0,
-          "tracker: " +
-            board.nazgul +
-            " Nazgûl" +
-            (board.chars.witchKing ? ", Witch King in play" : ""),
-        );
-      // CH.wkJoin shares the Witch King check with C5/M5.wkNotMob above.
-      case "CH.nazFs":
-      case "CH.nazJoin":
-        if (trackerOn && board.nazgul === 0)
-          return answerAuto(false, "no Nazgûl on the map");
-        return ask(state, node);
-      case "CH.mosMob":
-        if (trackerOn && !board.chars.mouth)
-          return answerAuto(false, "Mouth of Sauron not in play");
-        return ask(state, node);
-      case "CH.dieUsed":
-        return answerAuto(
-          walk.dieUsed,
-          walk.dieUsed ? "a move was made" : "nothing moved",
-        );
-      // ---- Army
-      case "AR.huntDice":
-        if (dice && state.dice.hunt === 0)
-          return answerAuto(false, "no dice in the Hunt box");
-        if (trackerOn && board.fs.mordor)
-          return answerAuto(false, "Fellowship in Mordor");
-        return ask(state, node);
-      // ---- Muster
-      case "MU.minion": {
-        const minions = engine.minionsAvailable(state);
-        return answerFromTracker(
-          minions.length > 0,
-          minions.length
-            ? minions[0].name + ": " + minions[0].why
-            : "no minion can be mustered (tracker)",
-        );
-      }
-      case "MU.wotw":
-        if (walk.fromReserve)
-          return answerAuto(
-            false,
-            "the die set aside for the minion must be used now (Rulings)",
-          );
-        if (
-          trackerOn &&
-          (board.chars.gandalfWhite ||
-            board.chars.saruman ||
-            board.chars.witchKing ||
-            board.chars.mouth)
-        )
-          return answerAuto(
-            false,
-            board.chars.gandalfWhite
-              ? "Gandalf the White is in play"
-              : "a minion is already in play",
-          );
-        return ask(state, node);
-      case "MU.notWar": {
-        if (!trackerOn) return ask(state, node);
-        const nationNotAtWar = !engine.allShadowNationsAtWar(state);
-        const noFactionInPlay =
-          state.settings.wome && !engine.shadowFactionInPlay(state);
-        let why =
-          "all at war" + (state.settings.wome ? ", faction in play" : "");
-        if (nationNotAtWar) why = "a Shadow nation is not at war";
-        else if (noFactionInPlay) why = "no faction in play";
-        return answerAuto(nationNotAtWar || noFactionInPlay, why);
-      }
-      case "MU.facTop":
-        return answerAuto(
-          walk.nationChoice === "Faction",
-          "priority chose " + (walk.nationChoice || "nothing"),
-        );
-      // MU.musterCard shares the playable Muster card count with M5.playMuster above.
-      case "MU.cardChoice":
-        if (cards && walk.chosen)
-          return answerAuto(
-            !!engine.MUSTER_CHOICE[walk.chosen],
-            "card: " + cardById[walk.chosen].title,
-          );
-        return ask(state, node);
-      case "MU.sixNaz":
-        return answerFromTracker(
-          board.nazgul < 6,
-          board.nazgul + " Nazgûl on the map",
-        );
-      // ---- Event
-      case "EV.prefPlay":
-        if (cards)
-          return playableCount(
-            state.cards.hand
-              .concat(state.cards.factionHand)
-              .filter((i) => engine.cardFlags(cardById[i], state).preferred),
-            "event",
-            "playable *preferred* card",
-          );
-        return ask(state, node);
-      case "EV.eventDie":
-        if (walk.die)
-          return answerAuto(
-            walk.die === DIE_REQUIREMENT.EVENT,
-            "using a " + DIE_REQUIREMENT_NAME[walk.die] + " die",
-          );
-        return ask(state, node);
-      case "EV.less4":
-      case "EV.less4b":
-        if (cards)
-          return answerAuto(
-            handCount.total < 4,
-            "Event cards in hand: " + handCount.total,
-          );
-        return ask(state, node);
-      case "EV.less3f":
-        if (cards)
-          return answerAuto(
-            handCount.faction < 3,
-            "Faction cards: " + handCount.faction,
-          );
-        return ask(state, node);
-      case "EV.anyPlay":
-        if (cards)
-          return playableCount(
-            state.cards.hand.concat(state.cards.factionHand),
-            "event",
-            "playable card",
-          );
-        return ask(state, node);
-      case "EV.aboveFull":
-        if (cards)
-          return answerAuto(
-            handCount.total > 6 || handCount.faction > 4,
-            "hand " +
-              handCount.total +
-              "/6" +
-              (state.settings.wome
-                ? ", faction " + handCount.faction + "/4"
-                : ""),
-          );
-        return ask(state, node);
-      case "EV.revCard":
-        if (cards)
-          return playableCount(
-            characterHand().filter((i) => cardById[i].revealed),
-            "event",
-            "card",
-          );
-        return ask(state, node);
-      case "EV.corrCard":
-        if (cards)
-          return playableCount(
-            state.cards.hand.filter(
-              (i) => cardById[i].corruption || cardById[i].tile,
-            ),
-            "event",
-            "card",
-          );
-        return ask(state, node);
-      // ---- Faction
-      case "FA.playable":
-        if (cards)
-          return playableCount(
-            state.cards.factionHand,
-            "event",
-            "playable Faction Event card",
-          );
-        return ask(state, node);
-      case "FA.blackSails":
-        if (cards)
-          return answerAuto(
-            state.cards.factionTable.includes(CARD.BLACK_SAILS) &&
-              board.factions.corsairs,
-            "table",
-          );
-        return ask(state, node);
-      case "FA.playDie":
-        if (walk.die)
-          return answerAuto(
-            walk.die === DIE_REQUIREMENT.FACTION_PLAY,
-            "using " + DIE_REQUIREMENT_NAME[walk.die],
-          );
-        return ask(state, node);
-      case "FA.aboveFull":
-        if (cards)
-          return answerAuto(
-            handCount.faction > 4,
-            "faction hand " + handCount.faction + "/4",
-          );
-        return ask(state, node);
-      case "FA.eligible":
-        if (walk.factionChoice)
-          return ask(
-            state,
-            node,
-            "Are the " +
-              walk.factionChoice +
-              " eligible to be brought into play?",
-          );
-        if (cards || trackerOn)
-          return answerAuto(false, "every faction is already in play");
-        return ask(state, node);
-      // ---- Battle
-      case "BA.playChar":
-        if (cards)
-          return playableCount(
-            engine
-              .combatCandidates(state)
-              .filter((i) => cardById[i].deck === "C"),
-            "combat",
-            "usable Character card",
-          );
-        return ask(state, node);
-      case "BA.wkFirst":
-        if (walk.battleRound !== 1)
-          return answerAuto(false, "not the first round");
-        if (trackerOn && !board.chars.witchKing)
-          return answerAuto(false, "Witch King not in play");
-        return ask(
-          state,
-          node,
-          "Army includes the Witch King (this is the first round)",
-        );
-      case "BA.more4":
-        if (cards)
-          return answerAuto(
-            handCount.total > 4,
-            "Event cards in hand: " + handCount.total,
-          );
-        return ask(state, node);
-      case "BA.ctb":
-        if (!state.settings.wome) return answerAuto(false, "WoME not in play");
-        if (cards) {
-          const usable = evalPlayable(
-            state,
-            engine.callToBattleCards(state),
-            "combat",
-          );
-          if (usable === PENDING) return;
-          walk.ctb = usable;
-          return answerAuto(
-            usable.length > 0,
-            usable.length +
-              " usable Call to Battle card" +
-              (usable.length === 1 ? "" : "s"),
-          );
-        }
-        return ask(state, node);
-      case "BA.round1":
-        return answerAuto(walk.battleRound === 1, "round " + walk.battleRound);
-      case "BA.fieldOrMil":
-        if (state.strategy === STRATEGY.MILITARY)
-          return answerAuto(true, "military strategy");
-        if (trackerOn && board.fs.mordor)
-          return answerAuto(true, "Fellowship on the Mordor track");
-        return ask(
-          state,
-          node,
-          "Field battle? (not military strategy; Fellowship not on the Mordor track)",
-        );
-      case "BA.aggrCont":
-        if (trackerOn && board.fs.mordor)
-          return answerAuto(true, "Fellowship on the Mordor track");
-        return ask(state, node);
-      case "BA.anyCond":
-        return ask(state, node, null, { items: nodeExtra.items, any: true });
+      trail(state, {
+        kind: TRAIL.QUESTION,
+        text: NODE.text(node),
+        answer: "No",
+        auto: true,
+        why: "no minion can be mustered (tracker)",
+      });
+      walk.sub = 1;
     }
+    const seNotAtWar = !engine.shadowNationAtWar(state, "se"),
+      noFactionInPlay = wome && !engine.shadowFactionInPlay(state);
+    let why = "S&E at war" + (wome ? ", a faction is in play" : "");
+    if (seNotAtWar) why = "Southrons & Easterlings not at war";
+    else if (noFactionInPlay) why = "no faction recruited";
+    recordDecision(state, {
+      text: NODE.extra(node).t2,
+      ringCondition: false,
+      answer: seNotAtWar || noFactionInPlay,
+      auto: true,
+      why,
+    });
+  }
+  function decideMordorWin(state, node, { trackerOn, board, walk }) {
+    if (walk.sub === 0) {
+      if (trackerOn && board.fs.mordor)
+        return recordDecision(state, {
+          text: NODE.text(node),
+          ringCondition: true,
+          answer: true,
+          auto: true,
+          why: "Fellowship on the Mordor track",
+        });
+      return ask(state, node, "*Target* would win the game", {
+        sub: 1,
+        bold: true,
+      });
+    }
+    ask(state, node, NODE.extra(node).t2, { sub: 2 });
+  }
+  function decidePlayableCharacterCard(state, node, { cardsOn }) {
+    if (cardsOn)
+      return answerByPlayableCount(
+        state,
+        node,
+        characterHand(state),
+        "event",
+        "playable Character card",
+      );
+    ask(state, node);
+  }
+  function decideAllFactionsInPlay(state, node, { factionsKnown }) {
+    if (factionsKnown)
+      return answerAuto(
+        state,
+        node,
+        engine.allShadowFactionsInPlay(state),
+        "tracker",
+      );
+    ask(state, node);
+  }
+  const decidePlayableRevealedCard = (noun) =>
+    function decideRevealedCard(state, node, { cardsOn }) {
+      if (cardsOn)
+        return answerByPlayableCount(
+          state,
+          node,
+          characterHand(state).filter((id) => cardById[id].revealed),
+          "event",
+          noun,
+        );
+      ask(state, node);
+    };
+  function decidePlayableMusterCard(state, node, { cardsOn }) {
+    if (cardsOn)
+      return answerByPlayableCount(
+        state,
+        node,
+        strategyHand(state).filter((id) => cardById[id].type === "Muster"),
+        "event",
+        "playable Muster card",
+      );
+    ask(state, node);
+  }
+  const askAnyOf = (state, node) =>
+    ask(state, node, null, { items: NODE.extra(node).items, any: true });
+  function decideAnyConditionOrMordor(state, node, { trackerOn, board }) {
+    if (trackerOn && board.fs.mordor)
+      return answerAuto(state, node, true, "Fellowship is in Mordor");
+    askAnyOf(state, node);
+  }
+  // ---- Character
+  function decideNazgulInPlay(state, node, { board }) {
+    answerFromTracker(
+      state,
+      node,
+      board.chars.witchKing || board.nazgul > 0,
+      "tracker: " +
+        board.nazgul +
+        " Nazgûl" +
+        (board.chars.witchKing ? ", Witch King in play" : ""),
+    );
+  }
+  function decideNazgulOnMap(state, node, { trackerOn, board }) {
+    if (trackerOn && board.nazgul === 0)
+      return answerAuto(state, node, false, "no Nazgûl on the map");
+    ask(state, node);
+  }
+  function decideMouthInPlay(state, node, { trackerOn, board }) {
+    if (trackerOn && !board.chars.mouth)
+      return answerAuto(state, node, false, "Mouth of Sauron not in play");
+    ask(state, node);
+  }
+  function decideDieUsed(state, node, { walk }) {
+    answerAuto(
+      state,
+      node,
+      walk.dieUsed,
+      walk.dieUsed ? "a move was made" : "nothing moved",
+    );
+  }
+  // ---- Army
+  function decideHuntDiceForArmy(state, node, { diceOn, trackerOn, board }) {
+    if (diceOn && state.dice.hunt === 0)
+      return answerAuto(state, node, false, "no dice in the Hunt box");
+    if (trackerOn && board.fs.mordor)
+      return answerAuto(state, node, false, "Fellowship in Mordor");
+    ask(state, node);
+  }
+  // ---- Muster
+  function decideMinionAvailable(state, node) {
+    const minions = engine.minionsAvailable(state);
+    answerFromTracker(
+      state,
+      node,
+      minions.length > 0,
+      minions.length
+        ? minions[0].name + ": " + minions[0].why
+        : "no minion can be mustered (tracker)",
+    );
+  }
+  function decideWillOfTheWest(state, node, { trackerOn, board, walk }) {
+    if (walk.fromReserve)
+      return answerAuto(
+        state,
+        node,
+        false,
+        "the die set aside for the minion must be used now (Rulings)",
+      );
+    if (
+      trackerOn &&
+      (board.chars.gandalfWhite ||
+        board.chars.saruman ||
+        board.chars.witchKing ||
+        board.chars.mouth)
+    )
+      return answerAuto(
+        state,
+        node,
+        false,
+        board.chars.gandalfWhite
+          ? "Gandalf the White is in play"
+          : "a minion is already in play",
+      );
+    ask(state, node);
+  }
+  function decideNationNotAtWar(state, node, { trackerOn, wome }) {
+    if (!trackerOn) return ask(state, node);
+    const nationNotAtWar = !engine.allShadowNationsAtWar(state);
+    const noFactionInPlay = wome && !engine.shadowFactionInPlay(state);
+    let why = "all at war" + (wome ? ", faction in play" : "");
+    if (nationNotAtWar) why = "a Shadow nation is not at war";
+    else if (noFactionInPlay) why = "no faction in play";
+    answerAuto(state, node, nationNotAtWar || noFactionInPlay, why);
+  }
+  function decideFactionTopOfPriority(state, node, { walk }) {
+    answerAuto(
+      state,
+      node,
+      walk.nationChoice === "Faction",
+      "priority chose " + (walk.nationChoice || "nothing"),
+    );
+  }
+  function decideMusterChoiceCard(state, node, { cardsOn, walk }) {
+    if (cardsOn && walk.chosen)
+      return answerAuto(
+        state,
+        node,
+        !!engine.MUSTER_CHOICE[walk.chosen],
+        "card: " + cardById[walk.chosen].title,
+      );
+    ask(state, node);
+  }
+  function decideFewerThanSixNazgul(state, node, { board }) {
+    answerFromTracker(
+      state,
+      node,
+      board.nazgul < 6,
+      board.nazgul + " Nazgûl on the map",
+    );
+  }
+  // ---- Event
+  function decidePreferredPlayable(state, node, { cardsOn }) {
+    if (cardsOn)
+      return answerByPlayableCount(
+        state,
+        node,
+        state.cards.hand
+          .concat(state.cards.factionHand)
+          .filter((id) => engine.cardFlags(cardById[id], state).preferred),
+        "event",
+        "playable *preferred* card",
+      );
+    ask(state, node);
+  }
+  function decideEventDie(state, node, { walk }) {
+    if (walk.die)
+      return answerAuto(
+        state,
+        node,
+        walk.die === DIE_REQUIREMENT.EVENT,
+        "using a " + DIE_REQUIREMENT_NAME[walk.die] + " die",
+      );
+    ask(state, node);
+  }
+  function decideHandUnder4(state, node, { cardsOn, handCount }) {
+    if (cardsOn)
+      return answerAuto(
+        state,
+        node,
+        handCount.total < 4,
+        "Event cards in hand: " + handCount.total,
+      );
+    ask(state, node);
+  }
+  function decideFactionHandUnder3(state, node, { cardsOn, handCount }) {
+    if (cardsOn)
+      return answerAuto(
+        state,
+        node,
+        handCount.faction < 3,
+        "Faction cards: " + handCount.faction,
+      );
+    ask(state, node);
+  }
+  function decideAnyPlayable(state, node, { cardsOn }) {
+    if (cardsOn)
+      return answerByPlayableCount(
+        state,
+        node,
+        state.cards.hand.concat(state.cards.factionHand),
+        "event",
+        "playable card",
+      );
+    ask(state, node);
+  }
+  function decideHandAboveLimits(state, node, { cardsOn, wome, handCount }) {
+    if (cardsOn)
+      return answerAuto(
+        state,
+        node,
+        handCount.total > 6 || handCount.faction > 4,
+        "hand " +
+          handCount.total +
+          "/6" +
+          (wome ? ", faction " + handCount.faction + "/4" : ""),
+      );
+    ask(state, node);
+  }
+  function decidePlayableCorruptionCard(state, node, { cardsOn }) {
+    if (cardsOn)
+      return answerByPlayableCount(
+        state,
+        node,
+        state.cards.hand.filter(
+          (id) => cardById[id].corruption || cardById[id].tile,
+        ),
+        "event",
+        "card",
+      );
+    ask(state, node);
+  }
+  // ---- Faction
+  function decidePlayableFactionCard(state, node, { cardsOn }) {
+    if (cardsOn)
+      return answerByPlayableCount(
+        state,
+        node,
+        state.cards.factionHand,
+        "event",
+        "playable Faction Event card",
+      );
+    ask(state, node);
+  }
+  function decideBlackSailsInPlay(state, node, { cardsOn, board }) {
+    if (cardsOn)
+      return answerAuto(
+        state,
+        node,
+        state.cards.factionTable.includes(CARD.BLACK_SAILS) &&
+          board.factions.corsairs,
+        "table",
+      );
+    ask(state, node);
+  }
+  function decideFactionPlayDie(state, node, { walk }) {
+    if (walk.die)
+      return answerAuto(
+        state,
+        node,
+        walk.die === DIE_REQUIREMENT.FACTION_PLAY,
+        "using " + DIE_REQUIREMENT_NAME[walk.die],
+      );
+    ask(state, node);
+  }
+  function decideFactionHandAboveLimit(state, node, { cardsOn, handCount }) {
+    if (cardsOn)
+      return answerAuto(
+        state,
+        node,
+        handCount.faction > 4,
+        "faction hand " + handCount.faction + "/4",
+      );
+    ask(state, node);
+  }
+  function decideFactionEligible(state, node, { cardsOn, trackerOn, walk }) {
+    if (walk.factionChoice)
+      return ask(
+        state,
+        node,
+        "Are the " + walk.factionChoice + " eligible to be brought into play?",
+      );
+    if (cardsOn || trackerOn)
+      return answerAuto(state, node, false, "every faction is already in play");
+    ask(state, node);
+  }
+  // ---- Battle
+  function decideUsableCharacterCombatCard(state, node, { cardsOn }) {
+    if (cardsOn)
+      return answerByPlayableCount(
+        state,
+        node,
+        engine
+          .combatCandidates(state)
+          .filter((id) => cardById[id].deck === DECK.CHARACTER),
+        "combat",
+        "usable Character card",
+      );
+    ask(state, node);
+  }
+  function decideWitchKingFirstRound(state, node, { trackerOn, board, walk }) {
+    if (walk.battleRound !== 1)
+      return answerAuto(state, node, false, "not the first round");
+    if (trackerOn && !board.chars.witchKing)
+      return answerAuto(state, node, false, "Witch King not in play");
+    ask(state, node, "Army includes the Witch King (this is the first round)");
+  }
+  function decideHandOver4(state, node, { cardsOn, handCount }) {
+    if (cardsOn)
+      return answerAuto(
+        state,
+        node,
+        handCount.total > 4,
+        "Event cards in hand: " + handCount.total,
+      );
+    ask(state, node);
+  }
+  function decideCallToBattleUsable(state, node, { cardsOn, wome, walk }) {
+    if (!wome) return answerAuto(state, node, false, "WoME not in play");
+    if (!cardsOn) return ask(state, node);
+    const usable = evalPlayable(
+      state,
+      engine.callToBattleCards(state),
+      "combat",
+    );
+    if (usable === PENDING) return PENDING;
+    walk.ctb = usable;
+    answerAuto(
+      state,
+      node,
+      usable.length > 0,
+      usable.length +
+        " usable Call to Battle card" +
+        (usable.length === 1 ? "" : "s"),
+    );
+  }
+  function decideFirstRound(state, node, { walk }) {
+    answerAuto(
+      state,
+      node,
+      walk.battleRound === 1,
+      "round " + walk.battleRound,
+    );
+  }
+  function decideFieldBattleOrMilitary(state, node, { trackerOn, board }) {
+    if (state.strategy === STRATEGY.MILITARY)
+      return answerAuto(state, node, true, "military strategy");
+    if (trackerOn && board.fs.mordor)
+      return answerAuto(state, node, true, "Fellowship on the Mordor track");
+    ask(
+      state,
+      node,
+      "Field battle? (not military strategy; Fellowship not on the Mordor track)",
+    );
+  }
+  function decideAggressiveContinue(state, node, { trackerOn, board }) {
+    if (trackerOn && board.fs.mordor)
+      return answerAuto(state, node, true, "Fellowship on the Mordor track");
+    ask(state, node);
+  }
+  // The decision boxes the app can answer itself (or ask about with more context than the box text), keyed by page and node id.
+  // A handler is (state, node, facts) and returns PENDING when it has opened a prompt.
+  const DECISION_HANDLERS = {
+    "C14.more6": decideHandOver6,
+    "M14.more6": decideHandOver6,
+    "C14.strat1": decideStrategyCardsOver1,
+    "C14.more4f": decideFactionHandOver4,
+    "M14.more4f": decideFactionHandOver4,
+    "C14.corrLow": decideCorruptionBelowVP,
+    "M14.vpLow": decideVPBelowCorruption,
+    "C14.fsStart": decideFellowshipAtStart,
+    "M14.fsStart": decideFellowshipAtStart,
+    "C14.fsMordor": decideFellowshipInMordor,
+    "M14.fsMordor": decideFellowshipInMordor,
+    "C14.prog4": decideProgressOver(4),
+    "M14.prog5": decideProgressOver(5),
+    "C14.winOr7": decideWinOrSevenDice,
+    "C5.charMordor": decideCharacterCardsWithFellowshipOut,
+    "M5.charMordor": decideCharacterCardsWithFellowshipOut,
+    "C5.wkNotMob": decideWitchKingInPlay,
+    "M5.wkNotMob": decideWitchKingInPlay,
+    "CH.wkJoin": decideWitchKingInPlay,
+    "C5.minion": decideMinionOrMuster2,
+    "M5.minion": decideMinionOrMuster2,
+    "C5.mordorWin": decideMordorWin,
+    "C5.playChar": decidePlayableCharacterCard,
+    "C5.allFac": decideAllFactionsInPlay,
+    "M5.revCard": decidePlayableRevealedCard(
+      "playable “Fellowship revealed” card",
+    ),
+    "M5.playMuster": decidePlayableMusterCard,
+    "MU.musterCard": decidePlayableMusterCard,
+    "M5.anyCond": decideAnyConditionOrMordor,
+    "CH.nazInPlay": decideNazgulInPlay,
+    "CH.nazFs": decideNazgulOnMap,
+    "CH.nazJoin": decideNazgulOnMap,
+    "CH.mosMob": decideMouthInPlay,
+    "CH.dieUsed": decideDieUsed,
+    "AR.huntDice": decideHuntDiceForArmy,
+    "MU.minion": decideMinionAvailable,
+    "MU.wotw": decideWillOfTheWest,
+    "MU.notWar": decideNationNotAtWar,
+    "MU.facTop": decideFactionTopOfPriority,
+    "MU.cardChoice": decideMusterChoiceCard,
+    "MU.sixNaz": decideFewerThanSixNazgul,
+    "EV.prefPlay": decidePreferredPlayable,
+    "EV.eventDie": decideEventDie,
+    "EV.less4": decideHandUnder4,
+    "EV.less4b": decideHandUnder4,
+    "EV.less3f": decideFactionHandUnder3,
+    "EV.anyPlay": decideAnyPlayable,
+    "EV.aboveFull": decideHandAboveLimits,
+    "EV.revCard": decidePlayableRevealedCard("card"),
+    "EV.corrCard": decidePlayableCorruptionCard,
+    "FA.playable": decidePlayableFactionCard,
+    "FA.blackSails": decideBlackSailsInPlay,
+    "FA.playDie": decideFactionPlayDie,
+    "FA.aboveFull": decideFactionHandAboveLimit,
+    "FA.eligible": decideFactionEligible,
+    "BA.playChar": decideUsableCharacterCombatCard,
+    "BA.wkFirst": decideWitchKingFirstRound,
+    "BA.more4": decideHandOver4,
+    "BA.ctb": decideCallToBattleUsable,
+    "BA.round1": decideFirstRound,
+    "BA.fieldOrMil": decideFieldBattleOrMilitary,
+    "BA.aggrCont": decideAggressiveContinue,
+    "BA.anyCond": askAnyOf,
+  };
+  // A decision the app cannot answer: a two-part question asks the bold (ring) part first, then the plain part.
+  function askDecision(state, node) {
+    const nodeExtra = NODE.extra(node),
+      walk = state.walk;
     if (nodeExtra.t2 && !nodeExtra.any) {
-      // two-part decision: the bold (ring) part first, then the plain part
       if (walk.sub === 0)
         return ask(state, node, NODE.text(node), { sub: 1, bold: true });
       return ask(state, node, nodeExtra.t2, { sub: 2 });
     }
-    return ask(
+    ask(
       state,
       node,
       null,
       nodeExtra.any ? { items: nodeExtra.items, any: true } : null,
     );
+  }
+  function handleDecision(state, node) {
+    if (NODE.extra(node).wome && !state.settings.wome)
+      return answerAuto(state, node, false, "WoME not in play");
+    const handler = DECISION_HANDLERS[state.walk.page + "." + state.walk.node];
+    if (handler) return handler(state, node, decisionFacts(state));
+    askDecision(state, node);
   }
 
   // ----- playability evaluation with lazy prompts -----
