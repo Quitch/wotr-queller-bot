@@ -13,10 +13,7 @@ export function applyAnchors(flow, records) {
     if (!edge) continue;
     edge[EDGE_SLOT.WAYPOINTS] = record.wp || edge[EDGE_SLOT.WAYPOINTS] || null;
     if (record.an)
-      edge[EDGE_SLOT.ANCHORS] = {
-        ...(edge[EDGE_SLOT.ANCHORS] || {}),
-        ...record.an,
-      };
+      edge[EDGE_SLOT.ANCHORS] = { ...edge[EDGE_SLOT.ANCHORS], ...record.an };
     if (record.elbow) edge[EDGE_SLOT.STYLE] = "elbow";
     if (record.nolabel) edge[EDGE_SLOT.HIDE_LABEL] = true;
   }

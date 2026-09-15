@@ -263,17 +263,17 @@ function errorsLine(errors) {
   );
 }
 function summary(state, env, errors) {
-  const lines = [];
-  lines.push(
+  const game = state
+    ? [settingsLine(state), walkLine(state.walk)]
+    : ["No game in progress (New game screen)"];
+  return [
     "Queller Bot Runner version " +
       engine.VERSION +
       (env?.built ? " (built " + env.built + ")" : ""),
-  );
-  if (!state) lines.push("No game in progress (New game screen)");
-  else lines.push(settingsLine(state), walkLine(state.walk));
-  lines.push(errorsLine(errors));
-  lines.push(actions.length + " actions in the history");
-  return lines;
+    ...game,
+    errorsLine(errors),
+    actions.length + " actions in the history",
+  ];
 }
 // The undo snapshots (JSON strings), newest first, parsed.
 function parseHistory(history) {
