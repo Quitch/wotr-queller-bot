@@ -1,5 +1,5 @@
 // Rendering the page: the New game screen or the game screen, keeping focus and open details across a re-render.
-import { renderModal } from "../modals.js";
+import { renderModal } from "../modals/index.js";
 import { LEGAL } from "./constants.js";
 import { diceHTML } from "./dice.js";
 import { find } from "./dom.js";

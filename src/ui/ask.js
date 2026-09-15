@@ -1,6 +1,6 @@
 // Opening a modal, asking the player a question in one, and the New game confirmation.
 import * as debug from "../debug.js";
-import { renderModal } from "../modals.js";
+import { renderModal } from "../modals/index.js";
 import { MODAL, STORAGE_KEY } from "./constants.js";
 import { render } from "./render.js";
 import { setHistory, setModal, setState, state } from "./session.js";

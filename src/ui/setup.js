@@ -1,6 +1,6 @@
 // The New game screen: the four options and the Start, Load and debug buttons.
 import * as debug from "../debug.js";
-import { loadHTML, wireLoad } from "../modals.js";
+import { loadHTML, wireLoad } from "../modals/index.js";
 import * as engine from "../qb.js";
 import { commit } from "./actions.js";
 import { openModal } from "./ask.js";

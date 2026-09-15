@@ -1,7 +1,7 @@
 // Page load: restore the debug log and the autosave, install the page-wide listeners, render (or fall back to the New
 // game screen); the error bar shown after an error.
 import * as debug from "../debug.js";
-import { closeModal } from "../modals.js";
+import { closeModal } from "../modals/index.js";
 import { openModal } from "./ask.js";
 import { MODAL, STORAGE_KEY } from "./constants.js";
 import { escapeHTML } from "./dom.js";
