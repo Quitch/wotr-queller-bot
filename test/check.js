@@ -1,7 +1,7 @@
 // Static consistency checks between walk.js / engine.js and the flowchart + card data. Exit 1 on any failure.
-const fs = require("node:fs"),
-  path = require("node:path");
-const fakeWindow = require("./load.js")();
+import fs from "node:fs";
+import path from "node:path";
+import * as fakeWindow from "./load.js";
 const FLOW = fakeWindow.QB_FLOW,
   NODE = fakeWindow.QB_NODE,
   NODE_KIND = fakeWindow.QB_NODE_KIND,
@@ -17,7 +17,7 @@ const NODE_KEY = /"([A-Z0-9]+)\.([A-Za-z0-9]+)"/g;
 // Every "PAGE.node" key in walk.js names a real node. Returns how many keys were checked, so a regex that stops matching is visible.
 function checkNodeKeysExist() {
   const walkSource = fs.readFileSync(
-    path.join(__dirname, "..", "src", "walk.js"),
+    path.join(import.meta.dirname, "..", "src", "walk.js"),
     "utf8",
   );
   const keys = new Set();

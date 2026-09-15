@@ -1,9 +1,9 @@
 // Shared setup for the Playwright scripts: serves the built index.html the way the artifact host does (wrapped in a
 // document, Google Fonts stubbed) and opens it in Chromium.
-const { chromium } = require("playwright");
-const fs = require("node:fs"),
-  path = require("node:path"),
-  http = require("node:http");
+import { chromium } from "playwright";
+import fs from "node:fs";
+import path from "node:path";
+import http from "node:http";
 
 const VIEWPORT = {
   DESKTOP: { width: 1280, height: 900 },
@@ -70,7 +70,10 @@ async function launchBuiltPage({
 } = {}) {
   const html =
     '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"></head><body>' +
-    fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8") +
+    fs.readFileSync(
+      path.join(import.meta.dirname, "..", "index.html"),
+      "utf8",
+    ) +
     "</body></html>";
   const server = http.createServer((request, response) => {
     response.setHeader("content-type", "text/html; charset=utf-8");
@@ -115,7 +118,7 @@ async function answerAll(page, max = MAX_ANSWERS) {
   }
 }
 
-module.exports = {
+export {
   VIEWPORT,
   WAIT_FOR_UNCAUGHT_MS,
   MAX_ANSWERS,

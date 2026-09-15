@@ -10,10 +10,6 @@
   "stylelint.validate": ["css"],
   "css.validate": false,
   "prettier.requireConfig": true,
-  "[python]": {
-    "editor.defaultFormatter": null,
-    "editor.formatOnSave": false
-  },
   "sonarlint.connectedMode.project": {
     "connectionId": "quitch",
     "projectKey": "Quitch_wotr-queller-bot"

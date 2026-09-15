@@ -1,8 +1,7 @@
 // Random games across every setting combination: exceptions, walks left without a prompt, runaway walks and card-count
 // conservation are reported; a seed reproduces a run. Exit 1 on any problem.
-require("./load.js")();
-const crypto = require("node:crypto");
-const engine = window.QB;
+import crypto from "node:crypto";
+import { QB as engine } from "./load.js";
 const { PROMPT, PHASE, WALK_RESULT, DIE_STATE, CARD_EFFECT } = engine;
 const cardById = engine.cardById;
 // Math.random is replaced by this linear congruential generator so that a seed reproduces a run exactly (the engine takes

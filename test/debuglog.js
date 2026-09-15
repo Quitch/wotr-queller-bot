@@ -1,5 +1,5 @@
 // Debug log module (src/debug.js) without a DOM: action history, walk trails, error capture, persistence, the built log. Exit 1 on any failure.
-const fakeWindow = require("./load.js")();
+import * as fakeWindow from "./load.js";
 const engine = fakeWindow.QB,
   debug = fakeWindow.QB_DEBUG,
   { PROMPT, PHASE, STRATEGY } = engine;

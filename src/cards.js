@@ -12,7 +12,7 @@
 //  effect       hand/dice effect the engine resolves itself: servants | hisWill | lidlessEye | recruitFaction
 //  tableCombat  may be discarded from the table to use its combat half (Balrog of Moria)
 //  reminder     shown under the card in the "On the table" list
-window.QB_CARDS = [
+export const CARDS = [
   {
     id: "sa001b2",
     set: "2E",

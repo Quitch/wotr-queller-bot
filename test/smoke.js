@@ -1,7 +1,7 @@
 // Browser smoke test: boots the built page the way the artifact host does, plays through a turn with every option on,
 // exercises the tracker triggers, the table-card list, the die tap, undo and every modal. Fails on any page error.
-const path = require("node:path");
-const {
+import path from "node:path";
+import {
   SEL,
   WAIT_FOR_UNCAUGHT_MS,
   MAX_PHASE5_WALKS,
@@ -10,7 +10,7 @@ const {
   startGameWithEverythingOn,
   readState,
   answerAll,
-} = require("./browser.js");
+} from "./browser.js";
 // The errors this script raises on purpose, and the console line the app prints when it falls back to the setup screen.
 const DELIBERATE_ERROR = /smoke: deliberate|could not render the saved game/;
 const debugFailures = [];
@@ -342,7 +342,7 @@ async function main() {
   await checkReloadKeepsHistory(page, actionsBefore);
   await checkBrokenAutosave(page);
   await page.screenshot({
-    path: path.join(__dirname, "smoke.png"),
+    path: path.join(import.meta.dirname, "smoke.png"),
     fullPage: true,
   });
   await close();

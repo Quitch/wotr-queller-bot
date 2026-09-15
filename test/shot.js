@@ -1,14 +1,15 @@
 // Screenshots of the main states for a visual check (test/shot-*.png).
-const path = require("node:path");
-const {
+import path from "node:path";
+import {
   VIEWPORT,
   SEL,
   brokenAutosave,
   launchBuiltPage,
   startGameWithEverythingOn,
-} = require("./browser.js");
+} from "./browser.js";
 const SHOT_PREFIX = "shot-";
-const shotPath = (name) => path.join(__dirname, SHOT_PREFIX + name + ".png");
+const shotPath = (name) =>
+  path.join(import.meta.dirname, SHOT_PREFIX + name + ".png");
 // The parts of the page the partial screenshots show.
 const CLIP = {
   ERROR_BAR: { x: 0, y: 0, width: VIEWPORT.DESKTOP.width, height: 260 },

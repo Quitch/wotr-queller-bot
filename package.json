@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "description": "Queller Bot Runner for War of the Ring: sources, build script and tests",
+  "type": "module",
   "scripts": {
+    "build": "node build.js",
     "lint": "npm run lint:js && npm run lint:css && npm run lint:md && npm run format:check",
     "lint:js": "eslint .",
     "lint:css": "stylelint \"src/**/*.css\"",
@@ -15,6 +17,7 @@
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "esbuild": "0.28.2",
     "eslint": "10.10.0",
     "eslint-config-prettier": "10.1.8",
     "globals": "17.12.0",

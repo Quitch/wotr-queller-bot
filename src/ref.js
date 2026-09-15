@@ -1,11 +1,11 @@
 // Reference text shown in the Help, Rules and glossary modals — the Queller Learning Guide's terms, its numbered
 // rules, the rulings and the turn sequence. Data only; ui.js and modals.js render it.
-//   QB_GLOSSARY          {term: definition}; QB_GLOSSARY_ALIASES maps other spellings to a term
-//   QB_RULES             [[section, [[number, text], ...]], ...] — the rule numbers the flowcharts refer to
-//   QB_RULINGS           [[question, answer], ...]
-//   QB_TURN              [[phase, text], ...]
+//   GLOSSARY          {term: definition}; GLOSSARY_ALIASES maps other spellings to a term
+//   RULES             [[section, [[number, text], ...]], ...] — the rule numbers the flowcharts refer to
+//   RULINGS           [[question, answer], ...]
+//   TURN              [[phase, text], ...]
 // In any text, *term* marks a glossary term (rendered as a tooltip link) and "\n•" starts a bullet line.
-window.QB_GLOSSARY = {
+export const GLOSSARY = {
   adjacent:
     "Two regions are adjacent when an army can move directly from one to the other. A Shadow army that besieges a Stronghold is adjacent to the *garrison* inside the Stronghold. The *garrison* is adjacent to the besieging army (rule 5).",
   aggressive:
@@ -42,14 +42,14 @@ window.QB_GLOSSARY = {
   value:
     "The *value* of an army is the total of these points:\n• +1 for each hit the army can take (rules page 30)\n• +1 for each combat die, including Captain of the West (maximum 5)\n• +1 for each point of leadership (maximum 5, and not more than the number of Army units)\n• +1 for each Captain of the West\n• +1 when the army defends in a Fortification or City region\n• ×1.5 (round down) when the army defends in a Stronghold. *Mobile* and *threat* always use this, even when there is no siege. Only the hits of the five strongest units in the region count.\n• ×0.5 (round down) for a sortie\n• Do not count Saruman when you test whether an army is *mobile*",
 };
-window.QB_GLOSSARY_ALIASES = {
+export const GLOSSARY_ALIASES = {
   threatened: "threat",
   targets: "target",
   "exposed target": "exposed",
   aggressively: "aggressive",
 };
 
-window.QB_RULES = [
+export const RULES = [
   [
     "Actions",
     [
@@ -268,7 +268,7 @@ window.QB_RULES = [
   ],
 ];
 
-window.QB_RULINGS = [
+export const RULINGS = [
   [
     "How does Queller act with the card Cruel Weather?",
     "Move the Fellowship back one space, to the location that makes the hunt easiest and progress hardest. If two locations are equal, apply rule 3.",
@@ -295,7 +295,7 @@ window.QB_RULINGS = [
   ],
 ];
 
-window.QB_TURN = [
+export const TURN = [
   [
     "Phase 1",
     "Recover the Queller dice. Draw one Character and one Strategy Event card (and one Faction Event card with WoME). Walk the Phases 1–4 flowchart from “Phase 1”.",

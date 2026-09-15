@@ -1,5 +1,5 @@
 // Scripted scenarios for the behaviour fixed in version 52. Exit 1 on any failure.
-const fakeWindow = require("./load.js")();
+import * as fakeWindow from "./load.js";
 const engine = fakeWindow.QB,
   FLOW = fakeWindow.QB_FLOW,
   NODE = fakeWindow.QB_NODE,
