@@ -5,7 +5,7 @@
 (function () {
   const engine = window.QB,
     FLOW = window.QB_FLOW;
-  const FORMAT = "queller-debug/2"; // 2: records carry action/time instead of a/t
+  const FORMAT = "queller-debug/1";
   const LIMITS = { actions: 300, errors: 30, walks: 8, states: 5 };
   const store = {
     actions: [],
@@ -25,7 +25,6 @@
     try {
       store.storage.set(
         JSON.stringify({
-          format: FORMAT,
           actions: store.actions,
           errors: store.errors,
           walks: store.walks,
@@ -35,19 +34,6 @@
       // Storage full or unavailable: the in-memory log still works for this page load.
     }
   }
-  // A stored history from format 1 named a record's action `a` and its time `t`; nested records (during, lastAction) too.
-  const FORMAT_1_FIELDS = { a: "action", t: "time" };
-  function upgradeRecord(record) {
-    if (!record || typeof record !== "object") return record;
-    for (const [from, to] of Object.entries(FORMAT_1_FIELDS))
-      if (from in record && !(to in record)) {
-        record[to] = record[from];
-        delete record[from];
-      }
-    for (const nested of ["during", "lastAction"])
-      if (record[nested]) upgradeRecord(record[nested]);
-    return record;
-  }
   // storage: {get():string|null, set(string)} — localStorage in the app, anything in tests
   function restore(storage) {
     store.storage = storage || null;
@@ -55,13 +41,9 @@
     try {
       const parsed = JSON.parse(storage.get() || "null");
       if (parsed) {
-        const upgrade =
-          parsed.format === FORMAT
-            ? (list) => list
-            : (list) => list.map(upgradeRecord);
-        store.actions = upgrade((parsed.actions || []).slice(-LIMITS.actions));
-        store.errors = upgrade((parsed.errors || []).slice(-LIMITS.errors));
-        store.walks = upgrade((parsed.walks || []).slice(-LIMITS.walks));
+        store.actions = (parsed.actions || []).slice(-LIMITS.actions);
+        store.errors = (parsed.errors || []).slice(-LIMITS.errors);
+        store.walks = (parsed.walks || []).slice(-LIMITS.walks);
       }
     } catch {
       // Storage unavailable or the saved log is corrupt: start with an empty log.

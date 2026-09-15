@@ -551,90 +551,6 @@ function battleOpenResetAndRunGuard() {
     "run() ends a walk that never reaches a prompt instead of leaving it in limbo",
   );
 }
-// JSON with every object's keys sorted, so two objects compare equal whatever the order their keys were added in.
-const canonical = (value) =>
-  JSON.stringify(value, (key, field) =>
-    field && typeof field === "object" && !Array.isArray(field)
-      ? Object.fromEntries(Object.entries(field).sort())
-      : field,
-  );
-// The field names a version-59 save used.
-function downgradeToVersion59(save) {
-  const rename = (object, from, to) => {
-    object[to] = object[from];
-    delete object[from];
-  };
-  for (const pooledDie of save.dice.pool) {
-    rename(pooledDie, "kind", "k");
-    rename(pooledDie, "status", "st");
-  }
-  rename(save.walk, "dieIndex", "dieObj");
-  rename(save.walk, "reservedDieIndex", "reserveDieObj");
-  for (const frame of save.walk.stack) rename(frame, "dieIndex", "dieObj");
-  rename(save, "situational", "situ");
-  for (const entry of save.log) rename(entry, "text", "t");
-  save.appVersion = 59;
-  return save;
-}
-// A version-59 save (dice {k, st}, walk dieObj/reserveDieObj, situ, log {t}) with an open die question migrates to the
-// current shape and plays on; an open choice prompt's options {v, l} become {value, label}.
-function migrateUpgradesVersion59Save() {
-  const state = phase5State(
-    { dice: false, cards: false, tracker: false, wome: false },
-    STRATEGY.MILITARY,
-  );
-  state.dice.pool = [die("Muster", DIE_STATE.RESERVED), die("Army")];
-  state.minionReserved = true;
-  state.situational = { mtSiege: true };
-  engine.startPhase(state, PHASE.P5);
-  for (
-    let guard = 0;
-    state.walk?.prompt &&
-    state.walk.prompt.type !== PROMPT.DIE_CHECK &&
-    guard < 40;
-    guard++
-  )
-    engine.answer(state, true);
-  ok(
-    state.walk?.prompt?.type === PROMPT.DIE_CHECK,
-    "the walk reached a die question to save mid-way",
-  );
-  const before = canonical(state);
-  const upgraded = engine.migrate(
-    downgradeToVersion59(JSON.parse(JSON.stringify(state))),
-  );
-  upgraded.appVersion = state.appVersion;
-  ok(
-    canonical(upgraded) === before,
-    "a version-59 save migrates back to the current shape",
-  );
-  engine.answer(upgraded, true);
-  ok(
-    upgraded.walk && (upgraded.walk.done || upgraded.walk.prompt),
-    "the migrated walk answers on to the next prompt (" +
-      (upgraded.walk.prompt?.type || upgraded.walk.result) +
-      ")",
-  );
-  const choice = engine.migrate({
-    settings: {},
-    board: { nations: {} },
-    walk: {
-      dieObj: 1,
-      stack: [{ dieObj: 2 }],
-      prompt: {
-        type: PROMPT.CHOICE,
-        options: [{ v: "Isengard", l: "Isengard" }],
-      },
-    },
-  });
-  ok(
-    choice.walk.dieIndex === 1 &&
-      choice.walk.stack[0].dieIndex === 2 &&
-      choice.walk.prompt.options[0].value === "Isengard" &&
-      choice.walk.prompt.options[0].label === "Isengard",
-    "an open choice prompt's options and the stack frames are migrated",
-  );
-}
 // The scenarios, with the section of the change log each one guards.
 const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
@@ -649,7 +565,6 @@ const SCENARIOS = [
   ["6.6", tableTriggersDiscardOrAsk],
   ["6.7", callToBattleCardsIgnoreInitiative],
   ["7.3/7.4", battleOpenResetAndRunGuard],
-  ["v60", migrateUpgradesVersion59Save],
 ];
 function main() {
   for (const [number, scenario] of SCENARIOS) {

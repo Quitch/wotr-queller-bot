@@ -1,11 +1,11 @@
-# Queller Bot Runner — sources (version 60, 15 Sep 2026)
+# Queller Bot Runner — sources (version 59, 14 Sep 2026)
 
 `python3 build.py` concatenates `src/` into `index.html` (the single-file artifact; the Artifact host adds the doctype/head/body).
 
 Tests (run all before building):
 
     node test/check.js    # static: walk.js node keys exist, priority criteria resolve, grey boxes have JUMPS entries, card flags valid
-    node test/verify.js   # scripted scenarios, one per behaviour fix, plus the save migration
+    node test/verify.js   # scripted scenarios, one per behaviour fix
     node test/debuglog.js # debug log module: action history, walk trails, error capture, persistence, the exported log
     node test/fuzz.js 1   # 400 random games (any seed) across all 16 setting combinations: no exceptions, no walk left without a prompt, card totals conserved
     node test/fuzz.js 1 --digest  # the same, printing a sha1 of every final state (unchanged by a refactor that preserves behaviour)

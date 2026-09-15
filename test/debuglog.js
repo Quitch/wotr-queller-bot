@@ -170,19 +170,6 @@ function checkPersistence() {
       debug.walks.length === restored.walks.length,
     "the previous log survives a corrupt stored history",
   );
-  stored.text = JSON.stringify({
-    actions: [{ a: "old", t: 1, during: { a: "older", t: 0 } }],
-    errors: [],
-    walks: [{ t: 2 }],
-  });
-  debug.restore(storage);
-  ok(
-    debug.actions[0].action === "old" &&
-      debug.actions[0].time === 1 &&
-      debug.actions[0].during.action === "older" &&
-      debug.walks[0].time === 2,
-    "a format-1 stored history is upgraded to action/time",
-  );
   stored.text = saved;
   debug.restore(storage);
 }

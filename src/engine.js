@@ -21,7 +21,7 @@
     }
     return items;
   };
-  const VERSION = 60; // app version (shown in the debug log and stamped on saves)
+  const VERSION = 59; // app version (shown in the debug log and stamped on saves)
 
   // The values are what saved games and cards.js hold, so they must not change without a migrate() step.
   const STRATEGY = { CORRUPTION: "corruption", MILITARY: "military" };
@@ -279,50 +279,7 @@
     if (save.board && save.board.rings === undefined) save.board.rings = 0;
     delete save.shownCard;
     delete save.lastAction;
-    migrateDice(save.dice);
-    migrateWalk(save.walk);
-    migrateSituational(save);
-    migrateLog(save.log);
     return save;
-  }
-  // Saves up to version 59 used shorter field names; the values are unchanged.
-  function renameField(object, from, to) {
-    if (
-      object &&
-      typeof object === "object" &&
-      from in object &&
-      !(to in object)
-    ) {
-      object[to] = object[from];
-      delete object[from];
-    }
-  }
-  // dice {k, st} → {kind, status}
-  function migrateDice(dice) {
-    for (const die of dice?.pool || []) {
-      renameField(die, "k", "kind");
-      renameField(die, "st", "status");
-    }
-  }
-  // walk.dieObj → dieIndex and walk.reserveDieObj → reservedDieIndex (also in every stack frame); an open prompt's options {v, l} → {value, label}
-  function migrateWalk(walk) {
-    if (!walk) return;
-    renameField(walk, "dieObj", "dieIndex");
-    renameField(walk, "reserveDieObj", "reservedDieIndex");
-    for (const frame of walk.stack || [])
-      renameField(frame, "dieObj", "dieIndex");
-    for (const option of walk.prompt?.options || []) {
-      renameField(option, "v", "value");
-      renameField(option, "l", "label");
-    }
-  }
-  // situ → situational
-  function migrateSituational(save) {
-    renameField(save, "situ", "situational");
-  }
-  // log entries {t} → {text}
-  function migrateLog(log) {
-    for (const entry of log || []) renameField(entry, "t", "text");
   }
 
   // Each returns true/false, or asks a situational question (answered once per turn) via situationalAnswer().
