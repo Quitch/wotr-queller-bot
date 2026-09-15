@@ -2,7 +2,7 @@
 
 export const VERSION = 59; // app version (shown in the debug log and stamped on saves)
 
-// The values are what saved games and cards.js hold, so they must not change without a migrate() step.
+// The values are what saved games and the card data (cards/) hold, so they must not change without a migrate() step.
 export const STRATEGY = { CORRUPTION: "corruption", MILITARY: "military" };
 export const PHASE = {
   SETUP: "setup",

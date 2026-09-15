@@ -1,4 +1,4 @@
-// Static consistency checks between walk.js / engine.js and the flowchart + card data. Exit 1 on any failure.
+// Static consistency checks between the walker / the engine and the flowchart + card data. Exit 1 on any failure.
 import fs from "node:fs";
 import path from "node:path";
 import * as fakeWindow from "./load.js";

@@ -158,7 +158,7 @@ function recordFinishedWalk(state) {
   if (state.walk?.done) recordWalk(state, state.walk);
 }
 
-// begin/finishAction bracket a state-changing action (ui.js act()); action() records something that changed no game state.
+// begin/finishAction bracket a state-changing action (ui/actions.js act()); action() records something that changed no game state.
 function begin(info, state) {
   store.inflight = { time: Date.now(), ...(info || { action: "act" }) };
   store.preWalk = state ? state.walk : null;

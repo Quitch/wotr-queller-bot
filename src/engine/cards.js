@@ -12,7 +12,7 @@ CARDS.forEach((card) => {
   cardById[card.id] = card;
   card.initiative = initiativeValue(card);
 });
-// Static flags come from cards.js; only `preferred` and `factionInPlay` depend on the game state.
+// Static flags come from the card data (cards/); only `preferred` and `factionInPlay` depend on the game state.
 // The strategy's preferred card type: Character cards under corruption, any other type under military.
 function preferred(card, strategy) {
   if (!card.type) return false;

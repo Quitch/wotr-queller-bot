@@ -20,3 +20,4 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run verify
+      - run: npm run build # a bundle that no longer builds fails here (esbuild's platform binary is an optional dependency, so no install script is needed)

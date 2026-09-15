@@ -2,12 +2,12 @@
 // Fields: id, set, deck (C=Character, S=Strategy, F=Faction Event, B=Call to Battle),
 // type (die that plays it: Character/Army/Muster), title, cond and text (the event half), combatTitle, combatCond
 // and combatText (the combat half, on the cards that have one), init, faction.
-// Behaviour flags (read by engine.js — never derived from the card text):
+// Behaviour flags (read by the engine — never derived from the card text):
 //  onTable      the card stays on the table when played as an event
 //  revealed     event half needs the Fellowship revealed ("uses the term Fellowship revealed" in the priority lists)
 //  tile         places or draws a Hunt tile (the special-tile cards count as placing one)
 //  corruption   event half can add Corruption
-//  pre          key into PRECONDITIONS in engine.js (board fact the event half needs; situational keys are asked once per turn)
+//  pre          key into PRECONDITIONS in engine/preconditions.js (board fact the event half needs; situational keys are asked once per turn)
 //  cpre         key into COMBAT_PRECONDITIONS (battle-form fact the combat half or Call to Battle card needs)
 //  effect       hand/dice effect the engine resolves itself: servants | hisWill | lidlessEye | recruitFaction
 //  tableCombat  may be discarded from the table to use its combat half (Balrog of Moria)

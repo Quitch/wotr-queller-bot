@@ -1,6 +1,6 @@
 // The modal names, the limits, the tooltip geometry, the localStorage keys and the legal notice.
 
-// The modals modals.js renders (the `name` passed to openModal).
+// The modals (modals/) by the `name` passed to openModal.
 export const MODAL = {
   GLOSSARY: "glossary",
   FLOW: "flow",

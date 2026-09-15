@@ -1,4 +1,4 @@
-// The UI's surface: what modals.js, main.js and the Playwright tests use (window.QBUI).
+// The UI's surface: what modals/, main.js and the Playwright tests use (window.QBUI).
 export { showErrBar, boot } from "./boot.js";
 export { ringIcon, RING_PATH } from "./dice.js";
 export { act, commit } from "./actions.js";

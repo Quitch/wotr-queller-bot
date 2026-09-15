@@ -22,7 +22,7 @@ function atStart(state, walk, node) {
       "Reached “" + normalizeText(NODE.text(node)) + "”.",
     );
 }
-// The handler for each box kind (see flow.js); notes are passed through.
+// The handler for each box kind (see flow/index.js); notes are passed through.
 const STEP = {
   [NODE_KIND.START]: atStart,
   [NODE_KIND.NOTE]: (state) => follow(state, null),

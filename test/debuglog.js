@@ -5,7 +5,7 @@ const engine = fakeWindow.QB,
   { PROMPT, PHASE, STRATEGY } = engine;
 const OVERFLOW = 50; // actions recorded beyond the ring buffer's limit
 const UNDO_SNAPSHOTS = 7; // an undo history longer than the snapshots a log keeps
-const FULL_UNDO_HISTORY = 60; // ui.js UNDO_DEPTH
+const FULL_UNDO_HISTORY = 60; // ui/constants.js UNDO_DEPTH
 const MAX_EXPORT_BYTES = 600 * 1024;
 const LONG_GAME_TURNS = 8;
 let fails = 0;
@@ -35,7 +35,7 @@ function defaultAnswer(prompt) {
   const answerFor = ANSWERS[prompt.type];
   return answerFor ? answerFor(prompt) : "done";
 }
-// Answer every prompt of the open walk, each answer bracketed like ui.js act() does.
+// Answer every prompt of the open walk, each answer bracketed like ui/actions.js act() does.
 function drive(state) {
   let guard = 0;
   while (state.walk && !state.walk.done && guard++ < 80) {
