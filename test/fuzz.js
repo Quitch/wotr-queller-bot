@@ -13,10 +13,10 @@ const rnd = () => {
   return seed / LCG.MASK;
 };
 Math.random = rnd;
-// --digest: print a sha1 over every final game state, so a refactor that
+// --digest: print a sha256 over every final game state, so a refactor that
 // should not change behaviour can be checked against a recorded hash
 const wantDigest = process.argv.includes("--digest");
-const digest = crypto.createHash("sha1");
+const digest = crypto.createHash("sha256");
 const SETTING_COMBINATIONS = 16; // every on/off combination of the four settings
 const GAMES_PER_SETTING = 25;
 const TURNS_PER_GAME = 4;

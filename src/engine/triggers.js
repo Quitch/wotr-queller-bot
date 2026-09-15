@@ -2,7 +2,9 @@
 import { CARD, FP_NATIONS, FP_STANCE, FP_STANCE_RANK } from "./constants.js";
 import { discardCard } from "./hand.js";
 
-const FP_NATION_KEY = new RegExp("^nations\\.(" + FP_NATIONS.join("|") + ")$"); // a tracker change key for a Free Peoples nation
+const FP_NATION_KEY = new RegExp(
+  String.raw`^nations\.(${FP_NATIONS.join("|")})$`,
+); // a tracker change key for a Free Peoples nation
 // Table cards whose discard condition the board tracker can see. `outcome(state, change)` returns {discard: reason} (discard now),
 // {ask: question} (the player must decide) or null (nothing happens).
 const sarumanEliminated = (change) =>

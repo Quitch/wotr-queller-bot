@@ -358,4 +358,4 @@ async function main() {
   );
   process.exit(unexpected.length ? 1 : 0);
 }
-main();
+await main();

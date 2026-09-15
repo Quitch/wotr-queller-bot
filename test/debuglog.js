@@ -100,7 +100,7 @@ function checkActionHistory() {
         ),
     "every action carries a time and before/after digests",
   );
-  const last = actions[actions.length - 1];
+  const last = actions.at(-1);
   ok(
     last.after.dice &&
       /\//.test(last.after.dice) &&
@@ -141,7 +141,7 @@ function checkAbandonedWalk(state) {
   state.walk = null;
   debug.finishAction(state);
   ok(
-    debug.walks[debug.walks.length - 1].note === "replaced or abandoned",
+    debug.walks.at(-1).note === "replaced or abandoned",
     "an abandoned walk is kept with a note",
   );
 }
@@ -210,8 +210,7 @@ function checkRingBuffer(state) {
     debug.action({ action: "modal", name: "x" + i }, state);
   ok(
     debug.actions.length === limit &&
-      debug.actions[debug.actions.length - 1].name ===
-        "x" + (limit + OVERFLOW - 1),
+      debug.actions.at(-1).name === "x" + (limit + OVERFLOW - 1),
     "action history capped at " + limit + ", newest kept",
   );
 }

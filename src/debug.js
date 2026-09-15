@@ -7,8 +7,8 @@ import { FLOW } from "./flow/index.js";
 
 const FORMAT = "queller-debug/1";
 const LIMITS = { actions: 300, errors: 30, walks: 8, states: 5 };
-// The action history, the errors and the finished walks (live bindings: restore() and reset() replace the arrays).
-export let actions = [],
+// The action history, the errors and the finished walks (restore() and reset() replace their contents in place).
+export const actions = [],
   errors = [],
   walks = [];
 const store = { inflight: null, preWalk: null, storage: null };
@@ -16,6 +16,9 @@ const store = { inflight: null, preWalk: null, storage: null };
 function push(list, record, limit) {
   list.push(record);
   while (list.length > limit) list.shift();
+}
+function replaceAll(list, items) {
+  list.splice(0, list.length, ...items);
 }
 function persist() {
   if (!store.storage) return;
@@ -38,9 +41,9 @@ function restore(storage) {
   try {
     const parsed = JSON.parse(storage.get() || "null");
     if (parsed) {
-      actions = (parsed.actions || []).slice(-LIMITS.actions);
-      errors = (parsed.errors || []).slice(-LIMITS.errors);
-      walks = (parsed.walks || []).slice(-LIMITS.walks);
+      replaceAll(actions, (parsed.actions || []).slice(-LIMITS.actions));
+      replaceAll(errors, (parsed.errors || []).slice(-LIMITS.errors));
+      replaceAll(walks, (parsed.walks || []).slice(-LIMITS.walks));
     }
   } catch {
     // Storage unavailable or the saved log is corrupt: start with an empty log.
@@ -207,62 +210,70 @@ const iso = (time) => {
 };
 const withTimes = (list) =>
   list.map((record) => ({ when: iso(record.time), ...record }));
+// The turn, phase, strategy and settings of a game in one line.
+function settingsLine(state) {
+  const onOff = (flag) => (flag ? "on" : "off");
+  return (
+    "Turn " +
+    state.turn +
+    ", " +
+    state.phase +
+    (state.strategy ? ", " + state.strategy + " strategy" : "") +
+    "; settings: dice " +
+    onOff(state.settings.dice) +
+    ", cards " +
+    onOff(state.settings.cards) +
+    ", tracker " +
+    onOff(state.settings.tracker) +
+    ", WoME " +
+    onOff(state.settings.wome)
+  );
+}
+// Where a walk started, where it is now and how it stands.
+function walkLine(walk) {
+  if (!walk) return "No walk in progress";
+  const pageName = FLOW[walk.entry.page]
+    ? FLOW[walk.entry.page].name
+    : walk.entry.page;
+  return (
+    "Walk: " +
+    pageName +
+    " from “" +
+    engine.normalizeText(walk.entry.start) +
+    "”, now at " +
+    walk.page +
+    "." +
+    walk.node +
+    (walk.prompt ? ", prompt " + walk.prompt.type : "") +
+    (walk.done ? ", finished (" + walk.result + ")" : "") +
+    ", " +
+    walk.trail.length +
+    " trail entries"
+  );
+}
+// How many errors were recorded and the latest one's message.
+function errorsLine(errors) {
+  if (!errors.length) return "No errors recorded";
+  return (
+    errors.length +
+    " error" +
+    (errors.length === 1 ? "" : "s") +
+    " recorded; latest: " +
+    errors.at(-1).message
+  );
+}
 function summary(state, env, errors) {
-  const lines = [];
-  lines.push(
+  const game = state
+    ? [settingsLine(state), walkLine(state.walk)]
+    : ["No game in progress (New game screen)"];
+  return [
     "Queller Bot Runner version " +
       engine.VERSION +
       (env?.built ? " (built " + env.built + ")" : ""),
-  );
-  if (!state) lines.push("No game in progress (New game screen)");
-  else {
-    lines.push(
-      "Turn " +
-        state.turn +
-        ", " +
-        state.phase +
-        (state.strategy ? ", " + state.strategy + " strategy" : "") +
-        "; settings: dice " +
-        (state.settings.dice ? "on" : "off") +
-        ", cards " +
-        (state.settings.cards ? "on" : "off") +
-        ", tracker " +
-        (state.settings.tracker ? "on" : "off") +
-        ", WoME " +
-        (state.settings.wome ? "on" : "off"),
-    );
-    const walk = state.walk;
-    if (walk)
-      lines.push(
-        "Walk: " +
-          (FLOW[walk.entry.page]
-            ? FLOW[walk.entry.page].name
-            : walk.entry.page) +
-          " from “" +
-          engine.normalizeText(walk.entry.start) +
-          "”, now at " +
-          walk.page +
-          "." +
-          walk.node +
-          (walk.prompt ? ", prompt " + walk.prompt.type : "") +
-          (walk.done ? ", finished (" + walk.result + ")" : "") +
-          ", " +
-          walk.trail.length +
-          " trail entries",
-      );
-    else lines.push("No walk in progress");
-  }
-  if (errors.length)
-    lines.push(
-      errors.length +
-        " error" +
-        (errors.length === 1 ? "" : "s") +
-        " recorded; latest: " +
-        errors[errors.length - 1].message,
-    );
-  else lines.push("No errors recorded");
-  lines.push(actions.length + " actions in the history");
-  return lines;
+    ...game,
+    errorsLine(errors),
+    actions.length + " actions in the history",
+  ];
 }
 // The undo snapshots (JSON strings), newest first, parsed.
 function parseHistory(history) {
@@ -345,9 +356,9 @@ function fileName(state) {
   );
 }
 function reset() {
-  actions = [];
-  errors = [];
-  walks = [];
+  replaceAll(actions, []);
+  replaceAll(errors, []);
+  replaceAll(walks, []);
   store.inflight = null;
   persist();
 }

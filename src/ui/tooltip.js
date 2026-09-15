@@ -38,7 +38,7 @@ export function installGlossaryListeners() {
     }
   });
 }
-export let tipEl = null;
+let tipEl = null;
 function showTip(term) {
   const key = term.dataset.term;
   if (!GLOSSARY[key]) return;
@@ -66,6 +66,9 @@ function showTip(term) {
     tipEl.style.top =
       Math.max(TOOLTIP.EDGE_MARGIN, rect.top - height - TOOLTIP.GAP) + "px";
 }
+// Hide the tooltip; true when it was showing.
 export function hideTip() {
-  if (tipEl) tipEl.hidden = true;
+  if (!tipEl || tipEl.hidden) return false;
+  tipEl.hidden = true;
+  return true;
 }

@@ -97,4 +97,4 @@ async function main() {
   await shootBrokenAutosave(page);
   await close();
 }
-main();
+await main();
