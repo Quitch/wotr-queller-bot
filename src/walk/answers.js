@@ -52,18 +52,6 @@ function answerYesNo(state, prompt, value) {
     auto: false,
   });
 }
-function answerCount(state, prompt, value) {
-  const count = Math.max(
-    prompt.min,
-    Math.min(prompt.max, Number.parseInt(value, 10) || 0),
-  );
-  state.walk.parts[prompt.part] = count;
-  trail(state, {
-    kind: TRAIL.QUESTION,
-    text: prompt.text,
-    answer: String(count),
-  });
-}
 function answerChoice(state, prompt, value) {
   state.walk[prompt.set] = value || null;
   trail(state, {
@@ -237,7 +225,6 @@ function answerBattleForm(state, prompt, value) {
 // What each prompt type does with the player's answer: (state, prompt, value).
 const ANSWER_HANDLERS = {
   [PROMPT.YES_NO]: answerYesNo,
-  [PROMPT.COUNT]: answerCount,
   [PROMPT.CHOICE]: answerChoice,
   [PROMPT.SITUATIONAL]: answerSituational,
   [PROMPT.CONFIRM]: answerConfirm,

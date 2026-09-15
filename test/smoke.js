@@ -13,6 +13,7 @@ import {
 } from "./browser.js";
 // The errors this script raises on purpose, and the console line the app prints when it falls back to the setup screen.
 const DELIBERATE_ERROR = /smoke: deliberate|could not render the saved game/;
+const BUILD_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\dZ$/; // what build.js defines QB_BUILT as
 const debugFailures = [];
 const debugLog = async (page) =>
   JSON.parse(await page.inputValue(SEL.DEBUG_TEXT));
@@ -194,7 +195,11 @@ async function checkDebugLogExport(page) {
     !!log.environment.userAgent,
     "dom prompt",
     log.dom.prompt !== undefined,
+    "built",
+    log.environment.built,
   );
+  if (!BUILD_TIME.test(log.environment.built || ""))
+    debugFailures.push("QB_BUILT was not defined into the bundle");
   await page.fill(SEL.DEBUG_REPORT, "smoke report");
   await page.dispatchEvent(SEL.DEBUG_REPORT, "change");
   log = await debugLog(page);
@@ -327,10 +332,30 @@ async function checkBrokenAutosave(page) {
     ),
   );
 }
+// The build put everything into the page: the engine and UI namespaces, the inlined stylesheet, the setup screen.
+async function checkBuildEssentials(page) {
+  const essentials = await page.evaluate(() => ({
+    version: window.QB?.VERSION,
+    ui: typeof window.QBUI?.act === "function",
+    styles: window.document.querySelectorAll("style").length,
+    setupScreen: !!window.document.querySelector("#start"),
+  }));
+  console.log("build essentials:", JSON.stringify(essentials));
+  if (
+    typeof essentials.version !== "number" ||
+    !essentials.ui ||
+    !essentials.styles ||
+    !essentials.setupScreen
+  )
+    debugFailures.push(
+      "build essentials missing: " + JSON.stringify(essentials),
+    );
+}
 async function main() {
   const { page, errors, close } = await launchBuiltPage({
     captureErrors: true,
   });
+  await checkBuildEssentials(page);
   await newGameWithEverythingOn(page);
   await playPhase5UntilPhase6(page);
   await playBattle(page);

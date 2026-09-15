@@ -18,7 +18,7 @@ const SEL = {
   NEW_GAME: "#newGameBtn",
   UNDO: "#undoBtn",
   DEBUG_BUTTON: "#debugBtn",
-  ANSWER_BUTTONS: ".prompt .answers .btn, .prompt #cntOk, .prompt #bfOk",
+  ANSWER_BUTTONS: ".prompt .answers .btn, .prompt #bfOk",
   BATTLE_FORM_OK: "#bfOk",
   BATTLE_NEAR_MORIA: "#bf-nearMoria",
   MODAL: "#modal",
