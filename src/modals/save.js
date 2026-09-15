@@ -13,7 +13,7 @@ const saveContent = () => ({
   narrow: true,
 });
 // Save and load.
-const slots = () =>
+export const slots = () =>
   ui.parseJSONOr(ui.storageGet(ui.STORAGE_KEY.SLOTS) || "[]", []);
 function saveHTML() {
   const slotList = slots();
@@ -77,8 +77,8 @@ function loadGame(save, title) {
   if (ui.state) confirmReplace(save, title);
   else replaceGame(save, title);
 }
-// Write the game into a slot.
-function saveToSlot(index) {
+// Write the game into a slot (slots and saveToSlot are exported for test/ui.js).
+export function saveToSlot(index) {
   debug.action({ action: "saveSlot", slot: index }, ui.state);
   const slotList = slots();
   slotList[index] = {

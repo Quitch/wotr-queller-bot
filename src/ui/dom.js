@@ -27,7 +27,7 @@ const selectorFor = (el, attr) =>
   (el.dataset.id === undefined ? "" : '[data-id="' + el.dataset.id + '"]');
 // A selector that finds the focused control again after a re-render, or null.
 export function focusKey(el) {
-  if (!el || el === document.body) return null;
+  if (!el || el === el.ownerDocument?.body) return null;
   if (el.id) return "#" + el.id;
   const attr = FOCUS_ATTRIBUTES.find((name) => el.hasAttribute(name));
   return attr ? selectorFor(el, attr) : null;

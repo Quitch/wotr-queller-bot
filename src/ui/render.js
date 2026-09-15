@@ -31,20 +31,21 @@ function restoreFocus(root, { key, wasAnswer }) {
   }
 }
 // Each <details> with its open state and its data-key (what it is about), so a toggle survives a re-render of the same thing.
-const detailsBefore = (root) =>
+// These four bookkeeping helpers are exported for test/ui.js, which runs them over stand-in roots.
+export const detailsBefore = (root) =>
   [...root.querySelectorAll("details")].map((details) => ({
     open: details.open,
     key: details.dataset.key || "",
   }));
-function restoreDetails(root, before) {
+export function restoreDetails(root, before) {
   root.querySelectorAll("details").forEach((details, i) => {
     const was = before[i];
     if (was && was.key === (details.dataset.key || "")) details.open = was.open;
   });
 }
-const scrollBefore = (root) =>
+export const scrollBefore = (root) =>
   SCROLLED.map((selector) => root.querySelector(selector)?.scrollTop || 0);
-function restoreScroll(root, before) {
+export function restoreScroll(root, before) {
   SCROLLED.forEach((selector, i) => {
     const el = root.querySelector(selector);
     if (el && before[i]) el.scrollTop = before[i];

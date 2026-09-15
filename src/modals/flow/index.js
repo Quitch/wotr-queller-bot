@@ -117,14 +117,16 @@ function textPage(pageKey) {
         : "") +
       ">" +
       text +
-      (id === curNode
-        ? " <b>(current step)</b>"
-        : visited.has(id)
-          ? " <b>(visited)</b>"
-          : "") +
+      walkMarkLabel(id, curNode, visited) +
       "</li>";
   }
   return html + "</ol></div>";
+}
+// The walk's mark on a box in the text view: the current step, a visited box, or nothing.
+function walkMarkLabel(id, curNode, visited) {
+  if (id === curNode) return " <b>(current step)</b>";
+  if (visited.has(id)) return " <b>(visited)</b>";
+  return "";
 }
 function wireFlowModal(modal, el) {
   ui.onClickEach(

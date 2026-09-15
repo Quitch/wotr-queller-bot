@@ -325,7 +325,7 @@ export function svgPage(pageKey) {
     "|" +
     (marks.curNode || "") +
     "|" +
-    [...marks.visited].sort().join(",");
+    [...marks.visited].sort((a, b) => a.localeCompare(b)).join(",");
   let svg = svgCache.get(key);
   if (svg === undefined) {
     svg = buildSVGPage(page, marks);
