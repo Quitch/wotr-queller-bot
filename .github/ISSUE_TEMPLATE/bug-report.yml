@@ -1,0 +1,44 @@
+name: Bug report
+description: "The app did something wrong: a step that makes no sense, a card or die handled wrongly, a button that does nothing."
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Every bug report needs a debug log. Without it the maintainer cannot see the game state and the actions that led to the fault.
+
+        **How to get one.** In the app, open **Settings** (in the **Tools** menu on a narrow screen) and press **Export debug log**. The same button is on the New game screen and on the red error bar after a crash. In the Debug log window, type what went wrong in the box (it is saved into the log), then press **Download debug log**. If nothing downloads, press **Copy debug log** and paste the text into the field below, or select all in the text area and copy it.
+
+        **What is in it.** The app version, the game state, your last actions, any errors, and your browser's user agent, language, screen size and time zone. No personal details. It shows Queller's hidden cards, so only read it if you do not mind seeing them.
+
+        Export the log as soon as the fault happens. Undo, starting a new game or loading a save changes what the log records.
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: What you did, what you expected the app to do, and what it did instead. Quote the step text if there was one.
+    validations:
+      required: true
+  - type: textarea
+    id: debug_log
+    attributes:
+      label: Debug log
+      description: Drag the `queller-debug-…json` file here, or paste the copied log. The upload shows as a link when it has finished.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: App version
+      description: On the README header line, on the New game screen, and in the log under `app.version`.
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before sending
+      options:
+        - label: The debug log is attached or pasted above.
+          required: true
+        - label: I know the log shows Queller's hidden cards.
+          required: false

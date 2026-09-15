@@ -1,0 +1,29 @@
+name: Rules or flowchart question
+description: A step the app showed does not match the Queller flowcharts or the War of the Ring rules as you read them.
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        No debug log is needed for a rules question, but one helps when the answer depends on the board state. The bug report form explains how to export one.
+  - type: textarea
+    id: step
+    attributes:
+      label: The step the app showed
+      description: Quote it as shown, with the phase and turn if you know them.
+    validations:
+      required: true
+  - type: textarea
+    id: rule
+    attributes:
+      label: The rule or flowchart node you believe applies
+      description: Name the rulebook section or the flowchart page and node, and say what you think the app should have done.
+    validations:
+      required: true
+  - type: textarea
+    id: debug_log
+    attributes:
+      label: Debug log (optional)
+      description: Drag the `queller-debug-…json` file here, or paste the copied log. It shows Queller's hidden cards.
+    validations:
+      required: false

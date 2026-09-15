@@ -4,7 +4,7 @@ Thanks for helping with the Queller Bot Runner. This page is the route from a cl
 
 ## Reporting a problem
 
-Open a [GitHub issue](https://github.com/Quitch/wotr-queller-bot/issues). For a fault in the app itself, attach the debug log as described under [Reporting a problem](README.md#reporting-a-problem) in the README; it holds the game state and the last actions, and it reveals Queller's hidden cards. For a rules or flowchart question, quote the step the app showed and the rule you believe applies.
+Open a [GitHub issue](https://github.com/Quitch/wotr-queller-bot/issues) and pick a form. The bug report form requires the debug log, which holds the game state and the last actions and reveals Queller's hidden cards; how to export it is on the form and under [Reporting a problem](README.md#reporting-a-problem) in the README. The rules or flowchart question form asks for the step the app showed and the rule you believe applies.
 
 ## Setting up
 
