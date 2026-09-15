@@ -25,6 +25,12 @@
     modal = null,
     shownCard = null;
   const find = (selector) => document.querySelector(selector);
+  // Attach one click handler to every element a selector matches (within root, default the whole document).
+  function onClickEach(selector, handler, root = document) {
+    root
+      .querySelectorAll(selector)
+      .forEach((el) => (el.onclick = () => handler(el)));
+  }
   const HTML_ESCAPES = {
     "&": "&amp;",
     "<": "&lt;",
@@ -84,8 +90,15 @@
   function stripMarkup(text) {
     return String(text || "").replaceAll("*", "");
   }
+  // JSON.parse that returns `fallback` for missing or corrupt text.
+  function parseJSONOr(text, fallback) {
+    try {
+      return JSON.parse(text);
+    } catch {
+      return fallback;
+    }
+  }
 
-  // ---------- persistence ----------
   const STORAGE_KEY = {
     AUTOSAVE: "qb.autosave",
     BROKEN_AUTOSAVE: "qb.autosave.broken",
@@ -104,7 +117,9 @@
   function storageSet(key, value) {
     try {
       localStorage.setItem(key, value);
-    } catch {}
+    } catch {
+      // Storage full, blocked or unavailable: the game goes on in memory; the debug log's storage probe reports it.
+    }
   }
   function snapshot() {
     history.push(JSON.stringify(state));
@@ -146,12 +161,15 @@
     return engine.migrate(save);
   }
 
-  // ---------- boot ----------
-  function boot() {
+  // Page load: restore the debug log and the autosave, install the page-wide listeners, render (or fall back to the New game screen).
+  function restoreDebugLog() {
     debug.restore({
       get: () => storageGet(STORAGE_KEY.DEBUG),
       set: (text) => storageSet(STORAGE_KEY.DEBUG, text),
     });
+  }
+  // Errors nothing caught go to the debug log and raise the error bar.
+  function installErrorHandlers() {
     window.addEventListener("error", (event) => {
       debug.error(
         event.error || event.message,
@@ -173,73 +191,74 @@
       );
       showErrBar();
     });
-    const autosaveText = storageGet(STORAGE_KEY.AUTOSAVE);
-    let loadError = null;
-    if (autosaveText) {
-      try {
-        state = loadJSON(autosaveText);
-      } catch (error) {
-        state = null;
-        loadError = error;
-      }
+  }
+  // The autosave as a game: {state, error, raw}; state is null when there is none or it cannot be parsed.
+  function loadAutosave() {
+    const raw = storageGet(STORAGE_KEY.AUTOSAVE);
+    if (!raw) return { state: null, error: null, raw };
+    try {
+      return { state: loadJSON(raw), error: null, raw };
+    } catch (error) {
+      return { state: null, error, raw };
     }
-    if (loadError) {
-      storageSet(STORAGE_KEY.BROKEN_AUTOSAVE, autosaveText);
-      debug.error(loadError, {
-        a: "boot-load",
-        note:
-          "the autosave could not be parsed; kept under " +
-          STORAGE_KEY.BROKEN_AUTOSAVE,
-      });
-    }
-    debug.action(
-      {
-        a: "pageLoad",
-        autosave: !!autosaveText,
-        restored: !!state,
-        broken: !!storageGet(STORAGE_KEY.BROKEN_AUTOSAVE),
-      },
+  }
+  // Keep an autosave the app could not use under its own key, so a debug log can carry it, and record why.
+  function quarantineBrokenAutosave(raw, error, { action, note, state }) {
+    storageSet(STORAGE_KEY.BROKEN_AUTOSAVE, raw);
+    debug.error(
+      error,
+      { a: action, note: note + "; kept under " + STORAGE_KEY.BROKEN_AUTOSAVE },
       state,
     );
-    document.documentElement.lang = document.documentElement.lang || "en";
+  }
+  function installTooltip() {
     tipEl = document.createElement("div");
     tipEl.id = "tip";
     tipEl.hidden = true;
     tipEl.setAttribute("role", "tooltip");
     tipEl.addEventListener("mouseleave", hideTip);
     document.body.appendChild(tipEl);
+  }
+  // Glossary terms show their definition on hover or focus and open the glossary on click.
+  function installGlossaryListeners() {
+    const termOf = (event) => event.target.closest(".term");
     document.body.addEventListener("mouseover", (event) => {
-      const term = event.target.closest(".term");
+      const term = termOf(event);
       if (term) showTip(term);
     });
     document.body.addEventListener("mouseout", (event) => {
-      const term = event.target.closest(".term");
+      const term = termOf(event);
       if (term && !event.relatedTarget?.closest?.("#tip")) hideTip();
     });
     document.body.addEventListener("focusin", (event) => {
-      const term = event.target.closest(".term");
+      const term = termOf(event);
       if (term) showTip(term);
     });
     document.body.addEventListener("focusout", (event) => {
-      if (event.target.closest(".term")) hideTip();
+      if (termOf(event)) hideTip();
     });
     document.body.addEventListener("click", (event) => {
-      const term = event.target.closest(".term");
+      const term = termOf(event);
       if (term) {
         hideTip();
         openModal(MODAL.GLOSSARY, term.dataset.term);
       }
     });
+  }
+  // Escape closes the tooltip first, then the open modal.
+  function installEscapeKey() {
     document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape") {
-        if (tipEl && !tipEl.hidden) {
-          hideTip();
-          event.stopPropagation();
-          return;
-        }
-        if (modal) closeModal();
+      if (event.key !== "Escape") return;
+      if (tipEl && !tipEl.hidden) {
+        hideTip();
+        event.stopPropagation();
+        return;
       }
+      if (modal) closeModal();
     });
+  }
+  // Render the restored game; if that throws, keep the save for the debug log and start at the New game screen.
+  function renderOrFallback(raw) {
     try {
       render();
     } catch (error) {
@@ -247,25 +266,41 @@
         "Queller Runner: could not render the saved game — starting at the New game screen.",
         error,
       );
-      storageSet(
-        STORAGE_KEY.BROKEN_AUTOSAVE,
-        storageGet(STORAGE_KEY.AUTOSAVE) || "",
-      );
-      debug.error(
-        error,
-        {
-          a: "boot-render",
-          note:
-            "the saved game could not be rendered; kept under " +
-            STORAGE_KEY.BROKEN_AUTOSAVE,
-        },
+      quarantineBrokenAutosave(raw || "", error, {
+        action: "boot-render",
+        note: "the saved game could not be rendered",
         state,
-      );
+      });
       state = null;
       history = [];
       render();
       showErrBar();
     }
+  }
+  function boot() {
+    restoreDebugLog();
+    installErrorHandlers();
+    const autosave = loadAutosave();
+    state = autosave.state;
+    if (autosave.error)
+      quarantineBrokenAutosave(autosave.raw, autosave.error, {
+        action: "boot-load",
+        note: "the autosave could not be parsed",
+      });
+    debug.action(
+      {
+        a: "pageLoad",
+        autosave: !!autosave.raw,
+        restored: !!state,
+        broken: !!storageGet(STORAGE_KEY.BROKEN_AUTOSAVE),
+      },
+      state,
+    );
+    document.documentElement.lang = document.documentElement.lang || "en";
+    installTooltip();
+    installGlossaryListeners();
+    installEscapeKey();
+    renderOrFallback(storageGet(STORAGE_KEY.AUTOSAVE));
   }
   // A bar above the app after an error: the game carries on (a failed action was rolled back) and a debug log is one tap away.
   function showErrBar() {
@@ -321,44 +356,63 @@
     if (tipEl) tipEl.hidden = true;
   }
 
-  // ---------- render ----------
+  // The attributes that identify a control across a re-render, so focus can be put back on it.
+  const FOCUS_ATTRIBUTES = [
+    "data-phase",
+    "data-ans",
+    "data-card",
+    "data-t",
+    "data-step",
+    "data-modal",
+    "data-t-reset",
+  ];
+  const selectorFor = (el, attr) =>
+    "[" +
+    attr +
+    '="' +
+    el.getAttribute(attr) +
+    '"]' +
+    (el.dataset.d === undefined ? "" : '[data-d="' + el.dataset.d + '"]') +
+    (el.dataset.id === undefined ? "" : '[data-id="' + el.dataset.id + '"]');
+  // A selector that finds the focused control again after the page is re-rendered, or null.
   function focusKey(el) {
     if (!el || el === document.body) return null;
     if (el.id) return "#" + el.id;
-    for (const attr of [
-      "data-phase",
-      "data-ans",
-      "data-card",
-      "data-t",
-      "data-step",
-      "data-modal",
-      "data-t-reset",
-    ]) {
-      if (el.hasAttribute(attr))
-        return (
-          "[" +
-          attr +
-          '="' +
-          el.getAttribute(attr) +
-          '"]' +
-          (el.dataset.d === undefined
-            ? ""
-            : '[data-d="' + el.dataset.d + '"]') +
-          (el.dataset.id === undefined
-            ? ""
-            : '[data-id="' + el.dataset.id + '"]')
-        );
+    const attr = FOCUS_ATTRIBUTES.find((name) => el.hasAttribute(name));
+    return attr ? selectorFor(el, attr) : null;
+  }
+  const captureFocus = () => ({
+    key: focusKey(document.activeElement),
+    wasAnswer: document.activeElement?.dataset?.ans !== undefined,
+  });
+  // After an answer (or when a prompt opened with nothing focused) focus the prompt or result; otherwise the same control as before.
+  function restoreFocus(root, { key, wasAnswer }) {
+    if (wasAnswer || (state.walk?.prompt && !key)) {
+      const focusTarget = find(".prompt, .result");
+      if (focusTarget) focusTarget.focus();
+    } else if (key) {
+      const el = root.querySelector(key);
+      if (el) el.focus();
     }
-    return null;
+  }
+  const openDetailsIndexes = (root) =>
+    [...root.querySelectorAll("details.more")].map((details) => details.open);
+  function reopenDetails(root, openBefore) {
+    root.querySelectorAll("details.more").forEach((details, i) => {
+      if (openBefore[i]) details.open = true;
+    });
+  }
+  // The latest log line goes to the live region for screen readers while a walk is in progress.
+  function announceLastLogLine() {
+    const live = find("#live");
+    const last = state.log[state.log.length - 1];
+    if (live && last && state.walk) live.textContent = last.t;
   }
   function render() {
     const root = find("#app");
     hideTip();
-    const prevKey = focusKey(document.activeElement),
-      prevWasAnswer = document.activeElement?.dataset?.ans !== undefined;
-    const openMore = [...root.querySelectorAll("details.more")].map(
-      (details) => details.open,
-    );
+    const focus = captureFocus();
+    const openBefore = openDetailsIndexes(root);
     if (!state) {
       root.innerHTML = setupHTML();
       wireSetup();
@@ -366,19 +420,9 @@
     }
     root.innerHTML = gameHTML();
     wire();
-    root.querySelectorAll("details.more").forEach((details, i) => {
-      if (openMore[i]) details.open = true;
-    });
-    const live = find("#live");
-    const last = state.log[state.log.length - 1];
-    if (live && last && state.walk) live.textContent = last.t;
-    if (prevWasAnswer || (state.walk?.prompt && !prevKey)) {
-      const focusTarget = find(".prompt, .result");
-      if (focusTarget) focusTarget.focus();
-    } else if (prevKey) {
-      const el = root.querySelector(prevKey);
-      if (el) el.focus();
-    }
+    reopenDetails(root, openBefore);
+    announceLastLogLine();
+    restoreFocus(root, focus);
     if (modal) renderModal();
   }
   // The game screen: header, the dice and cards panels, the walkthrough, the board tracker and the footer.
@@ -425,13 +469,13 @@
     );
   }
   function setupHTML() {
-    const settings = { dice: false, cards: false, tracker: false, wome: false };
-    try {
-      Object.assign(
-        settings,
-        JSON.parse(storageGet(STORAGE_KEY.OPTIONS) || "{}"),
-      );
-    } catch {}
+    const settings = {
+      dice: false,
+      cards: false,
+      tracker: false,
+      wome: false,
+      ...parseJSONOr(storageGet(STORAGE_KEY.OPTIONS) || "{}", {}),
+    };
     return (
       '<div class="top"><div class="brand"><h1>Queller Bot Runner</h1><span class="sub">Shadow player · War of the Ring 2nd Ed.</span></div></div>' +
       '<div class="setup"><h2 style="font-size:1.3rem;margin-bottom:6px">New game</h2><p class="notice" style="max-width:none">Choose which parts of the bot the app should run for you. Each part works on its own — turn off anything you would rather keep on the table.</p>' +
@@ -588,7 +632,7 @@
   const capitalize = (text) =>
     text ? text[0].toUpperCase() + text.slice(1) : "";
 
-  // ---------- walk panel ----------
+  // The walkthrough panel: start-point buttons, the open prompt or the walk's result, the trail and the log.
   function walkHTML(extra) {
     let html =
       '<section class="panel" aria-labelledby="h-walk"><h2 class="ph" id="h-walk">Walkthrough</h2>';
@@ -729,12 +773,26 @@
     [NODE_KIND.STEP]: "Step",
     [NODE_KIND.NOTE]: "Note",
   };
-  function promptHTML(walk) {
-    const prompt = walk.prompt,
-      page = FLOW[walk.page],
-      node = page.nodes[walk.node] || [NODE_KIND.DECISION];
-    const kind = prompt.kind || NODE.kind(node) || NODE_KIND.DECISION;
-    const eyebrow =
+  // The prompt renderers: each turns the open prompt into {body, answers} (the buttons carry data-ans values).
+  const YES_NO_BUTTONS =
+    '<button class="btn yes" data-ans="yes">Yes</button><button class="btn no" data-ans="no">No</button>';
+  const DONE_BUTTON = '<button class="btn yes" data-ans="done">Done</button>';
+  const orderedListHTML = (items) =>
+    items
+      ? "<ol>" +
+        items.map((item) => "<li>" + formatText(item) + "</li>").join("") +
+        "</ol>"
+      : "";
+  const stepsHTML = (steps) =>
+    steps?.length
+      ? '<ol class="steps">' +
+        steps.map((step) => "<li>" + formatText(step) + "</li>").join("") +
+        "</ol>"
+      : "";
+  const questionHTML = (text) => '<p class="q">' + formatText(text) + "</p>";
+  // The line above a prompt: the page, the box kind, the die held and whether this is a ring search.
+  function promptEyebrowHTML(walk, page, kind) {
+    return (
       '<div class="eyebrow"><span class="sw" style="background:var(--n' +
       kind +
       ')"></span>' +
@@ -745,208 +803,215 @@
         ? " · " + escapeHTML(engine.DIE_REQUIREMENT_NAME[walk.die]) + " die"
         : "") +
       (walk.mode === "ringAny" ? " · ring search" : "") +
-      "</div>";
-    let body = "",
-      answers = "";
-    const yesNoButtons = () =>
-      '<button class="btn yes" data-ans="yes">Yes</button><button class="btn no" data-ans="no">No</button>';
-    switch (prompt.type) {
-      case PROMPT.YES_NO: {
-        const isRing = prompt.bold || (NODE.extra(node).bold && !prompt.sub);
-        body =
-          (prompt.board ? '<div class="eyebrow">Board question</div>' : "") +
-          '<p class="q">' +
-          (isRing ? ringIcon() + " " : "") +
-          formatText(prompt.text) +
-          "?</p>" +
-          (isRing
-            ? '<div class="bold-note">Elven Ring condition: if it is true and Queller lacks the die the next step needs, it uses an Elven Ring (rule 36).</div>'
-            : "") +
-          (prompt.items
-            ? "<ol>" +
-              prompt.items
-                .map((item) => "<li>" + formatText(item) + "</li>")
-                .join("") +
-              "</ol>"
-            : "");
-        answers = yesNoButtons();
-        break;
-      }
-      case PROMPT.COUNT:
-        body =
-          '<div class="eyebrow">Board question</div><p class="q">' +
-          formatText(prompt.text) +
-          '</p><p><label for="cnt">Number</label> <input type="number" id="cnt" class="askctl" min="' +
-          prompt.min +
-          '" max="' +
-          prompt.max +
-          '" value="' +
-          (prompt.value | 0) +
-          '" style="min-width:100px"></p>';
-        answers = '<button class="btn yes" id="cntOk">Continue</button>';
-        break;
-      case PROMPT.CHOICE:
-        body =
-          '<div class="eyebrow">Priority list — you decide</div><p class="q">' +
-          formatText(prompt.text) +
-          "</p><ol>" +
-          (prompt.items || [])
-            .map((item) => "<li>" + formatText(item) + "</li>")
-            .join("") +
-          "</ol>";
-        answers = prompt.options
-          .map(
-            (option) =>
-              '<button class="btn" data-ans="' +
-              escapeHTML(option.value) +
-              '">' +
-              escapeHTML(option.label) +
-              "</button>",
-          )
-          .join("");
-        break;
-      case PROMPT.SITUATIONAL:
-        body =
-          '<div class="eyebrow">Board check (for a card in Queller’s hand)</div><p class="q">' +
-          formatText(prompt.text) +
-          "</p>";
-        answers = yesNoButtons();
-        break;
-      case PROMPT.CONFIRM:
-        body =
-          '<div class="eyebrow">' +
-          (prompt.ctx === "combat" ? "Combat card" : "Card") +
-          ' check — the condition on this card is met</div><p class="q">Is this card *playable* now? Every paragraph must be usable and have an effect (rule 17).</p>' +
-          cardHTML(
-            cardById[prompt.card],
-            prompt.ctx === "combat" ? CARD_HALF.COMBAT : CARD_HALF.EVENT,
-          );
-        answers =
-          '<button class="btn yes" data-ans="yes">Playable</button><button class="btn no" data-ans="no">Not playable</button>';
-        break;
-      case PROMPT.DIE_CHECK:
-        body =
-          '<p class="q">' +
-          formatText(prompt.text) +
-          '</p><div class="help">Grey box: ' +
-          escapeHTML(prompt.label) +
-          "</div>";
-        answers = yesNoButtons();
-        break;
-      case PROMPT.RING:
-        body = '<p class="q">' + formatText(prompt.text) + "</p>";
-        answers =
-          '<button class="btn yes" data-ans="yes">Ring used</button><button class="btn no" data-ans="no">No ring available</button>';
-        break;
-      case PROMPT.ACTION:
-        body =
-          '<p class="q">Queller: ' +
-          formatText(prompt.text) +
-          "</p>" +
-          (prompt.help
-            ? '<div class="help">' + formatText(prompt.help) + "</div>"
-            : "") +
-          (prompt.pass
-            ? ""
-            : '<div class="help">' + dieHelpText(walk) + "</div>");
-        answers =
-          '<button class="btn yes" data-ans="done">Done</button>' +
-          (prompt.auto
-            ? ""
-            : '<button class="btn no" data-ans="no">Not possible (rule 29)</button>');
-        break;
-      case PROMPT.PLAY_CARD: {
-        const card = cardById[prompt.card];
-        body =
-          '<p class="q">Queller plays a card' +
-          (prompt.combat ? " as its combat card" : "") +
-          ":</p>" +
-          cardHTML(card) +
-          (walk.steps?.length
-            ? '<ol class="steps">' +
-              walk.steps
-                .map((step) => "<li>" + formatText(step) + "</li>")
-                .join("") +
-              "</ol>"
-            : "") +
-          '<div class="help">Resolve it with the matching decision page (rule 12). ' +
-          (engine.staysOnTable(prompt.card) && !prompt.combat
-            ? "It stays on the table until discarded."
-            : "") +
-          "</div>";
-        answers = '<button class="btn yes" data-ans="done">Done</button>';
-        break;
-      }
-      case PROMPT.STEP:
-        body =
-          '<p class="q">' +
-          formatText(prompt.text) +
-          "</p>" +
-          (prompt.items
-            ? "<ol>" +
-              prompt.items
-                .map((item) => "<li>" + formatText(item) + "</li>")
-                .join("") +
-              "</ol>"
-            : "");
-        answers = prompt.move
-          ? '<button class="btn yes" data-ans="done">Done</button><button class="btn no" data-ans="no">Not possible</button>'
-          : '<button class="btn yes" data-ans="done">Continue</button>';
-        break;
-      case PROMPT.ROLL:
-        body = '<p class="q">' + formatText(prompt.text) + "</p>";
-        answers = prompt.options
-          .map(
-            (option) =>
-              '<button class="btn" data-ans="' +
-              option +
-              '">' +
-              option +
-              "</button>",
-          )
-          .join("");
-        break;
-      case PROMPT.PRIORITY: {
-        const half = walk.page === "BA" ? CARD_HALF.COMBAT : CARD_HALF.EVENT;
-        body =
-          '<p class="q">' +
-          formatText(prompt.text) +
-          "</p><ol>" +
-          (prompt.items || [])
-            .map((item) => "<li>" + formatText(item) + "</li>")
-            .join("") +
-          "</ol>" +
-          (prompt.steps
-            ? '<ol class="steps">' +
-              prompt.steps
-                .map((step) => "<li>" + formatText(step) + "</li>")
-                .join("") +
-              "</ol>"
-            : "") +
-          (prompt.card
-            ? "<div><b>Chosen:</b> " +
-              cardHTML(cardById[prompt.card], half) +
-              "</div>"
-            : "") +
-          (prompt.choice
-            ? "<p><b>Result:</b> " + escapeHTML(prompt.choice) + "</p>"
-            : "") +
-          (!prompt.steps && !prompt.card
-            ? '<div class="help">Apply the list as filters (rule 30), then continue.</div>'
-            : "");
-        answers = '<button class="btn yes" data-ans="ok">Continue</button>';
-        break;
-      }
-      case PROMPT.BATTLE_FORM:
-        body = battleFormHTML(prompt);
-        answers = '<button class="btn yes" id="bfOk">Start the round</button>';
-        break;
-    }
+      "</div>"
+    );
+  }
+  function renderYesNoPrompt(prompt, walk, node) {
+    const isRing = prompt.bold || (NODE.extra(node).bold && !prompt.sub);
+    return {
+      body:
+        (prompt.board ? '<div class="eyebrow">Board question</div>' : "") +
+        '<p class="q">' +
+        (isRing ? ringIcon() + " " : "") +
+        formatText(prompt.text) +
+        "?</p>" +
+        (isRing
+          ? '<div class="bold-note">Elven Ring condition: if it is true and Queller lacks the die the next step needs, it uses an Elven Ring (rule 36).</div>'
+          : "") +
+        orderedListHTML(prompt.items),
+      answers: YES_NO_BUTTONS,
+    };
+  }
+  function renderCountPrompt(prompt) {
+    return {
+      body:
+        '<div class="eyebrow">Board question</div><p class="q">' +
+        formatText(prompt.text) +
+        '</p><p><label for="cnt">Number</label> <input type="number" id="cnt" class="askctl" min="' +
+        prompt.min +
+        '" max="' +
+        prompt.max +
+        '" value="' +
+        (prompt.value ?? 0) +
+        '" style="min-width:100px"></p>',
+      answers: '<button class="btn yes" id="cntOk">Continue</button>',
+    };
+  }
+  function renderChoicePrompt(prompt) {
+    return {
+      body:
+        '<div class="eyebrow">Priority list — you decide</div><p class="q">' +
+        formatText(prompt.text) +
+        "</p>" +
+        orderedListHTML(prompt.items || []),
+      answers: prompt.options
+        .map(
+          (option) =>
+            '<button class="btn" data-ans="' +
+            escapeHTML(option.value) +
+            '">' +
+            escapeHTML(option.label) +
+            "</button>",
+        )
+        .join(""),
+    };
+  }
+  function renderSituationalPrompt(prompt) {
+    return {
+      body:
+        '<div class="eyebrow">Board check (for a card in Queller’s hand)</div><p class="q">' +
+        formatText(prompt.text) +
+        "</p>",
+      answers: YES_NO_BUTTONS,
+    };
+  }
+  function renderConfirmPrompt(prompt) {
+    const combat = prompt.ctx === "combat";
+    return {
+      body:
+        '<div class="eyebrow">' +
+        (combat ? "Combat card" : "Card") +
+        ' check — the condition on this card is met</div><p class="q">Is this card *playable* now? Every paragraph must be usable and have an effect (rule 17).</p>' +
+        cardHTML(
+          cardById[prompt.card],
+          combat ? CARD_HALF.COMBAT : CARD_HALF.EVENT,
+        ),
+      answers:
+        '<button class="btn yes" data-ans="yes">Playable</button><button class="btn no" data-ans="no">Not playable</button>',
+    };
+  }
+  function renderDieCheckPrompt(prompt) {
+    return {
+      body:
+        questionHTML(prompt.text) +
+        '<div class="help">Grey box: ' +
+        escapeHTML(prompt.label) +
+        "</div>",
+      answers: YES_NO_BUTTONS,
+    };
+  }
+  function renderRingPrompt(prompt) {
+    return {
+      body: questionHTML(prompt.text),
+      answers:
+        '<button class="btn yes" data-ans="yes">Ring used</button><button class="btn no" data-ans="no">No ring available</button>',
+    };
+  }
+  function renderActionPrompt(prompt, walk) {
+    return {
+      body:
+        '<p class="q">Queller: ' +
+        formatText(prompt.text) +
+        "</p>" +
+        (prompt.help
+          ? '<div class="help">' + formatText(prompt.help) + "</div>"
+          : "") +
+        (prompt.pass
+          ? ""
+          : '<div class="help">' + dieHelpText(walk) + "</div>"),
+      answers:
+        DONE_BUTTON +
+        (prompt.auto
+          ? ""
+          : '<button class="btn no" data-ans="no">Not possible (rule 29)</button>'),
+    };
+  }
+  function renderPlayCardPrompt(prompt, walk) {
+    return {
+      body:
+        '<p class="q">Queller plays a card' +
+        (prompt.combat ? " as its combat card" : "") +
+        ":</p>" +
+        cardHTML(cardById[prompt.card]) +
+        stepsHTML(walk.steps) +
+        '<div class="help">Resolve it with the matching decision page (rule 12). ' +
+        (engine.staysOnTable(prompt.card) && !prompt.combat
+          ? "It stays on the table until discarded."
+          : "") +
+        "</div>",
+      answers: DONE_BUTTON,
+    };
+  }
+  function renderStepPrompt(prompt) {
+    return {
+      body: questionHTML(prompt.text) + orderedListHTML(prompt.items),
+      answers: prompt.move
+        ? DONE_BUTTON +
+          '<button class="btn no" data-ans="no">Not possible</button>'
+        : '<button class="btn yes" data-ans="done">Continue</button>',
+    };
+  }
+  function renderRollPrompt(prompt) {
+    return {
+      body: questionHTML(prompt.text),
+      answers: prompt.options
+        .map(
+          (option) =>
+            '<button class="btn" data-ans="' +
+            option +
+            '">' +
+            option +
+            "</button>",
+        )
+        .join(""),
+    };
+  }
+  function renderPriorityPrompt(prompt, walk) {
+    const half = walk.page === "BA" ? CARD_HALF.COMBAT : CARD_HALF.EVENT;
+    return {
+      body:
+        questionHTML(prompt.text) +
+        orderedListHTML(prompt.items || []) +
+        stepsHTML(prompt.steps) +
+        (prompt.card
+          ? "<div><b>Chosen:</b> " +
+            cardHTML(cardById[prompt.card], half) +
+            "</div>"
+          : "") +
+        (prompt.choice
+          ? "<p><b>Result:</b> " + escapeHTML(prompt.choice) + "</p>"
+          : "") +
+        (!prompt.steps && !prompt.card
+          ? '<div class="help">Apply the list as filters (rule 30), then continue.</div>'
+          : ""),
+      answers: '<button class="btn yes" data-ans="ok">Continue</button>',
+    };
+  }
+  function renderBattleFormPrompt(prompt) {
+    return {
+      body: battleFormHTML(prompt),
+      answers: '<button class="btn yes" id="bfOk">Start the round</button>',
+    };
+  }
+  const PROMPT_RENDERERS = {
+    [PROMPT.YES_NO]: renderYesNoPrompt,
+    [PROMPT.COUNT]: renderCountPrompt,
+    [PROMPT.CHOICE]: renderChoicePrompt,
+    [PROMPT.SITUATIONAL]: renderSituationalPrompt,
+    [PROMPT.CONFIRM]: renderConfirmPrompt,
+    [PROMPT.DIE_CHECK]: renderDieCheckPrompt,
+    [PROMPT.RING]: renderRingPrompt,
+    [PROMPT.ACTION]: renderActionPrompt,
+    [PROMPT.PLAY_CARD]: renderPlayCardPrompt,
+    [PROMPT.STEP]: renderStepPrompt,
+    [PROMPT.ROLL]: renderRollPrompt,
+    [PROMPT.PRIORITY]: renderPriorityPrompt,
+    [PROMPT.BATTLE_FORM]: renderBattleFormPrompt,
+  };
+  function promptHTML(walk) {
+    const prompt = walk.prompt,
+      page = FLOW[walk.page],
+      node = page.nodes[walk.node] || [NODE_KIND.DECISION];
+    const kind = prompt.kind || NODE.kind(node) || NODE_KIND.DECISION;
+    const renderer = PROMPT_RENDERERS[prompt.type];
+    const { body, answers } = renderer
+      ? renderer(prompt, walk, node)
+      : { body: "", answers: "" };
     return (
       '<div class="prompt k-' +
       kind +
       '" tabindex="-1" role="group" aria-label="Current step">' +
-      eyebrow +
+      promptEyebrowHTML(walk, page, kind) +
       body +
       '<div class="answers">' +
       answers +
@@ -979,7 +1044,7 @@
       attrs +
       ' data-d="-1" aria-label="Decrease ' +
       escapeHTML(stripMarkup(label)) +
-      '">\u2212</button><span class="n" id="' +
+      '">−</button><span class="n" id="' +
       id +
       '-n" aria-live="polite">' +
       value +
@@ -1003,7 +1068,7 @@
     html +=
       numberRowHTML(
         "bf-nazLead",
-        "Nazg\u00fbl leadership in the battle",
+        "Nazgûl leadership in the battle",
         nazgulLeadership,
         'data-bs="1"',
       ) +
@@ -1087,11 +1152,12 @@
   }
   // The deck line above a card's title.
   function cardTag(card) {
-    if (card.deck === "F")
+    if (card.deck === DECK.FACTION)
       return "Faction Event · " + (card.faction || "Sauron");
-    if (card.deck === "B") return "Call to Battle · " + card.faction;
+    if (card.deck === DECK.CALL_TO_BATTLE)
+      return "Call to Battle · " + card.faction;
     return (
-      (card.deck === "C" ? "Character" : "Strategy") +
+      (card.deck === DECK.CHARACTER ? "Character" : "Strategy") +
       " · " +
       (card.type || "") +
       " symbol"
@@ -1120,7 +1186,8 @@
   const CARD_HALF = { EVENT: "event", COMBAT: "combat" };
   function cardHTML(card, half) {
     const tag = cardTag(card);
-    const showEvent = half !== CARD_HALF.COMBAT || card.deck === "B",
+    const showEvent =
+        half !== CARD_HALF.COMBAT || card.deck === DECK.CALL_TO_BATTLE,
       showCombat = half !== CARD_HALF.EVENT && !!card.ct;
     let html =
       '<div class="card' +
@@ -1146,31 +1213,37 @@
         "</div>";
     return html + "</div>";
   }
+  // What a finished walk shows: the big line and the smaller one under it, by the walk's result.
+  const lastTrailText = (walk) =>
+    escapeHTML(walk.trail[walk.trail.length - 1].text);
+  const RESULT_TEXT = {
+    [WALK_RESULT.ACTION]: (walk) => ({
+      big:
+        "Queller acts: " +
+        escapeHTML(stripMarkup(walk.trail[walk.trail.length - 1].text)),
+      small:
+        "Do this on the board, then take your own action. When Queller is next eligible to act, walk again.",
+    }),
+    [WALK_RESULT.PASS]: () => ({ big: "Queller passes." }),
+    [WALK_RESULT.NO_ACTION]: (walk) => ({
+      big: "Queller has no usable action.",
+      small: lastTrailText(walk),
+    }),
+    [WALK_RESULT.STRATEGY]: (walk) => ({ big: lastTrailText(walk) }),
+    [WALK_RESULT.BATTLE_NEXT]: () => ({
+      big: "Combat continues.",
+      small: "After both sides resolve this round, walk “Battle: next round”.",
+    }),
+    [WALK_RESULT.END]: () => ({ big: "End of the walk." }),
+  };
   function resultHTML(walk) {
     const result = walk.result || "";
-    let big = "",
-      small = "";
-    if (result === WALK_RESULT.ACTION) {
-      big =
-        "Queller acts: " +
-        escapeHTML(stripMarkup(walk.trail[walk.trail.length - 1].text));
-      small =
-        "Do this on the board, then take your own action. When Queller is next eligible to act, walk again.";
-    } else if (result === WALK_RESULT.PASS) {
-      big = "Queller passes.";
-    } else if (result === WALK_RESULT.NO_ACTION) {
-      big = "Queller has no usable action.";
-      small = escapeHTML(walk.trail[walk.trail.length - 1].text);
-    } else if (result === WALK_RESULT.STRATEGY) {
-      big = escapeHTML(walk.trail[walk.trail.length - 1].text);
-    } else if (result === WALK_RESULT.BATTLE_NEXT) {
-      big = "Combat continues.";
-      small = "After both sides resolve this round, walk “Battle: next round”.";
-    } else if (result === WALK_RESULT.END) {
-      big = "End of the walk.";
-    } else if (phaseFromResult(result)) {
-      big = escapeHTML(walk.trail[walk.trail.length - 1].text);
-    }
+    const describe =
+      RESULT_TEXT[result] ||
+      (phaseFromResult(result)
+        ? (ended) => ({ big: lastTrailText(ended) })
+        : () => ({}));
+    const { big = "", small = "" } = describe(walk);
     return (
       '<div class="result" tabindex="-1"><div class="big">' +
       big +
@@ -1196,45 +1269,41 @@
     [TRAIL.RING]: "Ring",
     [TRAIL.END]: "End",
   };
+  function trailEntryHTML(entry) {
+    const kind = entry.kind;
+    let label = TRAIL_LABEL[kind] || kind;
+    if (kind === TRAIL.QUESTION && entry.auto) label = "Auto";
+    let text = (entry.ring ? ringIcon() + " " : "") + formatText(entry.text);
+    if (entry.die)
+      text += ' <span class="why">(' + escapeHTML(entry.die) + " die)</span>";
+    if (entry.why)
+      text += ' <span class="why">— ' + formatText(entry.why) + "</span>";
+    if (kind === TRAIL.PRIORITY && entry.card)
+      text +=
+        ' <span class="why">→ ' +
+        escapeHTML(cardById[entry.card].title) +
+        "</span>";
+    if (kind === TRAIL.PRIORITY && entry.choice)
+      text += ' <span class="why">→ ' + escapeHTML(entry.choice) + "</span>";
+    return (
+      '<li class="t-' +
+      kind +
+      (entry.auto ? " auto" : "") +
+      '"><span class="k">' +
+      label +
+      '</span><span class="txt">' +
+      text +
+      "</span>" +
+      (entry.answer
+        ? '<span class="a">' + escapeHTML(entry.answer) + "</span>"
+        : "") +
+      "</li>"
+    );
+  }
   function trailHTML(walk) {
     return (
       '<ul class="trail" tabindex="0" aria-label="Walk trail">' +
-      walk.trail
-        .map((entry) => {
-          const kind = entry.kind;
-          let label = TRAIL_LABEL[kind] || kind;
-          if (kind === TRAIL.QUESTION && entry.auto) label = "Auto";
-          let text =
-            (entry.ring ? ringIcon() + " " : "") + formatText(entry.text);
-          if (entry.die)
-            text +=
-              ' <span class="why">(' + escapeHTML(entry.die) + " die)</span>";
-          if (entry.why)
-            text += ' <span class="why">— ' + formatText(entry.why) + "</span>";
-          if (kind === TRAIL.PRIORITY && entry.card)
-            text +=
-              ' <span class="why">→ ' +
-              escapeHTML(cardById[entry.card].title) +
-              "</span>";
-          if (kind === TRAIL.PRIORITY && entry.choice)
-            text +=
-              ' <span class="why">→ ' + escapeHTML(entry.choice) + "</span>";
-          return (
-            '<li class="t-' +
-            kind +
-            (entry.auto ? " auto" : "") +
-            '"><span class="k">' +
-            label +
-            '</span><span class="txt">' +
-            text +
-            "</span>" +
-            (entry.answer
-              ? '<span class="a">' + escapeHTML(entry.answer) + "</span>"
-              : "") +
-            "</li>"
-          );
-        })
-        .join("") +
+      walk.trail.map(trailEntryHTML).join("") +
       "</ul>"
     );
   }
@@ -1260,7 +1329,7 @@
     );
   }
 
-  // ---------- dice panel ----------
+  // The dice panel.
   const FACE_ICON = {
     Muster: "crown",
     "Army/Muster": "crownbanner",
@@ -1346,56 +1415,55 @@
           "</button></li>"
       : '<li class="' + cls + '" title="' + title + '">' + inner + "</li>";
   }
-  // Table cards that matter at a Hunt roll, and what to do with them.
-  const HUNT_ROLL_ADVICE = {
-    [CARD.FLOCKS_OF_CREBAIN]:
-      "Flocks of Crebain on the table — discard it before the roll for +1 to every Hunt die",
-    [CARD.BALROG]:
-      "Balrog of Moria on the table — discard it for an extra Hunt tile when the Fellowship moves into, out of or through Moria while declared or revealed",
-  };
-  function diceHTML() {
-    const dice = state.dice,
-      available = engine.availableDice(state);
-    let html =
-      '<section class="panel" aria-labelledby="h-dice"><h2 class="ph" id="h-dice">Queller’s dice <span class="r">' +
-      engine.diceCount(state) +
-      " action dice" +
-      (dice.factionDie && state.settings.wome ? " + Faction die" : "") +
-      "</span></h2>";
-    html += SPRITE;
+  // The Hunt box and the rest of the pool, with a hint when a die can be marked used.
+  function dicePoolHTML(dice, available) {
     if (!dice.pool.length)
-      html += '<div class="notice">Dice are recovered in Phase 1.</div>';
-    else {
-      const indexedDice = dice.pool.map((die, index) => [die, index]);
-      const huntDice = indexedDice.filter(([die]) => die.st === "hunt"),
-        otherDice = indexedDice.filter(([die]) => die.st !== "hunt");
-      html +=
-        '<div class="dicewrap"><div class="huntbox"><span class="hlbl">Hunt box</span><ul class="dice" aria-label="Dice in the Hunt box">' +
-        (huntDice.length
-          ? huntDice.map(([die, index]) => dieHTML(die, index)).join("")
-          : '<li class="die empty" aria-hidden="true"></li>') +
-        '</ul></div><ul class="dice" aria-label="Dice">' +
-        otherDice.map(([die, index]) => dieHTML(die, index)).join("") +
-        "</ul></div>";
-      if (available.length)
-        html +=
-          '<div class="notice" style="margin-top:8px">Tap an available die to mark it used (a card effect, for example).</div>';
-    }
-    html +=
+      return '<div class="notice">Dice are recovered in Phase 1.</div>';
+    const indexedDice = dice.pool.map((die, index) => [die, index]);
+    const huntDice = indexedDice.filter(([die]) => die.st === "hunt"),
+      otherDice = indexedDice.filter(([die]) => die.st !== "hunt");
+    return (
+      '<div class="dicewrap"><div class="huntbox"><span class="hlbl">Hunt box</span><ul class="dice" aria-label="Dice in the Hunt box">' +
+      (huntDice.length
+        ? huntDice.map(([die, index]) => dieHTML(die, index)).join("")
+        : '<li class="die empty" aria-hidden="true"></li>') +
+      '</ul></div><ul class="dice" aria-label="Dice">' +
+      otherDice.map(([die, index]) => dieHTML(die, index)).join("") +
+      "</ul></div>" +
+      (available.length
+        ? '<div class="notice" style="margin-top:8px">Tap an available die to mark it used (a card effect, for example).</div>'
+        : "")
+    );
+  }
+  const faceLegendHTML = (faces) =>
+    faces
+      .map((face) => "<span>" + faceIcon(face) + escapeHTML(face) + "</span>")
+      .join("");
+  function diceLegendHTML(dice) {
+    return (
       '<div class="legend" aria-hidden="true">' +
-      ["Character", "Army", "Muster", "Army/Muster", "Event", "Eye"]
-        .map((face) => "<span>" + faceIcon(face) + escapeHTML(face) + "</span>")
-        .join("") +
+      faceLegendHTML([
+        "Character",
+        "Army",
+        "Muster",
+        "Army/Muster",
+        "Event",
+        "Eye",
+      ]) +
       (dice.factionDie && state.settings.wome
-        ? ["Recruit", "Play/Draw", "Recruit/Play", "Recruit/Draw", "Wild"]
-            .map(
-              (face) =>
-                "<span>" + faceIcon(face) + escapeHTML(face) + "</span>",
-            )
-            .join("")
+        ? faceLegendHTML([
+            "Recruit",
+            "Play/Draw",
+            "Recruit/Play",
+            "Recruit/Draw",
+            "Wild",
+          ])
         : "") +
-      "</div>";
-    html +=
+      "</div>"
+    );
+  }
+  function diceSummaryHTML(available) {
+    return (
       '<div class="dicerow"><span>Available: <b>' +
       available.length +
       "</b></span>" +
@@ -1403,26 +1471,48 @@
       (engine.ringsKnown(state)
         ? "<span>Rings held: <b>" + state.board.rings + "</b></span>"
         : "") +
-      "</div>";
-    const huntCards = state.cards.table.filter((id) => HUNT_ROLL_ADVICE[id]);
-    if (huntCards.length)
-      html +=
-        '<div class="notice" style="margin-top:8px">At a Hunt roll: ' +
-        huntCards.map((id) => HUNT_ROLL_ADVICE[id]).join("; ") +
-        ".</div>";
-    return html + "</section>";
+      "</div>"
+    );
   }
-  // ---------- cards panel ----------
-  function cardsHTML() {
-    const cards = state.cards,
-      handCount = engine.handCounts(state);
-    let html =
-      '<section class="panel" aria-labelledby="h-cards"><h2 class="ph" id="h-cards">Queller’s cards <span class="r">' +
-      handCount.total +
-      " in hand" +
-      (state.settings.wome ? " · " + handCount.faction + " faction" : "") +
-      "</span></h2>";
-    html +=
+  // Table cards that matter at a Hunt roll, and what to do with them.
+  const HUNT_ROLL_ADVICE = {
+    [CARD.FLOCKS_OF_CREBAIN]:
+      "Flocks of Crebain on the table — discard it before the roll for +1 to every Hunt die",
+    [CARD.BALROG]:
+      "Balrog of Moria on the table — discard it for an extra Hunt tile when the Fellowship moves into, out of or through Moria while declared or revealed",
+  };
+  function huntRollAdviceHTML() {
+    const huntCards = state.cards.table.filter((id) => HUNT_ROLL_ADVICE[id]);
+    if (!huntCards.length) return "";
+    return (
+      '<div class="notice" style="margin-top:8px">At a Hunt roll: ' +
+      huntCards.map((id) => HUNT_ROLL_ADVICE[id]).join("; ") +
+      ".</div>"
+    );
+  }
+  function diceHTML() {
+    const dice = state.dice,
+      available = engine.availableDice(state);
+    return (
+      '<section class="panel" aria-labelledby="h-dice"><h2 class="ph" id="h-dice">Queller’s dice <span class="r">' +
+      engine.diceCount(state) +
+      " action dice" +
+      (dice.factionDie && state.settings.wome ? " + Faction die" : "") +
+      "</span></h2>" +
+      SPRITE +
+      dicePoolHTML(dice, available) +
+      diceLegendHTML(dice) +
+      diceSummaryHTML(available) +
+      huntRollAdviceHTML() +
+      "</section>"
+    );
+  }
+
+  // The cards panel: the hand as card backs, the deck counts and the cards on the table.
+  function handHTML(cards, handCount) {
+    const deckLabel = (id) =>
+      cardById[id].deck === DECK.CHARACTER ? "Character" : "Strategy";
+    return (
       '<div class="hand"><ul aria-label="Cards in hand: ' +
       handCount.character +
       " Character, " +
@@ -1436,11 +1526,11 @@
             '<li class="back' +
             (cardById[id].deck === DECK.STRATEGY ? " s" : "") +
             '" title="' +
-            (cardById[id].deck === DECK.CHARACTER ? "Character" : "Strategy") +
+            deckLabel(id) +
             ' card"><span aria-hidden="true">' +
             (cardById[id].deck === DECK.CHARACTER ? "C" : "S") +
             '</span><span class="sr">' +
-            (cardById[id].deck === DECK.CHARACTER ? "Character" : "Strategy") +
+            deckLabel(id) +
             " card</span></li>",
         )
         .join("") +
@@ -1450,63 +1540,78 @@
             '<li class="back f" title="Faction Event card"><span aria-hidden="true">F</span><span class="sr">Faction Event card</span></li>',
         )
         .join("") +
-      "</ul></div>";
-    html +=
-      '<div class="kv"><span>Character deck</span><span class="v">' +
-      cards.decks.C.length +
-      " / " +
-      cards.discards.C.length +
-      ' discarded</span><span>Strategy deck</span><span class="v">' +
-      cards.decks.S.length +
-      " / " +
-      cards.discards.S.length +
-      " discarded</span>" +
-      (state.settings.wome
-        ? '<span>Faction deck</span><span class="v">' +
-          cards.decks.F.length +
-          " / " +
-          cards.discards.F.length +
-          " discarded</span>"
-        : "") +
-      "</div>";
-    const tableCards = cards.table.concat(cards.factionTable);
-    html += '<div class="more tablecards"><div class="mlbl">On the table</div>';
-    if (!tableCards.length)
-      html +=
-        '<div class="notice">No cards in play. Cards Queller plays “on the table” are listed here until discarded.</div>';
-    else
-      html += tableCards
-        .map((id) => {
-          const open = shownCard === id,
-            card = cardById[id];
-          return (
-            '<div class="tc"><b>' +
-            escapeHTML(card.title) +
-            '</b><button class="btn small" data-card="' +
-            (open ? "hide" : "show") +
-            '" data-id="' +
-            id +
-            '" aria-expanded="' +
-            open +
-            '">' +
-            (open ? "Hide" : "Details") +
-            '</button><button class="btn small" data-card="discard" data-id="' +
-            id +
-            '">Discard</button>' +
-            (card.reminder
-              ? '<div class="notice rem">' +
-                escapeHTML(card.reminder) +
-                "</div>"
-              : "") +
-            "</div>" +
-            (open ? cardHTML(card) : "")
-          );
-        })
-        .join("");
-    html += "</div>";
-    return html + "</section>";
+      "</ul></div>"
+    );
   }
-  // ---------- tracker ----------
+  function deckCountsHTML(cards) {
+    const deckCount = (name, deckKey) =>
+      "<span>" +
+      name +
+      ' deck</span><span class="v">' +
+      cards.decks[deckKey].length +
+      " / " +
+      cards.discards[deckKey].length +
+      " discarded</span>";
+    return (
+      '<div class="kv">' +
+      deckCount("Character", DECK.CHARACTER) +
+      deckCount("Strategy", DECK.STRATEGY) +
+      (state.settings.wome ? deckCount("Faction", DECK.FACTION) : "") +
+      "</div>"
+    );
+  }
+  // One card on the table: its title, Details/Hide and Discard buttons, its reminder, and the card itself when shown.
+  function tableCardHTML(id) {
+    const open = shownCard === id,
+      card = cardById[id];
+    return (
+      '<div class="tc"><b>' +
+      escapeHTML(card.title) +
+      '</b><button class="btn small" data-card="' +
+      (open ? "hide" : "show") +
+      '" data-id="' +
+      id +
+      '" aria-expanded="' +
+      open +
+      '">' +
+      (open ? "Hide" : "Details") +
+      '</button><button class="btn small" data-card="discard" data-id="' +
+      id +
+      '">Discard</button>' +
+      (card.reminder
+        ? '<div class="notice rem">' + escapeHTML(card.reminder) + "</div>"
+        : "") +
+      "</div>" +
+      (open ? cardHTML(card) : "")
+    );
+  }
+  function tableCardsHTML(cards) {
+    const tableCards = cards.table.concat(cards.factionTable);
+    return (
+      '<div class="more tablecards"><div class="mlbl">On the table</div>' +
+      (tableCards.length
+        ? tableCards.map(tableCardHTML).join("")
+        : '<div class="notice">No cards in play. Cards Queller plays “on the table” are listed here until discarded.</div>') +
+      "</div>"
+    );
+  }
+  function cardsHTML() {
+    const cards = state.cards,
+      handCount = engine.handCounts(state);
+    return (
+      '<section class="panel" aria-labelledby="h-cards"><h2 class="ph" id="h-cards">Queller’s cards <span class="r">' +
+      handCount.total +
+      " in hand" +
+      (state.settings.wome ? " · " + handCount.faction + " faction" : "") +
+      "</span></h2>" +
+      handHTML(cards, handCount) +
+      deckCountsHTML(cards) +
+      tableCardsHTML(cards) +
+      "</section>"
+    );
+  }
+
+  // The board tracker.
   // Tracker rows: a checkbox, a number stepper and a Free Peoples nation selector, keyed by the tracker path (e.g. "fs.progress").
   const trackerId = (path) => "t-" + path.replaceAll(".", "-");
   const trackerCheckbox = (path, label) =>
@@ -1550,6 +1655,32 @@
       )
       .join("") +
     "</select></div>";
+  // A Shadow nation's steps above At War on the Political Track.
+  const shadowNationSelect = (path, label, max) => {
+    let options = "";
+    for (let steps = 0; steps <= max; steps++)
+      options +=
+        '<option value="' +
+        steps +
+        '"' +
+        ((boardValue(path) ?? 0) === steps ? " selected" : "") +
+        ">" +
+        engine.politicalTrackLabel(steps) +
+        "</option>";
+    return (
+      '<div class="row"><label for="' +
+      trackerId(path) +
+      '">' +
+      label +
+      '</label><select id="' +
+      trackerId(path) +
+      '" data-t="' +
+      path +
+      '" data-num="1">' +
+      options +
+      "</select></div>"
+    );
+  };
   // The situational card checks answered this turn, with a button to forget them (and the playability cache).
   function situBlockHTML() {
     const answeredKeys = Object.keys(state.situ);
@@ -1573,30 +1704,41 @@
       "</div>"
     );
   }
+  const minionsSectionHTML = (heading) =>
+    "<h3>" +
+    heading +
+    "</h3>" +
+    trackerCheckbox("chars.saruman", "Saruman") +
+    trackerCheckbox("chars.witchKing", "Witch King") +
+    trackerCheckbox("chars.mouth", "Mouth of Sauron");
+  const shadowFactionsHTML = () =>
+    trackerCheckbox("factions.corsairs", "Corsairs") +
+    trackerCheckbox("factions.dunlendings", "Dunlendings") +
+    trackerCheckbox("factions.spiders", "Spiders");
   // Without the full tracker, only the facts the dice pool and card priorities need are tracked.
+  function minimalFactionsSectionHTML() {
+    const uses = [
+      state.settings.cards ? "card priorities" : "",
+      state.settings.dice ? "Faction die" : "",
+    ].filter(Boolean);
+    return (
+      "<h3>Shadow factions in play (" +
+      uses.join(", ") +
+      ")</h3>" +
+      shadowFactionsHTML()
+    );
+  }
+  const huntSectionHTML = () =>
+    "<h3>Hunt box and Elven Rings</h3>" +
+    trackerNumber("fs.companions", "Companions in the Fellowship") +
+    trackerNumber("rings", "Elven Rings held by the Shadow");
   function minimalTrackerHTML() {
     let html = "";
     if (state.settings.dice)
-      html +=
-        "<h3>Minions in play (sizes the dice pool)</h3>" +
-        trackerCheckbox("chars.saruman", "Saruman") +
-        trackerCheckbox("chars.witchKing", "Witch King") +
-        trackerCheckbox("chars.mouth", "Mouth of Sauron");
+      html += minionsSectionHTML("Minions in play (sizes the dice pool)");
     if ((state.settings.cards || state.settings.dice) && state.settings.wome)
-      html +=
-        "<h3>Shadow factions in play (" +
-        (state.settings.cards ? "card priorities" : "") +
-        (state.settings.cards && state.settings.dice ? ", " : "") +
-        (state.settings.dice ? "Faction die" : "") +
-        ")</h3>" +
-        trackerCheckbox("factions.corsairs", "Corsairs") +
-        trackerCheckbox("factions.dunlendings", "Dunlendings") +
-        trackerCheckbox("factions.spiders", "Spiders");
-    if (state.settings.dice)
-      html +=
-        "<h3>Hunt box and Elven Rings</h3>" +
-        trackerNumber("fs.companions", "Companions in the Fellowship") +
-        trackerNumber("rings", "Elven Rings held by the Shadow");
+      html += minimalFactionsSectionHTML();
+    if (state.settings.dice) html += huntSectionHTML();
     if (state.settings.cards) html += situBlockHTML();
     if (!html) return "";
     return (
@@ -1605,87 +1747,66 @@
       "</div></section>"
     );
   }
+  const scoreSectionHTML = () =>
+    "<h3>Score</h3>" +
+    trackerNumber("shadowVP", "Shadow victory points") +
+    trackerNumber("corruption", "Corruption") +
+    trackerNumber("rings", "Elven Rings held by the Shadow");
+  const fellowshipSectionHTML = () =>
+    "<h3>Fellowship</h3>" +
+    trackerNumber("fs.progress", "Progress counter") +
+    trackerNumber("fs.companions", "Companions in the Fellowship") +
+    trackerCheckbox("fs.revealed", "Revealed") +
+    trackerCheckbox("fs.mordor", "On the Mordor track") +
+    trackerCheckbox("fs.atStart", "Figure in Rivendell") +
+    trackerCheckbox(
+      "fs.inFPSettlement",
+      "Figure in a Free Peoples settlement region",
+    ) +
+    trackerCheckbox(
+      "fs.inStrongholdOrSea",
+      "Figure in a Stronghold or at sea",
+    ) +
+    trackerCheckbox("fs.guideGollum", "Gollum is the Guide");
+  const charactersSectionHTML = () =>
+    "<h3>Characters in play</h3>" +
+    trackerCheckbox("chars.saruman", "Saruman") +
+    trackerCheckbox("chars.witchKing", "Witch King") +
+    trackerCheckbox("chars.mouth", "Mouth of Sauron") +
+    trackerNumber("nazgul", "Nazgûl on the map") +
+    trackerCheckbox("chars.gandalfWhite", "Gandalf the White") +
+    trackerCheckbox("chars.aragorn", "Aragorn, Heir to Isildur");
+  const shadowNationsSectionHTML = () =>
+    "<h3>Shadow nations (Political Track)</h3>" +
+    shadowNationSelect("nations.sauron", "Sauron", 3) +
+    shadowNationSelect("nations.isengard", "Isengard", 3) +
+    shadowNationSelect("nations.se", "Southrons & Easterlings", 3);
+  const fpNationsSectionHTML = () =>
+    "<h3>Free Peoples nations</h3>" +
+    trackerSelect("nations.gondor", "Gondor") +
+    trackerSelect("nations.rohan", "Rohan") +
+    trackerSelect("nations.north", "North") +
+    trackerSelect("nations.dwarves", "Dwarves") +
+    trackerSelect("nations.elves", "Elves");
+  const factionsSectionHTML = () =>
+    "<h3>Factions in play</h3>" +
+    shadowFactionsHTML() +
+    trackerCheckbox("factions.ents", "Ents") +
+    trackerCheckbox("factions.eagles", "Eagles") +
+    trackerCheckbox("factions.deadmen", "Dead Men");
   function trackerHTML() {
     if (!state.settings.tracker) return minimalTrackerHTML();
-    let html =
-      '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">answers what it can</span></h2><div class="tracker">';
-    html +=
-      "<h3>Score</h3>" +
-      trackerNumber("shadowVP", "Shadow victory points") +
-      trackerNumber("corruption", "Corruption") +
-      trackerNumber("rings", "Elven Rings held by the Shadow");
-    html +=
-      "<h3>Fellowship</h3>" +
-      trackerNumber("fs.progress", "Progress counter") +
-      trackerNumber("fs.companions", "Companions in the Fellowship") +
-      trackerCheckbox("fs.revealed", "Revealed") +
-      trackerCheckbox("fs.mordor", "On the Mordor track") +
-      trackerCheckbox("fs.atStart", "Figure in Rivendell") +
-      trackerCheckbox(
-        "fs.inFPSettlement",
-        "Figure in a Free Peoples settlement region",
-      ) +
-      trackerCheckbox(
-        "fs.inStrongholdOrSea",
-        "Figure in a Stronghold or at sea",
-      ) +
-      trackerCheckbox("fs.guideGollum", "Gollum is the Guide");
-    html +=
-      "<h3>Characters in play</h3>" +
-      trackerCheckbox("chars.saruman", "Saruman") +
-      trackerCheckbox("chars.witchKing", "Witch King") +
-      trackerCheckbox("chars.mouth", "Mouth of Sauron") +
-      trackerNumber("nazgul", "Nazg\u00fbl on the map") +
-      trackerCheckbox("chars.gandalfWhite", "Gandalf the White") +
-      trackerCheckbox("chars.aragorn", "Aragorn, Heir to Isildur");
-    const shadowNationSelect = (path, label, max) => {
-      let options = "";
-      for (let steps = 0; steps <= max; steps++)
-        options +=
-          '<option value="' +
-          steps +
-          '"' +
-          ((boardValue(path) | 0) === steps ? " selected" : "") +
-          ">" +
-          engine.politicalTrackLabel(steps) +
-          "</option>";
-      return (
-        '<div class="row"><label for="' +
-        trackerId(path) +
-        '">' +
-        label +
-        '</label><select id="' +
-        trackerId(path) +
-        '" data-t="' +
-        path +
-        '" data-num="1">' +
-        options +
-        "</select></div>"
-      );
-    };
-    html +=
-      "<h3>Shadow nations (Political Track)</h3>" +
-      shadowNationSelect("nations.sauron", "Sauron", 3) +
-      shadowNationSelect("nations.isengard", "Isengard", 3) +
-      shadowNationSelect("nations.se", "Southrons & Easterlings", 3);
-    html +=
-      "<h3>Free Peoples nations</h3>" +
-      trackerSelect("nations.gondor", "Gondor") +
-      trackerSelect("nations.rohan", "Rohan") +
-      trackerSelect("nations.north", "North") +
-      trackerSelect("nations.dwarves", "Dwarves") +
-      trackerSelect("nations.elves", "Elves");
-    if (state.settings.wome)
-      html +=
-        "<h3>Factions in play</h3>" +
-        trackerCheckbox("factions.corsairs", "Corsairs") +
-        trackerCheckbox("factions.dunlendings", "Dunlendings") +
-        trackerCheckbox("factions.spiders", "Spiders") +
-        trackerCheckbox("factions.ents", "Ents") +
-        trackerCheckbox("factions.eagles", "Eagles") +
-        trackerCheckbox("factions.deadmen", "Dead Men");
-    html += situBlockHTML();
-    return html + "</div></section>";
+    return (
+      '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">answers what it can</span></h2><div class="tracker">' +
+      scoreSectionHTML() +
+      fellowshipSectionHTML() +
+      charactersSectionHTML() +
+      shadowNationsSectionHTML() +
+      fpNationsSectionHTML() +
+      (state.settings.wome ? factionsSectionHTML() : "") +
+      situBlockHTML() +
+      "</div></section>"
+    );
   }
   // dotted paths into state.board ("fs.progress")
   function boardValue(path) {
@@ -1706,8 +1827,9 @@
     nazgul: [0, 8],
   };
   const DEFAULT_STEP_LIMIT = [0, 99];
-  // A tracker change: apply it, forget cached card checks it may affect, and discard table cards whose condition it triggers (asking when the app cannot tell).
-  function trackerChange(path, value) {
+  // A tracker change: apply it and forget the cached card checks it may affect; returns the table cards whose discard
+  // condition the app cannot judge itself (the questions to ask).
+  function applyTrackerChange(path, value) {
     let asks = [];
     const from = boardValue(path);
     act(
@@ -1719,7 +1841,11 @@
       },
       { a: "tracker", key: path, from, to: value },
     );
-    const next = () => {
+    return asks;
+  }
+  // Ask about each table card the change may have triggered, one dialog after another.
+  function askAboutTriggeredCards(asks) {
+    const askNextTriggeredCard = () => {
       const pending = asks.shift();
       if (!pending) return;
       ask({
@@ -1740,40 +1866,38 @@
                 ),
               { a: "tableTrigger", card: pending.card },
             );
-          next();
+          askNextTriggeredCard();
         },
       });
     };
-    next();
+    askNextTriggeredCard();
+  }
+  function trackerChange(path, value) {
+    askAboutTriggeredCards(applyTrackerChange(path, value));
   }
 
-  // ---------- wiring ----------
-  function wire() {
+  // Wiring: the handlers of the game screen's controls, attached after every render.
+  function wireHeader() {
     find("#undoBtn").onclick = undo;
     const newGameBtn = find("#newGameBtn");
     if (newGameBtn) newGameBtn.onclick = askNewGame;
-    document
-      .querySelectorAll("[data-modal]")
-      .forEach(
-        (button) =>
-          (button.onclick = () =>
-            openModal(
-              button.dataset.modal,
-              button.dataset.modal === MODAL.FLOW
-                ? { current: true }
-                : undefined,
-            )),
-      );
-    document
-      .querySelectorAll("[data-phase]")
-      .forEach(
-        (button) => (button.onclick = () => onPhase(button.dataset.phase)),
-      );
-    document
-      .querySelectorAll("[data-ans]")
-      .forEach(
-        (button) => (button.onclick = () => onAnswer(button.dataset.ans)),
-      );
+  }
+  function wireModalButtons() {
+    onClickEach("[data-modal]", (button) =>
+      openModal(
+        button.dataset.modal,
+        button.dataset.modal === MODAL.FLOW ? { current: true } : undefined,
+      ),
+    );
+  }
+  function wirePhaseButtons() {
+    onClickEach("[data-phase]", (button) => onPhase(button.dataset.phase));
+  }
+  function wireAnswerButtons() {
+    onClickEach("[data-ans]", (button) => onAnswer(button.dataset.ans));
+  }
+  // The battle form: its Nazgûl stepper and the button that starts the round.
+  function wireBattleForm() {
     const battleFormOk = find("#bfOk");
     if (battleFormOk)
       battleFormOk.onclick = () => {
@@ -1785,69 +1909,68 @@
           { a: "answer", prompt: PROMPT.BATTLE_FORM, value: form },
         );
       };
-    document.querySelectorAll("[data-bs]").forEach(
-      (button) =>
-        (button.onclick = () => {
-          const input = find("#bf-nazLead");
-          const value = Math.max(
-            0,
-            Math.min(
-              STEP_LIMITS.nazgul[1],
-              (+input.value || 0) + +button.dataset.d,
-            ),
-          );
-          input.value = value;
-          find("#bf-nazLead-n").textContent = value;
-        }),
-    );
+    onClickEach("[data-bs]", (button) => {
+      const input = find("#bf-nazLead");
+      const value = Math.max(
+        0,
+        Math.min(
+          STEP_LIMITS.nazgul[1],
+          (+input.value || 0) + +button.dataset.d,
+        ),
+      );
+      input.value = value;
+      find("#bf-nazLead-n").textContent = value;
+    });
+  }
+  function wireCountPrompt() {
     const countOk = find("#cntOk");
-    if (countOk)
-      countOk.onclick = () => {
-        const value = find("#cnt").value;
-        act(
-          () => {
-            engine.answer(state, value);
-            afterWalk();
-          },
-          {
-            a: "answer",
-            prompt: PROMPT.COUNT,
-            page: state.walk?.page,
-            node: state.walk?.node,
-            value,
-          },
-        );
-      };
-    document
-      .querySelectorAll("[data-spend]")
-      .forEach(
-        (button) =>
-          (button.onclick = () => spendDieClick(+button.dataset.spend)),
+    if (!countOk) return;
+    countOk.onclick = () => {
+      const value = find("#cnt").value;
+      act(
+        () => {
+          engine.answer(state, value);
+          afterWalk();
+        },
+        {
+          a: "answer",
+          prompt: PROMPT.COUNT,
+          page: state.walk?.page,
+          node: state.walk?.node,
+          value,
+        },
       );
-    document
-      .querySelectorAll("[data-card]")
-      .forEach(
-        (button) =>
-          (button.onclick = () =>
-            onCard(button.dataset.card, button.dataset.id)),
-      );
+    };
+  }
+  function wireDiceSpend() {
+    onClickEach("[data-spend]", (button) =>
+      spendDieClick(+button.dataset.spend),
+    );
+  }
+  function wireTableCards() {
+    onClickEach("[data-card]", (button) =>
+      onCard(button.dataset.card, button.dataset.id),
+    );
+  }
+  function wireTracker() {
     document.querySelectorAll(".tracker [data-t]").forEach((el) => {
       el.onchange = () => trackerChange(el.dataset.t, trackerValue(el));
     });
-    document.querySelectorAll("[data-step]").forEach(
-      (button) =>
-        (button.onclick = () => {
-          const path = button.dataset.step;
-          const limits = STEP_LIMITS[path] || DEFAULT_STEP_LIMIT;
-          trackerChange(
-            path,
-            Math.min(
-              limits[1],
-              Math.max(limits[0], boardValue(path) + +button.dataset.d),
-            ),
-          );
-        }),
-    );
+  }
+  function wireSteppers() {
+    onClickEach("[data-step]", (button) => {
+      const path = button.dataset.step;
+      const limits = STEP_LIMITS[path] || DEFAULT_STEP_LIMIT;
+      trackerChange(
+        path,
+        Math.min(
+          limits[1],
+          Math.max(limits[0], boardValue(path) + +button.dataset.d),
+        ),
+      );
+    });
+  }
+  function wireForgetChecks() {
     const resetBtn = find("[data-t-reset]");
     if (resetBtn)
       resetBtn.onclick = () =>
@@ -1858,6 +1981,19 @@
           },
           { a: "forgetCardChecks" },
         );
+  }
+  function wire() {
+    wireHeader();
+    wireModalButtons();
+    wirePhaseButtons();
+    wireAnswerButtons();
+    wireBattleForm();
+    wireCountPrompt();
+    wireDiceSpend();
+    wireTableCards();
+    wireTracker();
+    wireSteppers();
+    wireForgetChecks();
   }
   function onAnswer(answer) {
     const walk = state.walk,
@@ -1914,6 +2050,7 @@
       },
     });
   }
+  // After a walk ends: remember whether a battle is still open, and move the phase on when the walk reached the next start point.
   function afterWalk() {
     const walk = state.walk;
     if (!walk?.done) return;
@@ -2025,6 +2162,8 @@
     commit,
     render,
     find,
+    onClickEach,
+    parseJSONOr,
     formatText,
     escapeHTML,
     stripMarkup,
