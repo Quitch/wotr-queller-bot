@@ -9,7 +9,15 @@ import { svgPage, walkMarks } from "./svg.js";
 
 const DEFAULT_FLOW_PAGE = "C14";
 let flowPage = DEFAULT_FLOW_PAGE, // the tab shown
-  flowText = false; // the text version instead of the diagram
+  flowText = null; // the text version instead of the diagram; decided on first use (see textMode)
+// Touch screens start with the text version, which reads at any width; anything else starts with the diagram.
+function textMode() {
+  if (flowText === null)
+    flowText =
+      typeof matchMedia === "function" &&
+      matchMedia("(pointer: coarse)").matches;
+  return flowText;
+}
 const flowContent = () => ({
   title: "Flowcharts",
   body:
@@ -21,6 +29,8 @@ const flowContent = () => ({
           (pageKey === flowPage ? " on" : "") +
           '" data-fp="' +
           pageKey +
+          '" aria-pressed="' +
+          (pageKey === flowPage) +
           '">' +
           esc(
             FLOW[pageKey].name
@@ -31,11 +41,11 @@ const flowContent = () => ({
       )
       .join("") +
     '</div><div class="body"><p class="notice" style="margin:0 0 8px">Green: start point. Red: action. Yellow/blue: decision. Grey: jump to another page. Purple: priority list. Orange: step. The current node of the walk is outlined; visited nodes are shaded.</p><p style="margin:0 0 8px"><button class="btn small" id="flowToggle" aria-pressed="' +
-    flowText +
+    textMode() +
     '">' +
-    (flowText ? "Show the diagram" : "Show as text") +
+    (textMode() ? "Show the diagram" : "Show as text") +
     "</button></p>" +
-    (flowText
+    (textMode()
       ? textPage(flowPage)
       : '<div class="flowwrap">' + svgPage(flowPage) + "</div>") +
     "</div>",
@@ -52,7 +62,7 @@ function currentPage() {
 }
 function textPage(pageKey) {
   const page = FLOW[pageKey];
-  const { curNode } = walkMarks(pageKey);
+  const { curNode, visited } = walkMarks(pageKey);
   const nodeName = (id) => {
     const node = page.nodes[id];
     return node
@@ -107,10 +117,16 @@ function textPage(pageKey) {
         : "") +
       ">" +
       text +
-      (id === curNode ? " <b>(current step)</b>" : "") +
+      walkMarkLabel(id, curNode, visited) +
       "</li>";
   }
   return html + "</ol></div>";
+}
+// The walk's mark on a box in the text view: the current step, a visited box, or nothing.
+function walkMarkLabel(id, curNode, visited) {
+  if (id === curNode) return " <b>(current step)</b>";
+  if (visited.has(id)) return " <b>(visited)</b>";
+  return "";
 }
 function wireFlowModal(modal, el) {
   ui.onClickEach(
@@ -122,9 +138,8 @@ function wireFlowModal(modal, el) {
     el,
   );
   el.querySelector("#flowToggle").onclick = () => {
-    flowText = !flowText;
+    flowText = !textMode();
     renderModal();
-    ui.find("#flowToggle").focus();
   };
 }
 

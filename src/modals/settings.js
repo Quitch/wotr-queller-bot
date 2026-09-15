@@ -40,7 +40,7 @@ function settingsHTML() {
       "Chosen when the game is set up; it cannot be changed mid-game.",
       true,
     ) +
-    '<h4 style="margin-top:18px">Report a problem</h4><p class="notice">If the app does something wrong, export a debug log and send it with a description of what happened. The log records the game, the last actions and any errors.</p><p style="margin-top:8px"><button type="button" class="btn" id="dbgOpen">Export debug log</button></p><h4 style="margin-top:18px">About</h4><p class="notice">Queller Bot Runner version ' +
+    '<h3 style="margin-top:18px">Report a problem</h3><p class="notice">If the app does something wrong, export a debug log and send it with a description of what happened. The log records the game, the last actions and any errors.</p><p style="margin-top:8px"><button type="button" class="btn" id="dbgOpen">Export debug log</button></p><h3 style="margin-top:18px">About</h3><p class="notice">Queller Bot Runner version ' +
     engine.VERSION +
     ".</p>" +
     ui.LEGAL +

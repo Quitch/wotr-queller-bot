@@ -42,6 +42,16 @@ input[type="checkbox"] {
 select {
   min-height: 44px;
 }
+input[type="file"] {
+  min-height: 44px;
+  font: inherit;
+}
+.filebtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
 .answers .btn,
 .phasebar .btn:not(.small),
 .tools .btn,

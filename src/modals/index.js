@@ -11,6 +11,7 @@ import { jump } from "./jump.js";
 import { rules } from "./rules.js";
 import { saveLoad } from "./save.js";
 import { settings } from "./settings.js";
+import { tools } from "./tools.js";
 
 // The registrations by modal name (test/render.js builds every modal's content from them).
 export const MODAL_REGISTRATIONS = {
@@ -24,6 +25,7 @@ export const MODAL_REGISTRATIONS = {
   [MODAL.HELP]: help,
   [MODAL.DEBUG]: debugLog,
   [MODAL.ASK]: askDialog,
+  [MODAL.TOOLS]: tools,
 };
 registerModals(MODAL_REGISTRATIONS);
 

@@ -8,9 +8,25 @@
   padding: 10px 12px;
   border-radius: 8px;
   font-size: 0.82rem;
-  line-height: 1.4;
+  line-height: 1.5;
   box-shadow: var(--shadow);
   white-space: pre-line;
+}
+/* an invisible bridge across the gap (ui/constants.js TOOLTIP.GAP) between a term and its tip, above and below, so the
+   pointer can move onto the tip without it closing */
+#tip::before,
+#tip::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8px;
+}
+#tip::before {
+  top: -8px;
+}
+#tip::after {
+  bottom: -8px;
 }
 .term {
   background: none;

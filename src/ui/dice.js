@@ -98,11 +98,11 @@ function dicePoolHTML(dice, available) {
   const huntDice = indexedDice.filter(([die]) => die.status === DIE_STATE.HUNT),
     otherDice = indexedDice.filter(([die]) => die.status !== DIE_STATE.HUNT);
   return (
-    '<div class="dicewrap"><div class="huntbox"><span class="hlbl">Hunt box</span><ul class="dice" aria-label="Dice in the Hunt box">' +
+    '<div class="dicewrap"><div class="huntbox"><span class="hlbl">Hunt box</span><ul class="dice" role="list" aria-label="Dice in the Hunt box">' +
     (huntDice.length
       ? huntDice.map(([die, index]) => dieHTML(die, index)).join("")
       : '<li class="die empty" aria-hidden="true"></li>') +
-    '</ul></div><ul class="dice" aria-label="Dice">' +
+    '</ul></div><ul class="dice" role="list" aria-label="Dice">' +
     otherDice.map(([die, index]) => dieHTML(die, index)).join("") +
     "</ul></div>" +
     (available.length
@@ -116,7 +116,7 @@ const faceLegendHTML = (faces) =>
     .join("");
 function diceLegendHTML(dice) {
   return (
-    '<div class="legend" aria-hidden="true">' +
+    '<div class="legend" aria-label="Die faces">' +
     faceLegendHTML([
       "Character",
       "Army",

@@ -22,9 +22,18 @@
 .toprow > section:only-child {
   grid-column: 1/-1;
 }
+/* one column: the walkthrough comes first, then the dice and cards panels that share the top row on a wide screen */
 @media (width <=900px) {
   .toprow {
     grid-template-columns: 1fr;
+    order: 1;
+  }
+  #app {
+    display: flex;
+    flex-direction: column;
+  }
+  footer.notice {
+    order: 2;
   }
 }
 .toprow + .grid {

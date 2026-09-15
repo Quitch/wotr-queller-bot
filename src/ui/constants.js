@@ -12,6 +12,7 @@ export const MODAL = {
   HELP: "help",
   DEBUG: "debug",
   ASK: "ask",
+  TOOLS: "tools",
 };
 export const UNDO_DEPTH = 60; // snapshots kept for Undo
 export const LOG_ROWS_SHOWN = 40;

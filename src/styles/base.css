@@ -3,7 +3,7 @@
   box-sizing: border-box;
 }
 html {
-  font-size: 15px;
+  font-size: 93.75%; /* 15px at the browser's default 16px; scales with the user's own size preference */
 }
 body {
   margin: 0;
@@ -11,8 +11,10 @@ body {
   color: var(--ink);
   font-family: var(--font-body);
   line-height: 1.5;
+  overflow-wrap: break-word;
   padding-block: 0 32px;
-  padding-inline: 16px;
+  padding-inline: max(16px, env(safe-area-inset-left, 0px))
+    max(16px, env(safe-area-inset-right, 0px));
 }
 h1,
 h2,

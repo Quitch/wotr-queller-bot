@@ -30,3 +30,11 @@ export {
 export { trackerValue } from "../src/ui/handlers.js";
 export { MODAL_REGISTRATIONS, svgPage } from "../src/modals/index.js";
 export { route } from "../src/modals/flow/route.js";
+export { NODE_STYLE, SVG_COLOUR } from "../src/modals/flow/svg.js";
+export {
+  detailsBefore,
+  restoreDetails,
+  scrollBefore,
+  restoreScroll,
+} from "../src/ui/render.js";
+export { slots, saveToSlot } from "../src/modals/save.js";

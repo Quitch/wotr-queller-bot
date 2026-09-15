@@ -1,4 +1,4 @@
-/* save slots and the battle form */
+/* save slots, the jump modal's selectors and the battle form */
 .slot {
   display: flex;
   gap: 8px;
@@ -9,6 +9,21 @@
 }
 .slot .t {
   flex: 1;
+}
+.jumpgrid {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+}
+.jumpgrid select {
+  min-width: 0;
+  max-width: 100%;
+}
+@media (width <=600px) {
+  .jumpgrid {
+    grid-template-columns: 1fr;
+  }
 }
 .bform.tracker {
   display: grid;
@@ -23,7 +38,7 @@
 .bform .row:last-child {
   border-bottom: 1px dotted var(--line);
 }
-@media (width <=700px) {
+@media (width <=900px) {
   .bform.tracker {
     grid-template-columns: 1fr;
   }

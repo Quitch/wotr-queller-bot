@@ -9,13 +9,15 @@ Queller Bot for War of the Ring: a single-file web app that walks the Queller bo
 ## Commands
 
 ```text
-npm run build           # bundle src/ into index.html (esbuild; defines QB_BUILT with the UTC build time)
+npm run build           # bundle src/ into index.html (esbuild, minified with names kept; defines QB_BUILT with the UTC build time)
 npm run verify          # all linters + all Node tests; run before committing
 npm run lint            # eslint + stylelint + markdownlint + prettier --check
 npm run format          # prettier --write .
 npm test                # check.js, verify.js, debuglog.js, render.js, ui.js, fuzz.js 1
 npm run coverage        # npm test under c8: a text report plus coverage/lcov.info (what SonarQube Cloud reads); src files no test imports count as 0%
 npm run smoke           # the Playwright browser test of the built index.html (build first)
+npm run a11y            # the Playwright accessibility checks of the built index.html: keyboard, live region, colour scheme, scroll chaining, touch (build first)
+npm run reader          # the optional NVDA screen-reader check (Windows, headed, never in CI; skips when NVDA cannot run; setup in docs/testing.md)
 ```
 
 Tests are plain Node scripts (no test runner); each exits 1 on failure. Run one directly:
@@ -26,13 +28,16 @@ node test/verify.js     # scripted scenarios (driveWalk() answers prompts by reg
 node test/debuglog.js   # debug log module
 node test/render.js     # the whole UI built without a DOM: 32 short random games (test/play.js) rendering the game screen, every prompt, every card half, every modal's content and every flowchart SVG; every arrow routes between its boxes
 node test/ui.js         # unit tests of the UI's pure logic: text markup, board paths, tracker values, storage and save loading, widgets, phase tables, trail/result/card renderers
+node test/contrast.js   # the colour tokens (both themes) and the flowchart strokes against their backgrounds: text 7:1, borders/strokes 3:1; --table prints every ratio
 node test/fuzz.js 7     # 400 random games with seed 7 across all 16 setting combinations; any seed works
 node test/fuzz.js 7 --digest  # also prints a sha256 of every final state: a refactor that preserves behaviour leaves it unchanged
-node test/smoke.js      # Playwright browser run of the built index.html (build first; needs `npx playwright install chromium`)
-node test/shot.js       # Playwright screenshots to test/shot-*.png (build first)
+node test/smoke.js      # Playwright browser run of the built index.html, desktop and a 360px touch screen, with axe-core on every screen and modal (build first; needs `npx playwright install chromium`)
+node test/a11y.js       # Playwright: the live region before and after a keyboard answer, the flowchart modal by keyboard (focus order, tab activation, the Tab trap, Escape), dark-scheme native controls, scroll chaining out of the log, the trail and the modals, then a 360px touch screen (touch-action, the tap pipeline, a double-tap zoom probe, modal containment); build first
+node test/reader.js     # NVDA through Guidepup speaks the log line after an answer (Windows only, headed, needs `npx @guidepup/setup setup` and `npx @guidepup/setup install` once; skips with exit 0 otherwise)
+node test/shot.js       # Playwright screenshots to test/shot-*.png, desktop plus phone portrait and landscape (build first)
 ```
 
-The Node tests never touch the DOM. `test/load.js` is the one place they reach into `src/`: it re-exports the engine and walker (`QB`), the flowchart data (`QB_FLOW`, `QB_NODE`, `QB_NODE_KIND`, `QB_EDGE`), the cards (`QB_CARDS`), the reference text (`GLOSSARY`, `RULES`, …), the debug log (`QB_DEBUG`), the UI surface (`QB_UI`) and the UI's pure HTML builders and tables (`gameHTML`, `promptHTML`, `PROMPT_RENDERERS`, `MODAL_REGISTRATIONS`, `svgPage`, `route`, …). Every module under `ui/` and `modals/` imports without a DOM (all `document`/`window` use is inside function bodies), so `test/render.js` builds the whole page and every modal's content in Node; only the DOM wiring (`render()`, `act()`, `boot()`, `wire.js`, `tooltip.js`, the modal framework) is left to the Playwright scripts, which are not part of `npm test` (the `browser` CI job runs `smoke.js`); `test/browser.js` serves the built page and launches Chromium for both. `test/play.js` is the random game driver `fuzz.js` and `render.js` share: a seeded `Math.random`, a random answer to every prompt, and hooks around every answer (`onWalkStart`, `onPrompt`, `afterAnswer`, `afterPhase`) for a test's own checks.
+The Node tests never touch the DOM. `test/load.js` is the one place they reach into `src/`: it re-exports the engine and walker (`QB`), the flowchart data (`QB_FLOW`, `QB_NODE`, `QB_NODE_KIND`, `QB_EDGE`), the cards (`QB_CARDS`), the reference text (`GLOSSARY`, `RULES`, …), the debug log (`QB_DEBUG`), the UI surface (`QB_UI`) and the UI's pure HTML builders and tables (`gameHTML`, `promptHTML`, `PROMPT_RENDERERS`, `MODAL_REGISTRATIONS`, `svgPage`, `route`, …). Every module under `ui/` and `modals/` imports without a DOM (all `document`/`window` use is inside function bodies), so `test/render.js` builds the whole page and every modal's content in Node; only the DOM wiring (`render()`, `act()`, `boot()`, `wire.js`, `tooltip.js`, the modal framework) is left to the Playwright scripts, which are not part of `npm test` (the `browser` CI job runs `smoke.js` then `a11y.js`; `reader.js` and `shot.js` run by hand); `test/browser.js` serves the built page and launches Chromium for all of them. `docs/testing.md` lists every script and what the suite cannot check. `test/play.js` is the random game driver `fuzz.js` and `render.js` share: a seeded `Math.random`, a random answer to every prompt, and hooks around every answer (`onWalkStart`, `onPrompt`, `afterAnswer`, `afterPhase`) for a test's own checks.
 
 ## Architecture
 
@@ -55,7 +60,7 @@ The stylesheets are written one declaration per line on purpose and their class/
 
 ## Reference material (not tracked)
 
-`docs/ref/` holds the two rulebooks as PDF and extracted text, and the
+`docs/refs/` holds the two rulebooks as PDF and extracted text, and the
 draw.io flowchart that `flow/` was transcribed from. Grep the `.txt`
 files for rules questions rather than reading them whole. The flowchart
 XML is the source of truth when node text in `flow/pages/` looks wrong.
@@ -65,9 +70,10 @@ XML is the source of truth when node text in `flow/pages/` looks wrong.
 - Bump `VERSION` in `engine/constants.js` for every published build; saved games carry it and `migrate` upgrades old saves.
 - When adding a flowchart node or changing node text, update `walk/` to match and run `node test/check.js`; when adding a card flag or effect, add it to the allow-lists that `check.js` enforces.
 - A module exports only what another module imports; `engine/index.js`, `walk/index.js`, `ui/index.js` and `modals/index.js` are the public surfaces. Mutable module state (`ui/session.js`, `debug.js`, the modal modules' own state) is changed only inside its module or through a setter it exports.
-- `npm run coverage` writes `coverage/lcov.info`; the CI `verify` job hands it to SonarQube Cloud (CI-based analysis, `sonar-project.properties`, the `SONAR_TOKEN` repository secret), so Sonar's coverage figure is the Node-side coverage only: the browser smoke test runs in the separate `browser` job and is not in it.
+- `npm run coverage` writes `coverage/lcov.info`; the CI `verify` job hands it to SonarQube Cloud (CI-based analysis, `sonar-project.properties`, the `SONAR_TOKEN` repository secret), so Sonar's coverage figure is the Node-side coverage only: the browser tests (`smoke.js`, `a11y.js`) run in the separate `browser` job and are not in it. The modules that only run in a browser (`main.js`, `ui/boot.js`, `ui/wire.js`, `ui/tooltip.js`, `modals/framework.js`) are excluded from Sonar's coverage measure (`sonar.coverage.exclusions`) for that reason; keep DOM wiring in those modules and pure logic where the Node tests reach it.
 - Behaviour fixes get a scripted scenario in `test/verify.js` (a named function listed in `SCENARIOS`, typically `phase5State()` + `driveWalk()` with `[pattern, answer]` rules); the fuzz test is the safety net for exceptions, walks left without a prompt, and card-count conservation, and its `--digest` shows whether a change altered any game's outcome.
 - Enum values (`PROMPT`, `TRAIL`, `DIE_STATE`, …) and the field names of the saved game are persisted in autosaves and slots: renaming one changes what saved games hold, so it needs a `migrate` step once there are published saves to upgrade (`VERSION` is bumped only when the artifact is published). CSS class names such as `k-D`, `st-used` and `t-skip` are derived from those values too.
 - `src/flow/anchors.json` is generated: after a draw.io change, run `npm run anchors` (add `--check` to see whether it is up to date) rather than editing it. The script matches draw.io boxes to flow.js nodes by geometry, so a new box needs its flow.js node first.
 - Prettier owns layout (eslint-config-prettier is last in the ESLint config). `endOfLine` is `auto`; `.gitattributes` normalises to LF.
 - The README's header line carries the version and date; keep it in step with `VERSION`.
+- `docs/wcag-2.2.md` is the WCAG 2.2 compliance record: an accessibility-relevant change (markup, colour tokens, focus handling, target sizes, live regions) updates the affected rows and its change log in the same commit. `test/contrast.js` guards the colour tokens; the smoke test runs axe-core; `test/a11y.js` checks the keyboard, live-region, colour-scheme, scroll-chaining and touch behaviour. `docs/testing.md` records what the suite cannot check and how to run the optional NVDA script; a new limit or a new script goes there too.

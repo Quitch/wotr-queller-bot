@@ -19,10 +19,10 @@
   margin-bottom: 12px;
 }
 .prompt .eyebrow {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: var(--muted);
+  color: inherit;
   display: flex;
   gap: 10px;
   align-items: center;
@@ -117,10 +117,18 @@
 }
 :root[data-theme="dark"] .prompt .answers .btn {
   background: rgb(0 0 0 / 25%);
+  border-color: var(--muted);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) .prompt .answers .btn {
     background: rgb(0 0 0 / 25%);
+    border-color: var(--muted);
+  }
+}
+/* Windows High Contrast: the swatch keeps its colour, since the colour is the information */
+@media (forced-colors: active) {
+  .prompt .eyebrow .sw {
+    forced-color-adjust: none;
   }
 }
 .prompt .steps {

@@ -303,10 +303,153 @@ function checkCardFaces() {
     "a Call to Battle card shows its text even when the combat half is asked for",
   );
 }
+// A stand-in for a focused element: an id, attributes and a dataset.
+const fakeElement = ({ id = "", attrs = {}, dataset = {} } = {}) => ({
+  id,
+  dataset,
+  hasAttribute: (name) => name in attrs,
+  getAttribute: (name) => attrs[name],
+});
+// The focus key finds a control again after a re-render: by id, else by the first identifying attribute plus its
+// data-d / data-id qualifiers; nothing for the body or an anonymous element.
+function checkFocusKeys() {
+  const { focusKey } = ui;
+  const body = {};
+  body.ownerDocument = { body };
+  ok(
+    focusKey(null) === null && focusKey(body) === null,
+    "no focus key for nothing or the body",
+  );
+  ok(
+    focusKey(fakeElement({ id: "undoBtn" })) === "#undoBtn",
+    "an id is the focus key",
+  );
+  ok(
+    focusKey(
+      fakeElement({ attrs: { "data-ans": "yes" }, dataset: { ans: "yes" } }),
+    ) === '[data-ans="yes"]',
+    "an answer button is found again by its data-ans",
+  );
+  ok(
+    focusKey(
+      fakeElement({
+        attrs: { "data-step": "rings" },
+        dataset: { step: "rings", d: "1" },
+      }),
+    ) === '[data-step="rings"][data-d="1"]' &&
+      focusKey(
+        fakeElement({
+          attrs: { "data-card": "show" },
+          dataset: { card: "show", id: "sa009" },
+        }),
+      ) === '[data-card="show"][data-id="sa009"]',
+    "stepper and table-card buttons keep their data-d and data-id qualifiers",
+  );
+  ok(
+    focusKey(
+      fakeElement({ attrs: { "data-fp": "C14" }, dataset: { fp: "C14" } }),
+    ) === '[data-fp="C14"]' &&
+      focusKey(
+        fakeElement({ attrs: { "data-save": "1" }, dataset: { save: "1" } }),
+      ) === '[data-save="1"]',
+    "modal controls (flow tabs, save slots) have focus keys too",
+  );
+  ok(
+    focusKey(fakeElement({ attrs: { class: "x" } })) === null,
+    "an element with no id and no identifying attribute has no key",
+  );
+}
+// The render bookkeeping: <details> open states survive a re-render of the same thing (by data-key) and scroll
+// positions of the trail and log are put back, run over stand-in roots.
+function checkRenderBookkeeping() {
+  const details = (open, key) => ({ open, dataset: key ? { key } : {} });
+  const root = (list, scrolled = {}) => ({
+    querySelectorAll: () => list,
+    querySelector: (selector) => scrolled[selector] || null,
+  });
+  const before = fakeWindow.detailsBefore(
+    root([details(false, "C14|Phase 5|1"), details(true, "")]),
+  );
+  ok(
+    before.length === 2 &&
+      before[0].open === false &&
+      before[0].key === "C14|Phase 5|1" &&
+      before[1].key === "",
+    "detailsBefore records each open state and key",
+  );
+  const same = details(true, "C14|Phase 5|1"),
+    unkeyed = details(false, "");
+  fakeWindow.restoreDetails(root([same, unkeyed]), before);
+  ok(
+    same.open === false && unkeyed.open === true,
+    "restoreDetails puts back the player's choice for the same keys",
+  );
+  const ended = details(false, "C14|Phase 5|1|done");
+  fakeWindow.restoreDetails(root([ended]), before);
+  ok(
+    ended.open === false,
+    "a details with a new key (the walk ended) keeps its default",
+  );
+  fakeWindow.restoreDetails(root([details(true, "x")]), []);
+  const trail = { scrollTop: 120 },
+    log = { scrollTop: 0 };
+  const scroll = fakeWindow.scrollBefore(
+    root([], { ".trail": trail, ".log": log }),
+  );
+  ok(
+    scroll[0] === 120 && scroll[1] === 0,
+    "scrollBefore reads the trail's position and 0 for a missing log",
+  );
+  const trailAfter = { scrollTop: 0 },
+    logAfter = { scrollTop: 0 };
+  fakeWindow.restoreScroll(
+    root([], { ".trail": trailAfter, ".log": logAfter }),
+    scroll,
+  );
+  ok(
+    trailAfter.scrollTop === 120 && logAfter.scrollTop === 0,
+    "restoreScroll puts the trail back and leaves an unscrolled log alone",
+  );
+  fakeWindow.restoreScroll(root([]), scroll);
+}
+// Saving into a slot writes the game with its turn and time under qb.slots (a fake localStorage as in checkStorage).
+function checkSlotSave() {
+  const store = {};
+  globalThis.localStorage = {
+    getItem: (key) => (key in store ? store[key] : null),
+    setItem: (key, value) => {
+      store[key] = String(value);
+    },
+  };
+  ok(fakeWindow.slots().length === 0, "no slots before any save");
+  const state = engine.newState({ dice: true });
+  state.turn = 4;
+  ui.setState(state);
+  fakeWindow.saveToSlot(1);
+  const slotList = fakeWindow.slots();
+  ok(
+    slotList.length === 2 &&
+      slotList[0] == null &&
+      slotList[1].turn === 4 &&
+      typeof slotList[1].when === "string" &&
+      JSON.parse(slotList[1].data).turn === 4,
+    "saveToSlot fills the chosen slot with the turn, the time and the game",
+  );
+  fakeWindow.saveToSlot(1);
+  ok(
+    fakeWindow.slots().length === 2 && fakeWindow.slots()[1].turn === 4,
+    "saving again overwrites the same slot",
+  );
+  ui.setState(null);
+  delete globalThis.localStorage;
+}
 function main() {
   checkTextHelpers();
   checkBoardPaths();
   checkStorage();
+  checkFocusKeys();
+  checkRenderBookkeeping();
+  checkSlotSave();
   checkWidgets();
   checkPhaseTables();
   checkTrailAndResult();

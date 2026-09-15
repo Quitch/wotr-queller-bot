@@ -11,7 +11,7 @@ const LIMITS = { actions: 300, errors: 30, walks: 8, states: 5 };
 export const actions = [],
   errors = [],
   walks = [];
-const store = { inflight: null, preWalk: null, storage: null };
+const store = { inflight: null, preWalk: null, storage: null, pending: false };
 
 function push(list, record, limit) {
   list.push(record);
@@ -20,7 +20,9 @@ function push(list, record, limit) {
 function replaceAll(list, items) {
   list.splice(0, list.length, ...items);
 }
-function persist() {
+// Write the log to storage now.
+function flush() {
+  store.pending = false;
   if (!store.storage) return;
   try {
     store.storage.set(
@@ -34,9 +36,20 @@ function persist() {
     // Storage full or unavailable: the in-memory log still works for this page load.
   }
 }
+// The write is deferred to the end of the current task (an idle moment when the browser offers one), so a burst of
+// actions costs one serialisation; errors, resets and the page going away (ui/boot.js) write at once.
+const FLUSH_IDLE_TIMEOUT_MS = 1000;
+function persist() {
+  if (store.pending || !store.storage) return;
+  store.pending = true;
+  if (typeof requestIdleCallback === "function")
+    requestIdleCallback(flush, { timeout: FLUSH_IDLE_TIMEOUT_MS });
+  else setTimeout(flush, 0);
+}
 // storage: {get():string|null, set(string)} — localStorage in the app, anything in tests
 function restore(storage) {
   store.storage = storage || null;
+  store.pending = false;
   if (!storage) return;
   try {
     const parsed = JSON.parse(storage.get() || "null");
@@ -197,7 +210,7 @@ function error(thrown, info, state) {
   if (state) record.state = safeDigest(state);
   push(errors, record, LIMITS.errors);
   store.inflight = null;
-  persist();
+  flush();
   return record;
 }
 
@@ -360,13 +373,14 @@ function reset() {
   replaceAll(errors, []);
   replaceAll(walks, []);
   store.inflight = null;
-  persist();
+  flush();
 }
 
 export {
   FORMAT,
   LIMITS,
   restore,
+  flush,
   begin,
   finishAction,
   action,

@@ -94,7 +94,7 @@ function trailEntryHTML(entry) {
 }
 export function trailHTML(walk) {
   return (
-    '<ul class="trail" tabindex="0" aria-label="Walk trail">' +
+    '<ul class="trail" role="list" tabindex="0" aria-label="Walk trail">' +
     walk.trail.map(trailEntryHTML).join("") +
     "</ul>"
   );
@@ -104,7 +104,7 @@ export function logHTML() {
   return (
     '<div class="panel" style="margin-top:14px"><h2 class="ph">Log <span class="r">' +
     state.log.length +
-    ' entries</span></h2><ul class="log" tabindex="0" aria-label="Game log">' +
+    ' entries</span></h2><ul class="log" role="list" tabindex="0" aria-label="Game log">' +
     items
       .map(
         (entry) =>

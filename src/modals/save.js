@@ -13,14 +13,14 @@ const saveContent = () => ({
   narrow: true,
 });
 // Save and load.
-const slots = () =>
+export const slots = () =>
   ui.parseJSONOr(ui.storageGet(ui.STORAGE_KEY.SLOTS) || "[]", []);
 function saveHTML() {
   const slotList = slots();
   let html =
     '<div class="body"><p class="notice">The game is saved automatically in this browser after every action. Named saves are also kept in this browser. To move a game to another device, download it or copy the code.</p>';
   html +=
-    "<h4>Named saves</h4>" +
+    "<h3>Named saves</h3>" +
     [0, 1, 2]
       .map((i) => {
         const slot = slotList[i];
@@ -39,12 +39,12 @@ function saveHTML() {
       })
       .join("");
   html +=
-    '<h4>Transfer</h4><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="dlBtn">Download save file</button><button class="btn" id="copyBtn">Copy save code</button></div><div id="dlNote" class="notice"></div>';
-  html += "<h4>Load</h4>" + loadHTML() + "</div>";
+    '<h3>Transfer</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="dlBtn">Download save file</button><button class="btn" id="copyBtn">Copy save code</button></div><div id="dlNote" class="notice" role="status" aria-live="polite"></div>';
+  html += "<h3>Load</h3>" + loadHTML() + "</div>";
   return html;
 }
 export function loadHTML() {
-  return '<p class="notice" style="margin:0 0 6px">Paste a save code, or choose a save file.</p><label for="loadTxt" class="notice">Save code</label><textarea id="loadTxt" placeholder="Paste the save code here"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="loadTxtBtn">Load from code</button><label class="notice">Save file <input type="file" id="loadFile" accept=".json,application/json"></label></div><div id="loadErr" class="notice" role="alert" style="color:var(--bad)"></div>';
+  return '<p class="notice" style="margin:0 0 6px">Paste a save code, or choose a save file.</p><label for="loadTxt" class="notice">Save code</label><textarea id="loadTxt" placeholder="Paste the save code here"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="loadTxtBtn">Load from code</button><label class="btn filebtn">Save file <input type="file" id="loadFile" accept=".json,application/json"></label></div><div id="loadErr" class="notice" role="alert" style="color:var(--bad)"></div>';
 }
 // Replace the game with a parsed save.
 function replaceGame(save, title) {
@@ -77,6 +77,39 @@ function loadGame(save, title) {
   if (ui.state) confirmReplace(save, title);
   else replaceGame(save, title);
 }
+// Write the game into a slot (slots and saveToSlot are exported for test/ui.js).
+export function saveToSlot(index) {
+  debug.action({ action: "saveSlot", slot: index }, ui.state);
+  const slotList = slots();
+  slotList[index] = {
+    turn: ui.state.turn,
+    when: new Date().toLocaleString(),
+    data: JSON.stringify(ui.state),
+  };
+  ui.storageSet(ui.STORAGE_KEY.SLOTS, JSON.stringify(slotList));
+}
+// Ask before overwriting an occupied slot (there is no undo for it); either answer returns to the save modal.
+function confirmOverwrite(index, slot) {
+  ui.ask({
+    title: "Overwrite slot " + (index + 1) + "?",
+    text:
+      "Slot " +
+      (index + 1) +
+      " holds a save from turn " +
+      slot.turn +
+      " (" +
+      slot.when +
+      "). It will be replaced by the current game and cannot be recovered.",
+    buttons: [
+      { v: "ok", label: "Overwrite", primary: true },
+      { v: "no", label: "Cancel" },
+    ],
+    onPick: (choice) => {
+      if (choice === "ok") saveToSlot(index);
+      ui.openModal(MODAL.SAVE);
+    },
+  });
+}
 export function wireLoad(root) {
   const doLoad = (text) => {
     try {
@@ -102,18 +135,13 @@ function wireSaveModal(modal, el) {
   ui.onClickEach(
     "[data-save]",
     (button) => {
-      debug.action(
-        { action: "saveSlot", slot: +button.dataset.save },
-        ui.state,
-      );
-      const slotList = slots();
-      slotList[+button.dataset.save] = {
-        turn: ui.state.turn,
-        when: new Date().toLocaleString(),
-        data: JSON.stringify(ui.state),
-      };
-      ui.storageSet(ui.STORAGE_KEY.SLOTS, JSON.stringify(slotList));
-      renderModal();
+      const index = +button.dataset.save;
+      const slot = slots()[index];
+      if (slot) confirmOverwrite(index, slot);
+      else {
+        saveToSlot(index);
+        renderModal();
+      }
     },
     el,
   );

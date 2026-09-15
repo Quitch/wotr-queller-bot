@@ -16,8 +16,8 @@ const PHASE_LABEL = {
 export const PHASE_BY_LABEL = Object.fromEntries(
   Object.entries(PHASE_LABEL).map(([phase, label]) => [label, phase]),
 );
-// The header's tool buttons: [modal, label, extra class].
-const TOOL_BUTTONS = [
+// The header's tool buttons: [modal, label, extra class]. On a narrow screen they fold into the Tools menu (modals/tools.js).
+export const TOOL_BUTTONS = [
   [MODAL.SAVE, "Save / Load"],
   [MODAL.GLOSSARY, "Glossary"],
   [MODAL.FLOW, "Flowcharts"],
@@ -60,7 +60,9 @@ export function headerHTML() {
         label +
         "</button>",
     ).join("") +
-    '<button class="btn ghost" id="newGameBtn">New game</button></nav></header>'
+    '<button class="btn ghost" id="newGameBtn">New game</button><button class="btn" id="toolsBtn" data-modal="' +
+    MODAL.TOOLS +
+    '">Tools</button></nav></header>'
   );
 }
 const capitalize = (text) =>

@@ -1,7 +1,37 @@
-// Small DOM and text helpers: querying, click wiring, HTML escaping, glossary markup, tolerant JSON.
+// Small DOM and text helpers: querying, click wiring, focus keys, HTML escaping, glossary markup, tolerant JSON.
 import { GLOSSARY, GLOSSARY_ALIASES } from "../ref/glossary.js";
 
 export const find = (selector) => document.querySelector(selector);
+// The attributes that identify a control across a re-render (of the page or of a modal), so focus can be put back on it.
+const FOCUS_ATTRIBUTES = [
+  "data-phase",
+  "data-ans",
+  "data-card",
+  "data-t",
+  "data-step",
+  "data-modal",
+  "data-t-reset",
+  "data-fp",
+  "data-save",
+  "data-load",
+  "data-set",
+  "data-ask",
+];
+const selectorFor = (el, attr) =>
+  "[" +
+  attr +
+  '="' +
+  el.getAttribute(attr) +
+  '"]' +
+  (el.dataset.d === undefined ? "" : '[data-d="' + el.dataset.d + '"]') +
+  (el.dataset.id === undefined ? "" : '[data-id="' + el.dataset.id + '"]');
+// A selector that finds the focused control again after a re-render, or null.
+export function focusKey(el) {
+  if (!el || el === el.ownerDocument?.body) return null;
+  if (el.id) return "#" + el.id;
+  const attr = FOCUS_ATTRIBUTES.find((name) => el.hasAttribute(name));
+  return attr ? selectorFor(el, attr) : null;
+}
 // Attach one click handler to every element a selector matches (within root, default the whole document).
 export function onClickEach(selector, handler, root = document) {
   root

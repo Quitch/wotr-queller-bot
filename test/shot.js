@@ -5,9 +5,11 @@ import {
   SEL,
   brokenAutosave,
   launchBuiltPage,
+  openFromToolsMenu,
   startGameWithEverythingOn,
 } from "./browser.js";
 const SHOT_PREFIX = "shot-";
+const TOOLS_MENU_MAX_WIDTH = 600; // the widest viewport that shows the Tools button
 const shotPath = (name) =>
   path.join(import.meta.dirname, SHOT_PREFIX + name + ".png");
 // The parts of the page the partial screenshots show.
@@ -44,16 +46,44 @@ async function shootFlowchart(page) {
   await page.screenshot({ path: shotPath("flow"), fullPage: true });
   await page.click(SEL.MODAL_CLOSE);
 }
+// Switch the full board tracker on or off (off leaves the minimal one).
+const setTracker = (page, on) =>
+  page.evaluate((tracker) => {
+    window.QBUI.act(() => {
+      window.QBUI.state.settings.tracker = tracker;
+    });
+  }, on);
 // The game with the full board tracker, then with the minimal one.
 async function shootTrackerLayouts(page) {
   await page.screenshot({ path: shotPath("full"), fullPage: true });
   await shootFlowchart(page);
-  await page.evaluate(() => {
-    window.QBUI.act(() => {
-      window.QBUI.state.settings.tracker = false;
-    });
-  });
+  await setTracker(page, false);
   await page.screenshot({ path: shotPath("minimal"), fullPage: true });
+}
+// One phone layout as a touch device: the flowchart modal (opened from the Tools menu on a narrow screen) and the jump
+// modal first, then the game with the full and the minimal tracker. Each orientation gets its own page: a full-page
+// screenshot resets Playwright's touch emulation, after which the app no longer sees a coarse pointer.
+async function shootPhoneLayout(tag, viewport) {
+  const { page, close } = await launchBuiltPage({ viewport, touch: true });
+  await startShowcaseGame(page);
+  // the header folds its buttons into the Tools menu only up to 600px (styles/header.css)
+  if (viewport.width <= TOOLS_MENU_MAX_WIDTH)
+    await openFromToolsMenu(page, "flow");
+  else await page.click(SEL.modal("flow"));
+  await page.screenshot({ path: shotPath(tag + "-flow") });
+  await page.click(SEL.MODAL_CLOSE);
+  await page.click(SEL.phase("jumpto"));
+  await page.screenshot({ path: shotPath(tag + "-jump") });
+  await page.click(SEL.MODAL_CLOSE);
+  await page.screenshot({ path: shotPath(tag + "-full"), fullPage: true });
+  await setTracker(page, false);
+  await page.screenshot({ path: shotPath(tag + "-minimal"), fullPage: true });
+  await close();
+}
+// Portrait (360×640) and landscape (700×360).
+async function shootPhoneLayouts() {
+  await shootPhoneLayout("phone", VIEWPORT.PHONE_SMALL);
+  await shootPhoneLayout("landscape", VIEWPORT.PHONE_LANDSCAPE);
 }
 // The error bar after a failed action and the debug log modal (light, dark, phone), then the phone-width error bar.
 async function shootErrorBarAndDebugLog(page) {
@@ -96,5 +126,6 @@ async function main() {
   await shootErrorBarAndDebugLog(page);
   await shootBrokenAutosave(page);
   await close();
+  await shootPhoneLayouts();
 }
 await main();
