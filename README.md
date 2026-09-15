@@ -1,24 +1,65 @@
-# Queller Bot Runner — sources (version 59, 14 Sep 2026)
+# Queller Bot Runner (version 59, 14 Sep 2026)
 
-`npm run build` bundles `src/` into `index.html` (the single-file artifact; the Artifact host adds the doctype/head/body). The sources are ES modules; esbuild follows the imports from `src/main.js` and the `@import`s from `src/styles/index.css` and writes one classic script (minified, with function names kept for the debug log's stack traces) and one stylesheet into the page. `docs/wcag-2.2.md` records where the app stands against WCAG 2.2 and how each criterion is met.
+A browser app that runs the [Queller Bot](https://boardgamegeek.com/filepage/141333/queller-bot-solo-play) by Quitch, so that one person can play War of the Ring solo as the Free Peoples against a scripted Shadow player.
 
-Tests (run all before building):
+## What this is
 
-    node test/check.js    # static: every "PAGE.node" key under src/walk/ exists, priority criteria resolve, grey boxes have JUMPS entries, card flags and counts valid, every *term* marker and "rule N" citation resolves, anchors.json matches the edges, every prompt type has an answer handler and a renderer
-    node test/verify.js   # scripted scenarios, one per behaviour fix
-    node test/debuglog.js # debug log module: action history, walk trails, error capture, persistence, the exported log
-    node test/render.js   # the whole UI built without a DOM: 32 short random games rendering the game screen, every prompt, every card half, every modal's content and every flowchart SVG; every arrow routes between its boxes
-    node test/ui.js       # unit tests of the UI's pure logic: text markup, board paths, tracker values, storage and save loading, widgets, phase tables, trail/result/card renderers
-    node test/contrast.js # the colour tokens of both themes and the flowchart strokes against their backgrounds: text at 7:1, borders and strokes at 3:1
-    node test/fuzz.js 1   # 400 random games (any seed) across all 16 setting combinations: no exceptions, no walk left without a prompt, card totals conserved
-    node test/fuzz.js 1 --digest  # the same, printing a sha256 of every final state (unchanged by a refactor that preserves behaviour)
-    node test/smoke.js    # Playwright: plays a turn in the built page, tracker triggers, modals, debug log export, a rolled-back action, an uncaught error, reload from autosave, a broken autosave, then a 360px touch screen (the Tools menu, no sideways scroll); axe-core runs on every screen and modal; fails on any unexpected page error or a serious axe violation
-    node test/a11y.js     # Playwright: the accessibility checks the audit left manual: the live region before and after a keyboard answer, the flowchart modal by keyboard (focus order, tab activation, the Tab trap, Escape), dark-scheme native controls, scroll chaining out of the log, the trail and the modals, then a 360px touch screen (touch-action on every tap target, the tap pipeline, a double-tap zoom probe, modal containment); docs/testing.md records what it cannot check
-    node test/reader.js   # NVDA through Guidepup (Windows only, a headed browser, never in CI): the log line after an answer is spoken; skips when NVDA cannot run (setup in docs/testing.md)
-    node test/shot.js     # screenshots of the full and minimal tracker layouts, the error bar, the debug log modal (light/dark/phone), the broken-autosave screen, and the phone layouts in portrait and landscape (test/shot-*.png)
+Queller Bot is a set of flowcharts and priority lists that tells the Shadow side what to do. On paper you roll its dice, hold its cards and walk the charts yourself. This app can take over as much of that as you like. Each part is optional, and each works on its own:
 
-`npm test` runs the Node tests (everything above except `smoke.js`, `a11y.js`, `reader.js` and `shot.js`); `npm run coverage` runs them under c8 and prints a coverage table alongside `coverage/lcov.info`; `npm run smoke` and `npm run a11y` run the browser tests against a built `index.html`; `npm run reader` runs the optional screen-reader check. The `Verify` GitHub Actions workflow runs lint, coverage and the build in one job (and, when the `SONAR_TOKEN` secret is present, sends the LCOV report to SonarQube Cloud, whose coverage figure is therefore the Node-side coverage only; the browser-only modules are excluded from it in `sonar-project.properties`) and the browser tests (`smoke.js` then `a11y.js`) in another. `docs/testing.md` lists every test and what the suite cannot check. `test/play.js` is the random game driver `fuzz.js` and `render.js` share; `test/load.js` is the one place the tests reach into `src/`.
+- it can roll Queller's Action dice and keep the Hunt box;
+- it may draw, hold and play Queller's cards, showing you a card only when it is played or when a flowchart needs to know whether it is playable;
+- it walks the flowcharts, asks their yes/no questions and names the action Queller takes;
+- it can answer those questions itself from a board tracker you keep up to date, or put every board question to you.
 
-`src/`: `flow/` (the ten flowchart pages, the node and edge accessors, and `anchors.json` — generated arrow routing, regenerate with `npm run anchors` after a draw.io change), `cards/` (79 cards with behaviour flags), `ref/` (glossary, rules, rulings, turn sequence), `engine/` (state, dice, cards, playability, priorities, table triggers; `VERSION` in `engine/constants.js`), `walk/` (the flowchart walker), `debug.js` (action history, error capture, the exportable debug log — kept outside the game state, persisted under `qb.debug`), `ui/` (rendering, undo, autosave), `modals/` (the dialogs), `styles/` (one file per concern, joined by `index.css`), `qb.js` (the engine and walker as one namespace) and `main.js` (the entry point). `test/load.js` imports the modules the Node tests need.
+You carry out the actions on the board. You need a physical copy of War of the Ring (2nd Edition): the app does not replace the board, figures, dice or cards. Warriors of Middle-earth is supported and needs that expansion.
 
-`build.js` defines `QB_BUILT` (UTC build time) into the script; the debug log shows it. Bump `VERSION` in `engine/constants.js` for each published build (saved games carry it and `migrate` upgrades older ones).
+The app works by keyboard and with a screen reader, on a phone screen in portrait and landscape, and targets WCAG 2.2 Level AAA; [docs/wcag-2.2.md](docs/wcag-2.2.md) is the compliance record.
+
+## How to use it
+
+### Play online
+
+The current build is published at <https://claude.ai/artifact/RZjDq2dXu5mHov9X2mmr93>. Games are saved automatically in that browser; Save / Load keeps named copies and can write a game to a file to carry on from another device.
+
+### Run it locally
+
+You need [Node.js](https://nodejs.org/) 24 or later.
+
+```text
+git clone https://github.com/Quitch/wotr-queller-bot.git
+cd wotr-queller-bot
+npm ci
+npm run build
+```
+
+`npm run build` writes `index.html`; open that file in a browser. It loads its two fonts from Google Fonts and falls back to system fonts when offline.
+
+### Playing a game
+
+1. **New game.** Choose what the app takes over: roll and track Queller's dice, draw and hold Queller's cards, track board state in the app, and Warriors of Middle-earth. The cards and expansion choices are fixed for the game; the other two can be changed in Settings. Roll a die for Queller's starting strategy and enter the result.
+2. **Each turn** press the buttons at the top of the walkthrough in turn order: Phase 1 (dice and cards), Phase 2 (strategy check, corruption strategy only), Phase 3 (Hunt box), Phase 4 (roll), then Phase 5 each time Queller is eligible to act. When a battle starts, use Battle for the first round; the button becomes Battle (next round) while the battle continues. Phase 6 is the victory check, and the next turn begins at Phase 1.
+3. **Answer each step.** A decision asks a question. An action names what Queller does: press Done, or Not possible if the game rules prevent it. A step is something to do before continuing. Italic terms show their definition when you hover, focus or tap them.
+4. **Keep the tracker up to date** when board tracking is on. It answers the questions about the Fellowship, minions, nations and factions for you, and decides which of Queller's cards can be played without showing you the rest of the hand.
+5. **Mistakes.** Undo reverses your last action, up to 60 steps. Save / Load keeps named copies or moves a game to another device.
+6. **Help, Rules, Glossary and Flowcharts** are in the header; on a narrow screen they fold into the Tools menu.
+
+### Reporting a problem
+
+If the app itself goes wrong (a step that makes no sense, a card or die handled wrongly, a button that does nothing), open Settings and press Export debug log. Attach the log to a [GitHub issue](https://github.com/Quitch/wotr-queller-bot/issues) with a short description of what you expected. The log holds the game state, the last actions you took and any errors. It also shows Queller's hidden cards, so only read it if you do not mind seeing them.
+
+## Development
+
+The sources are ES modules under `src/`, bundled by esbuild into the single-file `index.html`. With Node 24 installed, `npm ci` sets the project up, `npm run build` builds the page, and `npm run verify` runs every linter and every Node test; run it before committing.
+
+- [docs/development.md](docs/development.md): every npm script, the build, the CI workflow and the conventions.
+- [docs/architecture.md](docs/architecture.md): how the code is organised, layer by layer.
+- [docs/testing.md](docs/testing.md): what each test checks and what the suite cannot see.
+- [docs/wcag-2.2.md](docs/wcag-2.2.md): the WCAG 2.2 compliance record.
+
+## Licence and credits
+
+The code in this repository is released under the [MIT Licence](LICENSE).
+
+Queller Bot for War of the Ring (version 3.3) is © Quitch and licensed under [Creative Commons Attribution-NonCommercial 4.0 International](https://creativecommons.org/licenses/by-nc/4.0/). Its bot text, flowcharts and rules are reproduced here with the author's permission; see the [file page on BoardGameGeek](https://boardgamegeek.com/filepage/141333/queller-bot-solo-play).
+
+War of the Ring, Middle-earth and The Lord of the Rings and the characters, items, events, and places therein are trademarks of Middle-earth Enterprises, LLC used under license by Ares Games srl. War of the Ring Second Edition and Warriors of Middle-earth © Ares Games srl. Event card and Action die text is reproduced only as a play aid for owners of the game. This is an unofficial fan-made tool and is not affiliated with, endorsed or sponsored by Ares Games or Middle-earth Enterprises.

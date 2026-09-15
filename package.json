@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Queller Bot Runner for War of the Ring: sources, build script and tests",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "build": "node build.js",

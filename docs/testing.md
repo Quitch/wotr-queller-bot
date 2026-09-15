@@ -1,6 +1,6 @@
 # Test coverage and its limits
 
-What each test script checks, how the mobile / WCAG 2.2 audit's manual checks were automated, and what the suite still cannot see. The commands are in the README and `CLAUDE.md`.
+What each test script checks, how the mobile / WCAG 2.2 audit's manual checks were automated, and what the suite still cannot see. The commands are in `docs/development.md` and `CLAUDE.md`.
 
 ## The tests
 
