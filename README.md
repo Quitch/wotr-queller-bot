@@ -1,4 +1,4 @@
-# Queller Bot Runner (version 59, 14 Sep 2026)
+# Queller Bot Runner (version 60, 15 Sep 2026)
 
 A browser app that runs the [Queller Bot](https://boardgamegeek.com/filepage/141333/queller-bot-solo-play) by Quitch, so that one person can play War of the Ring solo as the Free Peoples against a scripted Shadow player.
 

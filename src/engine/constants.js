@@ -1,6 +1,6 @@
 // The app version, the enums and the limits the engine and the rest of the app share.
 
-export const VERSION = 59; // app version (shown in the debug log and stamped on saves)
+export const VERSION = 60; // app version (shown in the debug log and stamped on saves)
 
 // The values are what saved games and the card data (cards/) hold, so they must not change without a migrate() step.
 export const STRATEGY = { CORRUPTION: "corruption", MILITARY: "military" };
