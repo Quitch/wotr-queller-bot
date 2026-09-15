@@ -50,6 +50,8 @@ The `Verify` workflow (`.github/workflows/verify.yml`) runs on every push to `ma
 
 `reader.js` and `shot.js` never run in CI.
 
+`CONTRIBUTING.md` walks a contributor from a clone to a merged pull request, and `.github/PULL_REQUEST_TEMPLATE.md` turns the conventions below and the hand-run checks into the checklist every pull request starts from.
+
 ## Reference material (not tracked)
 
 `docs/refs/` holds the two rulebooks as PDF and extracted text, and the draw.io flowchart that `src/flow/` was transcribed from. Grep the `.txt` files for rules questions rather than reading them whole. The flowchart XML is the source of truth when node text in `flow/pages/` looks wrong. `src/flow/anchors.json` is generated from it: after a draw.io change, run `npm run anchors` (add `--check` to see whether it is up to date) rather than editing the JSON. The script matches draw.io boxes to flow.js nodes by geometry, so a new box needs its flow.js node first.

@@ -51,6 +51,7 @@ If the app itself goes wrong (a step that makes no sense, a card or die handled 
 
 The sources are ES modules under `src/`, bundled by esbuild into the single-file `index.html`. With Node 24 installed, `npm ci` sets the project up, `npm run build` builds the page, and `npm run verify` runs every linter and every Node test; run it before committing.
 
+- [CONTRIBUTING.md](CONTRIBUTING.md): how to report a problem and how to send a change.
 - [docs/development.md](docs/development.md): every npm script, the build, the CI workflow and the conventions.
 - [docs/architecture.md](docs/architecture.md): how the code is organised, layer by layer.
 - [docs/testing.md](docs/testing.md): what each test checks and what the suite cannot see.
