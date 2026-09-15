@@ -39,7 +39,7 @@ const decodeXML = (text) =>
 // The attributes of an XML tag as an object.
 function attributes(tag) {
   const out = {};
-  for (const [, name, value] of tag.matchAll(/([\w:-]+)="([^"]*)"/g))
+  for (const [, name, value] of tag.matchAll(/(?<![\w:-])([\w:-]+)="([^"]*)"/g))
     out[name] = decodeXML(value);
   return out;
 }
@@ -47,7 +47,7 @@ function attributes(tag) {
 const plainText = (html) =>
   decodeXML(html)
     .replace(/<br\s*\/?>/gi, " ")
-    .replace(/<[^>]+>/g, "")
+    .replace(/<[^<>]+>/g, "")
     .replace(/\s+/g, " ")
     .trim();
 // The style string as {key: value}.
@@ -61,7 +61,29 @@ const styleOf = (style) =>
         return at < 0 ? [part, true] : [part.slice(0, at), part.slice(at + 1)];
       }),
   );
-// The pages of the file: [{name, cells: [{attrs, geometry, points}]}] in document order.
+// One mxCell as {attrs, geometry, points, ends}: its attributes, its geometry tag's attributes, its waypoints and its
+// free arrow ends (an arrow end that is not attached to a box is a point).
+function parseCell(cellTag, inner = "") {
+  const attrs = attributes(cellTag);
+  const geometryTag = /<mxGeometry\b[^>]*>/.exec(inner);
+  const geometry = geometryTag ? attributes(geometryTag[0]) : {};
+  const points = [];
+  const pointList = /<Array as="points">([\s\S]*?)<\/Array>/.exec(inner);
+  if (pointList)
+    for (const [, point] of pointList[1].matchAll(/<mxPoint\b([^>]*)\/>/g)) {
+      const at = attributes(point);
+      points.push([Number(at.x || 0), Number(at.y || 0)]);
+    }
+  const ends = {};
+  for (const [, point] of inner.matchAll(
+    /<mxPoint\b([^>]*as="(?:source|target)Point"[^>]*)\/>/g,
+  )) {
+    const at = attributes(point);
+    ends[at.as] = [Number(at.x || 0), Number(at.y || 0)];
+  }
+  return { attrs, geometry, points, ends };
+}
+// The pages of the file: [{name, cells: [{attrs, geometry, points, ends}]}] in document order.
 function parseDiagrams(xml) {
   const pages = [];
   for (const [, tag, body] of xml.matchAll(
@@ -70,31 +92,8 @@ function parseDiagrams(xml) {
     const cells = [];
     for (const [, cellTag, inner] of body.matchAll(
       /<mxCell\b([^>]*?)(?:\/>|>([\s\S]*?)<\/mxCell>)/g,
-    )) {
-      const attrs = attributes(cellTag);
-      const geometryTag = /<mxGeometry\b[^>]*>/.exec(inner || "");
-      const geometry = geometryTag ? attributes(geometryTag[0]) : {};
-      const points = [];
-      const pointList = /<Array as="points">([\s\S]*?)<\/Array>/.exec(
-        inner || "",
-      );
-      if (pointList)
-        for (const [, point] of pointList[1].matchAll(
-          /<mxPoint\b([^>]*)\/>/g,
-        )) {
-          const at = attributes(point);
-          points.push([Number(at.x || 0), Number(at.y || 0)]);
-        }
-      // an arrow end that is not attached to a box is a free point
-      const ends = {};
-      for (const [, point] of (inner || "").matchAll(
-        /<mxPoint\b([^>]*as="(?:source|target)Point"[^>]*)\/>/g,
-      )) {
-        const at = attributes(point);
-        ends[at.as] = [Number(at.x || 0), Number(at.y || 0)];
-      }
-      cells.push({ attrs, geometry, points, ends });
-    }
+    ))
+      cells.push(parseCell(cellTag, inner));
     pages.push({ name: attributes(tag).name, cells });
   }
   return pages;
@@ -182,6 +181,35 @@ const fraction = (style, x, y) =>
   style[x] !== undefined && style[y] !== undefined
     ? [Number(style[x]), Number(style[y])]
     : null;
+// The ends of an arrow as flow.js node ids and anchor fractions: {from, to, ex, en}. An end attached to a box is
+// looked up by the box's cell id; a free end is resolved by the point it sits on.
+function arrowEnds(cell, nodeIds, boxes) {
+  const style = styleOf(cell.attrs.style);
+  let ex = fraction(style, "exitX", "exitY"),
+    en = fraction(style, "entryX", "entryY");
+  let from = nodeIds.get(cell.attrs.source),
+    to = nodeIds.get(cell.attrs.target);
+  if (!cell.attrs.source && cell.ends.sourcePoint) {
+    const end = freeEnd(boxes, cell.ends.sourcePoint, ex);
+    if (end) ({ id: from, fraction: ex } = end);
+  }
+  if (!cell.attrs.target && cell.ends.targetPoint) {
+    const end = freeEnd(boxes, cell.ends.targetPoint, en);
+    if (end) ({ id: to, fraction: en } = end);
+  }
+  return { from, to, ex, en };
+}
+// The arrow's label and whether it is drawn: {label, nolabel}. When flow.js labels the arrow but the diagram does not,
+// the label is not drawn (an arrow with an empty value attribute is a label that was cleared, and is drawn).
+function arrowLabel(cell, candidates) {
+  const drawn = plainText(cell.attrs.value || "") || null;
+  if (drawn || candidates.length !== 1 || !EDGE.label(candidates[0]))
+    return { label: drawn, nolabel: false };
+  return {
+    label: EDGE.label(candidates[0]),
+    nolabel: !("value" in cell.attrs),
+  };
+}
 // One record per arrow on a page, in document order.
 function pageRecords(page, pageKey) {
   const { nodeIds, boxes } = pageBoxes(page, pageKey);
@@ -190,36 +218,17 @@ function pageRecords(page, pageKey) {
   for (const cell of page.cells) {
     if (cell.attrs.edge !== "1") continue;
     const style = styleOf(cell.attrs.style);
-    let ex = fraction(style, "exitX", "exitY"),
-      en = fraction(style, "entryX", "entryY");
-    let from = nodeIds.get(cell.attrs.source),
-      to = nodeIds.get(cell.attrs.target);
-    if (!cell.attrs.source && cell.ends.sourcePoint) {
-      const end = freeEnd(boxes, cell.ends.sourcePoint, ex);
-      if (end) ({ id: from, fraction: ex } = end);
-    }
-    if (!cell.attrs.target && cell.ends.targetPoint) {
-      const end = freeEnd(boxes, cell.ends.targetPoint, en);
-      if (end) ({ id: to, fraction: en } = end);
-    }
+    const { from, to, ex, en } = arrowEnds(cell, nodeIds, boxes);
     if (!from || !to) {
       console.warn(
         `${pageKey}: arrow ${cell.attrs.id} joins boxes flow.js does not have (${cell.attrs.source || JSON.stringify(cell.ends.sourcePoint)} -> ${cell.attrs.target || JSON.stringify(cell.ends.targetPoint)})`,
       );
       continue;
     }
-    const drawn = plainText(cell.attrs.value || "") || null;
     const candidates = flowEdges.filter(
       (edge) => EDGE.from(edge) === from && EDGE.to(edge) === to,
     );
-    let label = drawn,
-      nolabel = false;
-    if (!drawn && candidates.length === 1 && EDGE.label(candidates[0])) {
-      // flow.js labels the arrow but the diagram does not: the label is not drawn (an arrow with an empty value
-      // attribute is a label that was cleared, and is drawn)
-      label = EDGE.label(candidates[0]);
-      nolabel = !("value" in cell.attrs);
-    }
+    const { label, nolabel } = arrowLabel(cell, candidates);
     if (!candidates.some((edge) => (EDGE.label(edge) || null) === label))
       console.warn(
         `${pageKey}: no flow.js edge ${from} -> ${to} labelled ${JSON.stringify(label)}`,
@@ -240,6 +249,31 @@ function pageRecords(page, pageKey) {
   }
   return records;
 }
+// List the records that are new, changed or gone between the tracked file and the regenerated ones.
+function reportDifferences(current, records) {
+  const key = (r) => `${r.p} ${r.f}->${r.t} ${r.l}`;
+  const have = new Map(current.map((r) => [key(r), r]));
+  for (const r of records) {
+    const old = have.get(key(r));
+    if (!old) console.log("new:", JSON.stringify(r));
+    else if (JSON.stringify(old) !== JSON.stringify(r))
+      console.log("changed:", JSON.stringify(old), "->", JSON.stringify(r));
+    have.delete(key(r));
+  }
+  for (const r of have.values()) console.log("gone:", JSON.stringify(r));
+}
+// --check: true when the tracked file already holds these records, otherwise list the differences.
+function checkUpToDate(records) {
+  const current = JSON.parse(readFileSync(OUT, "utf8"));
+  const same = JSON.stringify(current) === JSON.stringify(records);
+  console.log(
+    records.length +
+      " records; " +
+      (same ? "anchors.json is up to date" : "anchors.json differs"),
+  );
+  if (!same) reportDifferences(current, records);
+  return same;
+}
 function main() {
   const args = process.argv.slice(2);
   const check = args.includes("--check");
@@ -251,31 +285,11 @@ function main() {
     if (!pageKey) throw new Error("unknown draw.io page: " + page.name);
     records.push(...pageRecords(page, pageKey));
   }
-  const text = JSON.stringify(records) + "\n";
   if (check) {
-    const current = JSON.parse(readFileSync(OUT, "utf8"));
-    const same = JSON.stringify(current) === JSON.stringify(records);
-    console.log(
-      records.length +
-        " records; " +
-        (same ? "anchors.json is up to date" : "anchors.json differs"),
-    );
-    if (!same) {
-      const key = (r) => `${r.p} ${r.f}->${r.t} ${r.l}`;
-      const have = new Map(current.map((r) => [key(r), r]));
-      for (const r of records) {
-        const old = have.get(key(r));
-        if (!old) console.log("new:", JSON.stringify(r));
-        else if (JSON.stringify(old) !== JSON.stringify(r))
-          console.log("changed:", JSON.stringify(old), "->", JSON.stringify(r));
-        have.delete(key(r));
-      }
-      for (const r of have.values()) console.log("gone:", JSON.stringify(r));
-      process.exit(1);
-    }
+    if (!checkUpToDate(records)) process.exit(1);
     return;
   }
-  writeFileSync(OUT, text, "utf8");
+  writeFileSync(OUT, JSON.stringify(records) + "\n", "utf8");
   console.log(
     "wrote " + records.length + " records to " + path.relative(ROOT, OUT),
   );

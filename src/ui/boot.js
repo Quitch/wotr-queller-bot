@@ -12,7 +12,6 @@ import {
   hideTip,
   installGlossaryListeners,
   installTooltip,
-  tipEl,
 } from "./tooltip.js";
 
 // Page load: restore the debug log and the autosave, install the page-wide listeners, render (or fall back to the New game screen).
@@ -69,8 +68,7 @@ function quarantineBrokenAutosave(raw, error, { action, note, state }) {
 function installEscapeKey() {
   document.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
-    if (tipEl && !tipEl.hidden) {
-      hideTip();
+    if (hideTip()) {
       event.stopPropagation();
       return;
     }

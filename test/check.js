@@ -84,31 +84,39 @@ function checkFlowchartShape() {
         fail(pageKey + "." + nodeId + " (" + kind + ") has no arrow out");
     }
 }
+// The card's pre/cpre keys resolve (the engine throws on an unknown key).
+function checkCardPreconditions(state, card) {
+  if (card.pre) {
+    try {
+      engine.precondition(state, card.id);
+    } catch (error) {
+      fail(card.id + ' pre "' + card.pre + '": ' + error.message);
+    }
+  }
+  if (card.cpre) {
+    try {
+      engine.combatPrecondition({ ...state, battle: { figures: {} } }, card);
+    } catch (error) {
+      fail(card.id + ' cpre "' + card.cpre + '": ' + error.message);
+    }
+  }
+}
+// The card's deck, effect and onTable flags are consistent with each other and with the condition text.
+function checkCardEffectFlags(card) {
+  if (card.deck === engine.DECK.CALL_TO_BATTLE && !card.faction)
+    fail(card.id + " Call to Battle card without a faction");
+  if (card.effect && !Object.keys(engine.CARD_EFFECTS).includes(card.effect))
+    fail(card.id + " unknown effect " + card.effect);
+  if (card.effect === engine.CARD_EFFECT.RECRUIT_FACTION && !card.faction)
+    fail(card.id + " recruitFaction without a faction");
+  if (!!card.onTable !== /play on the table/i.test(card.cond || ""))
+    fail(card.id + " onTable flag disagrees with its condition text");
+}
 // Every card flag key exists; every card the engine expects has its data; onTable agrees with the condition text (a transcription guard).
 function checkCardFlags(state) {
   for (const card of fakeWindow.QB_CARDS) {
-    if (card.pre) {
-      try {
-        engine.precondition(state, card.id);
-      } catch (error) {
-        fail(card.id + ' pre "' + card.pre + '": ' + error.message);
-      }
-    }
-    if (card.cpre) {
-      try {
-        engine.combatPrecondition({ ...state, battle: { figures: {} } }, card);
-      } catch (error) {
-        fail(card.id + ' cpre "' + card.cpre + '": ' + error.message);
-      }
-    }
-    if (card.deck === engine.DECK.CALL_TO_BATTLE && !card.faction)
-      fail(card.id + " Call to Battle card without a faction");
-    if (card.effect && !Object.keys(engine.CARD_EFFECTS).includes(card.effect))
-      fail(card.id + " unknown effect " + card.effect);
-    if (card.effect === engine.CARD_EFFECT.RECRUIT_FACTION && !card.faction)
-      fail(card.id + " recruitFaction without a faction");
-    if (!!card.onTable !== /play on the table/i.test(card.cond || ""))
-      fail(card.id + " onTable flag disagrees with its condition text");
+    checkCardPreconditions(state, card);
+    checkCardEffectFlags(card);
   }
 }
 function main() {

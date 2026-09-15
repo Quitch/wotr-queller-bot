@@ -23,7 +23,7 @@ node test/check.js      # static: every "PAGE.node" key under src/walk/ exists (
 node test/verify.js     # scripted scenarios (driveWalk() answers prompts by regex until the walk finishes)
 node test/debuglog.js   # debug log module
 node test/fuzz.js 7     # 400 random games with seed 7 across all 16 setting combinations; any seed works
-node test/fuzz.js 7 --digest  # also prints a sha1 of every final state: a refactor that preserves behaviour leaves it unchanged
+node test/fuzz.js 7 --digest  # also prints a sha256 of every final state: a refactor that preserves behaviour leaves it unchanged
 node test/smoke.js      # Playwright browser run of the built index.html (build first; needs `npx playwright install chromium`)
 node test/shot.js       # Playwright screenshots to test/shot-*.png (build first)
 ```

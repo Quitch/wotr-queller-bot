@@ -55,12 +55,12 @@ export const DIE_REQUIREMENT = {
   FACTION_PLAY: "FPlay",
   FACTION_DRAW: "FDraw",
 };
-const FACTION_REQUIREMENTS = [
+const FACTION_REQUIREMENTS = new Set([
   DIE_REQUIREMENT.FACTION_RECRUIT,
   DIE_REQUIREMENT.FACTION_PLAY,
   DIE_REQUIREMENT.FACTION_DRAW,
-];
-export const isFactionRequirement = (req) => FACTION_REQUIREMENTS.includes(req);
+]);
+export const isFactionRequirement = (req) => FACTION_REQUIREMENTS.has(req);
 // Free Peoples nations on the Political Track.
 export const FP_STANCE = { PASSIVE: "passive", ACTIVE: "active", WAR: "war" };
 export const FP_STANCE_RANK = {
