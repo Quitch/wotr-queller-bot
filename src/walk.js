@@ -1440,6 +1440,8 @@
   }
 
   // ----- actions -----
+  // Returned by an action or step handler that leaves the box to the generic handling (the End box, or a plain prompt).
+  const FALL_THROUGH = Symbol("not handled");
   // Draw steps and actions on the Event/Faction pages: the deck depends on the box; with cards off the player draws.
   // The deck a draw node draws from: Character or Faction Event where the node says so, otherwise the strategy's preferred deck.
   function drawDeck(state, key) {
@@ -1449,8 +1451,9 @@
       ? DECK.CHARACTER
       : DECK.STRATEGY;
   }
-  function drawStep(state, node, key) {
+  function drawStep(state, node) {
     const walk = state.walk,
+      key = walk.page + "." + walk.node,
       label = normalizeText(NODE.text(node)),
       isStep = NODE.kind(node) === NODE_KIND.STEP;
     if (!state.settings.cards)
@@ -1489,280 +1492,276 @@
       auto: true,
     });
   }
-  function handleAction(state, node) {
-    const walk = state.walk,
-      key = walk.page + "." + walk.node,
-      label = normalizeText(NODE.text(node)),
-      nodeExtra = NODE.extra(node),
-      cards = state.settings.cards,
-      dice = state.settings.dice;
-    if (nodeExtra.die && !(walk.die === nodeExtra.die && walk.dieObj != null)) {
-      const dieResult = ensureDie(state, nodeExtra.die, label);
-      if (dieResult === PENDING) return;
-      if (!dieResult) {
-        exitAction(state);
-        return;
-      }
-      walk.die = nodeExtra.die;
+  // The die an action box names: hold it (or the die already held for it) before acting. Returns true to go on, false when
+  // the box was skipped for want of the die, or PENDING while a die question is open.
+  function claimActionDie(state, walk, node, label) {
+    const die = NODE.extra(node).die;
+    if (!die || (walk.die === die && walk.dieObj != null)) return true;
+    const dieResult = ensureDie(state, die, label);
+    if (dieResult === PENDING) return PENDING;
+    if (!dieResult) {
+      exitAction(state);
+      return false;
     }
-    switch (key) {
-      case "C14.sogCorr":
-      case "M14.sogCorr":
-        state.strategy = STRATEGY.CORRUPTION;
-        engine.log(state, "Queller uses the corruption strategy.");
-        endWalk(
-          state,
-          WALK_RESULT.STRATEGY,
-          "Queller uses the corruption strategy.",
-        );
-        return;
-      case "C14.sogMil":
-      case "M14.sogMil":
-        state.strategy = STRATEGY.MILITARY;
-        engine.log(state, "Queller uses the military strategy.");
-        endWalk(
-          state,
-          WALK_RESULT.STRATEGY,
-          "Queller uses the military strategy.",
-        );
-        return;
-      case "C5.discardDie":
-      case "M5.discardDie":
-        if (dice) {
-          const available = engine.availableDice(state);
-          if (!available.length) {
-            trail(state, {
-              kind: TRAIL.SKIP,
-              text: label,
-              why: "no die left to discard",
-            });
-            exitAction(state);
-            return;
-          }
-          const die = engine.pick(available);
-          die.st = engine.DIE_STATE.USED;
-          engine.log(
-            state,
-            "Discarded an unplayable " + die.face + " die at random (rule 32).",
-          );
-          endWalk(
-            state,
-            WALK_RESULT.ACTION,
-            "Queller sets aside a " +
-              die.face +
-              " die it could not use (rule 32).",
-          );
-          return;
-        }
-        return setPrompt(state, {
-          type: PROMPT.ACTION,
-          text: "Discard unplayable die: set aside one Queller die that could not be used, chosen at random (rule 32).",
-          node: walk.node,
-        });
-      case "C5.minionDie":
-      case "M5.minionDie": {
-        const reserved = dice
-          ? state.dice.pool.find((die) => die.st === engine.DIE_STATE.RESERVED)
-          : null;
-        if (dice ? !reserved : !state.minionReserved) {
-          trail(state, {
-            kind: TRAIL.SKIP,
-            text: label,
-            why: "no Muster die set aside",
-          });
-          endWalk(
-            state,
-            WALK_RESULT.NO_ACTION,
-            "Queller has no action — it has no die it can use.",
-          );
-          return;
-        }
-        let reservedIndex = null;
-        if (dice) {
-          reserved.st = engine.DIE_STATE.AVAIL;
-          reservedIndex = state.dice.pool.indexOf(reserved);
-          state.minionReserved = state.dice.pool.some(
-            (die) => die.st === engine.DIE_STATE.RESERVED,
-          );
-        } else state.minionReserved = false;
-        walk.fromReserve = true;
-        walk.reserveDieObj = reservedIndex;
-        trail(state, {
-          kind: TRAIL.JUMP,
-          text: "Muster 2 (die set aside for the minion)",
-        });
-        walk.stack.push({
-          page: walk.page,
-          node: walk.node,
-          die: null,
-          dieObj: null,
-          dieUsed: false,
-        });
-        walk.die = DIE_REQUIREMENT.MUSTER;
-        walk.dieObj = reservedIndex;
-        goto(state, "MU", findStart("MU", "Muster 2"));
-        follow(state, null);
-        return;
-      }
-      case "C5.pass":
-      case "M5.pass":
-        return setPrompt(state, {
-          type: PROMPT.ACTION,
-          text: "Pass",
-          node: walk.node,
-          pass: true,
-          help: "Only if the game rules permit a pass (Rulings). If Queller cannot pass, follow the arrow out.",
-        });
-      case "EV.drawPref":
-      case "EV.drawChar":
-      case "EV.drawFac":
-        return drawStep(state, node, key);
-      case "EV.discard":
-      case "FA.discard": {
-        if (cards && walk.discards) {
-          if (walk.die) spendCurrentDie(state, "drew a card");
-          endWalk(
-            state,
-            WALK_RESULT.ACTION,
-            "Discarded down to the hand limit.",
-          );
-          return;
-        }
-        return setPrompt(state, {
-          type: PROMPT.ACTION,
-          text: "Discard the card chosen by the priority list.",
-          node: walk.node,
-        });
-      }
-      case "EV.playA":
-      case "EV.playB":
-      case "EV.playC":
-      case "EV.playD":
-      case "FA.playA":
-      case "MU.musterCardA":
-      case "M5.playCharDie":
-      case "M5.playEventDie": {
-        if (cards && !walk.chosen && walk.cands?.length) {
-          const picked = engine.applyPriority(state, walk.cands, [
-            "Ascending order of initiative",
-          ]);
-          walk.chosen = picked.chosen;
-          walk.steps = picked.steps;
-        }
-        if (cards && walk.chosen) {
-          return setPrompt(state, {
-            type: PROMPT.PLAY_CARD,
-            card: walk.chosen,
-            text: label,
-            node: walk.node,
-          });
-        }
-        return setPrompt(state, {
-          type: PROMPT.ACTION,
-          text: label,
-          node: walk.node,
-        });
-      }
-      case "MU.musterE":
-      case "MU.musterEnd": {
-        if (cards && walk.chosen) {
-          return setPrompt(state, {
-            type: PROMPT.PLAY_CARD,
-            card: walk.chosen,
-            text: "Muster with the card",
-            node: walk.node,
-          });
-        }
-        break;
-      }
-      case "MU.polTrack": {
-        if (!walk.nationChoice || walk.nationChoice === "Faction") {
-          trail(state, {
-            kind: TRAIL.SKIP,
-            text: label,
-            why: "no nation to advance",
-          });
-          exitAction(state);
-          return;
-        }
-        const nationKey = SHADOW_NATION_KEY[walk.nationChoice];
-        if (!state.settings.tracker)
-          return setPrompt(state, {
-            type: PROMPT.ACTION,
-            text:
-              "Move " + walk.nationChoice + " down one on the Political Track.",
-            node: walk.node,
-          });
-        const now = state.board.nations[nationKey] ?? 0,
-          next = Math.max(0, now - 1);
-        return setPrompt(state, {
-          type: PROMPT.ACTION,
-          text:
-            "Move " +
-            walk.nationChoice +
-            " down one on the Political Track (" +
-            engine.politicalTrackLabel(now) +
-            " → " +
-            engine.politicalTrackLabel(next) +
-            ").",
-          node: walk.node,
-          nation: nationKey,
-        });
-      }
-      case "MU.musterMinion":
-        if (!walk.minionPick) {
-          trail(state, {
-            kind: TRAIL.SKIP,
-            text: label,
-            why: "no minion can be mustered",
-          });
-          exitAction(state);
-          return;
-        }
-        return setPrompt(state, {
-          type: PROMPT.ACTION,
-          text: "Muster " + walk.minionPick + ".",
-          node: walk.node,
-          minion: {
-            Saruman: "saruman",
-            "Witch King": "witchKing",
-            "Mouth of Sauron": "mouth",
-          }[walk.minionPick],
-        });
-      case "FA.bringIn":
-        if (walk.factionChoice)
-          return setPrompt(state, {
-            type: PROMPT.ACTION,
-            text: "Bring the " + walk.factionChoice + " into play.",
-            node: walk.node,
-            faction: walk.factionChoice.toLowerCase(),
-          });
-        if (cards || state.settings.tracker) {
-          trail(state, {
-            kind: TRAIL.SKIP,
-            text: label,
-            why: "no faction to bring in",
-          });
-          exitAction(state);
-          return;
-        }
-        break;
-    }
-    if (/^End( action)?$/.test(label)) {
-      endWalk(
-        state,
-        walk.die ? WALK_RESULT.ACTION : WALK_RESULT.END,
-        "End of " + (walk.die ? "action" : "walk") + ".",
-      );
-      if (walk.die) spendCurrentDie(state, "end of action");
-      return;
-    }
+    walk.die = die;
+    return true;
+  }
+  const actionFacts = (state, label) => ({
+    walk: state.walk,
+    label,
+    cardsOn: state.settings.cards,
+    diceOn: state.settings.dice,
+    trackerOn: state.settings.tracker,
+  });
+  // Record a box the walk skips over and follow its arrow out.
+  function skipAction(state, label, why) {
+    trail(state, { kind: TRAIL.SKIP, text: label, why });
+    exitAction(state);
+  }
+  function promptAction(state, node, text, extra) {
     setPrompt(state, {
       type: PROMPT.ACTION,
-      text: label,
-      node: walk.node,
-      help: nodeExtra.help,
+      text,
+      node: state.walk.node,
+      ...extra,
     });
+  }
+  // "Start of game": adopt the strategy the roll (or the player) chose.
+  const adoptStrategy = (strategy) =>
+    function adopt(state) {
+      state.strategy = strategy;
+      const message = "Queller uses the " + strategy + " strategy.";
+      engine.log(state, message);
+      endWalk(state, WALK_RESULT.STRATEGY, message);
+    };
+  // "Discard unplayable die" (rule 32): set aside one available die at random.
+  function discardUnusableDie(state, node, { diceOn, label }) {
+    if (!diceOn)
+      return promptAction(
+        state,
+        node,
+        "Discard unplayable die: set aside one Queller die that could not be used, chosen at random (rule 32).",
+      );
+    const available = engine.availableDice(state);
+    if (!available.length)
+      return skipAction(state, label, "no die left to discard");
+    const die = engine.pick(available);
+    die.st = engine.DIE_STATE.USED;
+    engine.log(
+      state,
+      "Discarded an unplayable " + die.face + " die at random (rule 32).",
+    );
+    endWalk(
+      state,
+      WALK_RESULT.ACTION,
+      "Queller sets aside a " + die.face + " die it could not use (rule 32).",
+    );
+  }
+  // Re-enter Muster 2 holding the Muster die that was set aside for a minion (Rulings: it must be used now).
+  function enterMuster2WithReservedDie(state, walk, reservedIndex) {
+    walk.fromReserve = true;
+    walk.reserveDieObj = reservedIndex;
+    trail(state, {
+      kind: TRAIL.JUMP,
+      text: "Muster 2 (die set aside for the minion)",
+    });
+    walk.stack.push({
+      page: walk.page,
+      node: walk.node,
+      die: null,
+      dieObj: null,
+      dieUsed: false,
+    });
+    walk.die = DIE_REQUIREMENT.MUSTER;
+    walk.dieObj = reservedIndex;
+    goto(state, "MU", findStart("MU", "Muster 2"));
+    follow(state, null);
+  }
+  // "Use Muster die set aside for minion": bring the reserved die back and walk Muster 2 with it.
+  function useReservedMinionDie(state, node, { walk, diceOn, label }) {
+    const reserved = diceOn
+      ? state.dice.pool.find((die) => die.st === engine.DIE_STATE.RESERVED)
+      : null;
+    if (diceOn ? !reserved : !state.minionReserved) {
+      trail(state, {
+        kind: TRAIL.SKIP,
+        text: label,
+        why: "no Muster die set aside",
+      });
+      endWalk(
+        state,
+        WALK_RESULT.NO_ACTION,
+        "Queller has no action — it has no die it can use.",
+      );
+      return;
+    }
+    let reservedIndex = null;
+    if (diceOn) {
+      reserved.st = engine.DIE_STATE.AVAIL;
+      reservedIndex = state.dice.pool.indexOf(reserved);
+      state.minionReserved = state.dice.pool.some(
+        (die) => die.st === engine.DIE_STATE.RESERVED,
+      );
+    } else state.minionReserved = false;
+    enterMuster2WithReservedDie(state, walk, reservedIndex);
+  }
+  function promptPass(state, node) {
+    promptAction(state, node, "Pass", {
+      pass: true,
+      help: "Only if the game rules permit a pass (Rulings). If Queller cannot pass, follow the arrow out.",
+    });
+  }
+  // "Discard": the priority list already discarded with cards on; the die (if any) was spent on the draw.
+  function finishDiscardToLimit(state, node, { walk, cardsOn }) {
+    if (cardsOn && walk.discards) {
+      if (walk.die) spendCurrentDie(state, "drew a card");
+      endWalk(state, WALK_RESULT.ACTION, "Discarded down to the hand limit.");
+      return;
+    }
+    promptAction(state, node, "Discard the card chosen by the priority list.");
+  }
+  // The candidates a decision left behind, narrowed to one card by initiative when no priority list has chosen yet.
+  function chooseByInitiative(state, walk) {
+    if (walk.chosen || !walk.cands?.length) return;
+    const picked = engine.applyPriority(state, walk.cands, [
+      "Ascending order of initiative",
+    ]);
+    walk.chosen = picked.chosen;
+    walk.steps = picked.steps;
+  }
+  function promptPlayCard(state, node, card, text, extra) {
+    setPrompt(state, {
+      type: PROMPT.PLAY_CARD,
+      card,
+      text,
+      node: state.walk.node,
+      ...extra,
+    });
+  }
+  // "Play card": with cards on, the chosen card is shown; otherwise the player plays from Queller's hand.
+  function playChosenCard(state, node, { walk, cardsOn, label }) {
+    if (cardsOn) chooseByInitiative(state, walk);
+    if (cardsOn && walk.chosen)
+      return promptPlayCard(state, node, walk.chosen, label);
+    promptAction(state, node, label);
+  }
+  function musterWithCard(state, node, { walk, cardsOn }) {
+    if (cardsOn && walk.chosen)
+      return promptPlayCard(state, node, walk.chosen, "Muster with the card");
+    return FALL_THROUGH;
+  }
+  // "Move nation down the Political Track": the nation the priority list chose, with the tracker's before/after.
+  function politicalTrackPreview(state, nationKey) {
+    const now = state.board.nations[nationKey] ?? 0,
+      next = Math.max(0, now - 1);
+    return (
+      " (" +
+      engine.politicalTrackLabel(now) +
+      " → " +
+      engine.politicalTrackLabel(next) +
+      ")"
+    );
+  }
+  function advancePoliticalTrack(state, node, { walk, trackerOn, label }) {
+    if (!walk.nationChoice || walk.nationChoice === "Faction")
+      return skipAction(state, label, "no nation to advance");
+    const nationKey = SHADOW_NATION_KEY[walk.nationChoice];
+    if (!trackerOn)
+      return promptAction(
+        state,
+        node,
+        "Move " + walk.nationChoice + " down one on the Political Track.",
+      );
+    promptAction(
+      state,
+      node,
+      "Move " +
+        walk.nationChoice +
+        " down one on the Political Track" +
+        politicalTrackPreview(state, nationKey) +
+        ".",
+      { nation: nationKey },
+    );
+  }
+  // The tracker field of each minion the Muster page can muster.
+  const MINION_KEY = {
+    Saruman: "saruman",
+    "Witch King": "witchKing",
+    "Mouth of Sauron": "mouth",
+  };
+  function musterMinion(state, node, { walk, label }) {
+    if (!walk.minionPick)
+      return skipAction(state, label, "no minion can be mustered");
+    promptAction(state, node, "Muster " + walk.minionPick + ".", {
+      minion: MINION_KEY[walk.minionPick],
+    });
+  }
+  function bringFactionIn(state, node, { walk, cardsOn, trackerOn, label }) {
+    if (walk.factionChoice)
+      return promptAction(
+        state,
+        node,
+        "Bring the " + walk.factionChoice + " into play.",
+        { faction: walk.factionChoice.toLowerCase() },
+      );
+    if (cardsOn || trackerOn)
+      return skipAction(state, label, "no faction to bring in");
+    return FALL_THROUGH;
+  }
+  // The action boxes with their own handling, keyed by page and node id. A handler is (state, node, facts); it returns
+  // FALL_THROUGH to leave the box to the generic handling.
+  const ACTION_HANDLERS = {
+    "C14.sogCorr": adoptStrategy(STRATEGY.CORRUPTION),
+    "M14.sogCorr": adoptStrategy(STRATEGY.CORRUPTION),
+    "C14.sogMil": adoptStrategy(STRATEGY.MILITARY),
+    "M14.sogMil": adoptStrategy(STRATEGY.MILITARY),
+    "C5.discardDie": discardUnusableDie,
+    "M5.discardDie": discardUnusableDie,
+    "C5.minionDie": useReservedMinionDie,
+    "M5.minionDie": useReservedMinionDie,
+    "C5.pass": promptPass,
+    "M5.pass": promptPass,
+    "EV.drawPref": drawStep,
+    "EV.drawChar": drawStep,
+    "EV.drawFac": drawStep,
+    "EV.discard": finishDiscardToLimit,
+    "FA.discard": finishDiscardToLimit,
+    "EV.playA": playChosenCard,
+    "EV.playB": playChosenCard,
+    "EV.playC": playChosenCard,
+    "EV.playD": playChosenCard,
+    "FA.playA": playChosenCard,
+    "MU.musterCardA": playChosenCard,
+    "M5.playCharDie": playChosenCard,
+    "M5.playEventDie": playChosenCard,
+    "MU.musterE": musterWithCard,
+    "MU.musterEnd": musterWithCard,
+    "MU.polTrack": advancePoliticalTrack,
+    "MU.musterMinion": musterMinion,
+    "FA.bringIn": bringFactionIn,
+  };
+  const isEndBox = (label) => /^End( action)?$/.test(label);
+  // An End box: the walk is over; a die held for the action is spent.
+  function endAction(state, walk) {
+    endWalk(
+      state,
+      walk.die ? WALK_RESULT.ACTION : WALK_RESULT.END,
+      "End of " + (walk.die ? "action" : "walk") + ".",
+    );
+    if (walk.die) spendCurrentDie(state, "end of action");
+  }
+  function handleAction(state, node) {
+    const walk = state.walk,
+      label = normalizeText(NODE.text(node));
+    const claimed = claimActionDie(state, walk, node, label);
+    if (claimed !== true) return claimed;
+    const handler = ACTION_HANDLERS[walk.page + "." + walk.node];
+    if (handler) {
+      const result = handler(state, node, actionFacts(state, label));
+      if (result !== FALL_THROUGH) return result;
+    }
+    if (isEndBox(label)) return endAction(state, walk);
+    promptAction(state, node, label, { help: NODE.extra(node).help });
   }
   function spendCurrentDie(state, why) {
     const walk = state.walk;
@@ -1781,8 +1780,8 @@
     walk.die = null;
     walk.dieObj = null;
   }
+  // Rule 29: an action Queller cannot take is skipped — follow the arrow out of the box, or return to the page that sent us here.
   function exitAction(state) {
-    // rule 29
     if (follow(state, null)) return;
     doReturn(state);
   }
@@ -1793,219 +1792,202 @@
     trail(state, { kind: TRAIL.STEP, text: label, auto: true, why });
     follow(state, null);
   }
-  function handleStep(state, node) {
-    const walk = state.walk,
-      key = walk.page + "." + walk.node,
-      label = normalizeText(NODE.text(node)),
-      nodeExtra = NODE.extra(node),
-      dice = state.settings.dice,
-      cards = state.settings.cards;
-    const continueWith = (why) => continueStep(state, label, why);
-    switch (key) {
-      case "C14.rec":
-      case "M14.rec":
-        if (dice) {
-          engine.recoverDice(state);
-          return continueWith("pool: " + state.dice.pool.length + " dice");
-        }
-        return setPrompt(state, {
-          type: PROMPT.STEP,
-          text:
-            "Recover Queller’s action dice" +
-            (state.settings.wome
-              ? " (and the Faction die if a Shadow faction is in play)"
-              : "") +
-            ".",
-          node: walk.node,
-        });
-      case "C14.draw":
-      case "M14.draw":
-        if (cards) {
-          engine.drawCard(state, DECK.CHARACTER);
-          engine.drawCard(state, DECK.STRATEGY);
-          if (state.settings.wome) engine.drawCard(state, DECK.FACTION);
-          return continueWith(
-            "hand: " +
-              engine.handCounts(state).total +
-              (state.settings.wome
-                ? " + " + engine.handCounts(state).faction + " faction"
-                : ""),
-          );
-        }
-        return setPrompt(state, {
-          type: PROMPT.STEP,
-          text:
-            "Draw one Character and one Strategy Event card for Queller" +
-            (state.settings.wome ? ", and one Faction Event card" : "") +
-            ".",
-          node: walk.node,
-        });
-      case "C14.disc14":
-      case "C14.disc18":
-      case "M14.disc":
-        if (cards) {
-          const discarded = engine.autoDiscard(
-            state,
-            nodeExtra.items,
-            HAND.EVENT,
-          );
-          return continueWith(
-            "discarded " +
-              discarded.map((i) => "“" + cardById[i].title + "”").join(", "),
-          );
-        }
-        return setPrompt(state, {
-          type: PROMPT.STEP,
-          text: label,
-          items: nodeExtra.items,
-          node: walk.node,
-        });
-      case "C14.discF":
-      case "M14.discF":
-        if (cards) {
-          const discarded = engine.autoDiscard(
-            state,
-            nodeExtra.items,
-            HAND.FACTION,
-          );
-          return continueWith(
-            "discarded " +
-              discarded.map((i) => "“" + cardById[i].title + "”").join(", "),
-          );
-        }
-        return setPrompt(state, {
-          type: PROMPT.STEP,
-          text: label,
-          items: nodeExtra.items,
-          node: walk.node,
-        });
-      case "C14.rollHunt":
-        if (dice) {
-          const roll = engine.randomBelow(6) + 1;
-          const placed = isLowRoll(roll) ? 0 : 1;
-          engine.log(
-            state,
-            "Rolled " +
-              roll +
-              " for the hunt allocation → " +
-              placed +
-              " dice.",
-          );
-          engine.assignHunt(state, placed);
-          return continueWith(
-            "rolled " + roll + " → " + placed + " in the Hunt box",
-          );
-        }
-        return setPrompt(state, {
-          type: PROMPT.STEP,
-          text: label,
-          node: walk.node,
-        });
-      case "C14.huntMax":
-      case "M14.huntMax":
-        if (dice) {
-          const placed = engine.assignHunt(state, engine.huntCap(state));
-          return continueWith(
-            placed +
-              " dice (Companions: " +
-              (state.board.fs.companions ?? 0) +
-              ")",
-          );
-        }
-        return setPrompt(state, {
-          type: PROMPT.STEP,
-          text: label + " (up to the number of Companions, minimum 1).",
-          node: walk.node,
-        });
-      case "C14.hunt1a":
-      case "C14.hunt1b":
-      case "M14.hunt1":
-        if (dice) {
-          engine.assignHunt(state, 1);
-          return continueWith();
-        }
-        break;
-      case "C14.hunt2a":
-      case "C14.hunt2b":
-      case "M14.hunt2":
-        if (dice) {
-          const placed = engine.assignHunt(state, 2);
-          return continueWith(
-            placed < 2
-              ? "capped at " +
-                  placed +
-                  " (rule 34: " +
-                  (state.board.fs.companions ?? 0) +
-                  " Companions)"
-              : undefined,
-          );
-        }
-        break;
-      case "M14.hunt0":
-        if (dice) {
-          engine.log(state, "No dice placed in the Hunt box before rolling.");
-          return continueWith();
-        }
-        break;
-      case "C14.rollRest":
-      case "M14.rollRest":
-        if (dice) {
-          const faces = engine.rollRemaining(state);
-          return continueWith(faces.join(", "));
-        }
-        return setPrompt(state, {
-          type: PROMPT.STEP,
-          text: "Roll Queller’s remaining action dice. Put every Eye in the Hunt box.",
-          node: walk.node,
-        });
-      case "C14.sogRoll":
-      case "M14.sogRoll":
-        if (dice) {
-          const roll = engine.randomBelow(6) + 1;
-          engine.log(state, "Strategy roll: " + roll + ".");
-          trail(state, {
-            kind: TRAIL.STEP,
-            text: "Roll a die",
-            auto: true,
-            why: "rolled " + roll,
-          });
-          follow(
-            state,
-            isLowRoll(roll) ? STRATEGY_ROLL.LOW : STRATEGY_ROLL.HIGH,
-          );
-          return;
-        }
-        return setPrompt(state, {
-          type: PROMPT.ROLL,
-          text: "Roll a die: 1-3 corruption strategy, 4-6 military strategy.",
-          node: walk.node,
-          options: [STRATEGY_ROLL.LOW, STRATEGY_ROLL.HIGH],
-        });
-      case "BA.playCard":
-        if (cards) {
-          if (walk.chosen) {
-            return setPrompt(state, {
-              type: PROMPT.PLAY_CARD,
-              card: walk.chosen,
-              text: "Play combat card",
-              node: walk.node,
-              combat: true,
-            });
-          }
-          return continueWith("no card to play");
-        }
-        break;
-      case "FA.drawT":
-      case "EV.drawPrefT":
-        return drawStep(state, node, key);
-    }
+  // A step for the player to do (items: a list shown under the text; move: a movement step that may be impossible).
+  function promptStep(state, node, text, extra) {
     setPrompt(state, {
       type: PROMPT.STEP,
-      text: label,
-      items: nodeExtra.items,
-      node: walk.node,
+      text,
+      node: state.walk.node,
+      ...extra,
+    });
+  }
+  const stepFacts = (state, label) => ({
+    walk: state.walk,
+    label,
+    cardsOn: state.settings.cards,
+    diceOn: state.settings.dice,
+    wome: state.settings.wome,
+  });
+  function recoverDiceStep(state, node, { diceOn, wome, label }) {
+    if (!diceOn)
+      return promptStep(
+        state,
+        node,
+        "Recover Queller’s action dice" +
+          (wome
+            ? " (and the Faction die if a Shadow faction is in play)"
+            : "") +
+          ".",
+      );
+    engine.recoverDice(state);
+    continueStep(state, label, "pool: " + state.dice.pool.length + " dice");
+  }
+  function drawTurnCardsStep(state, node, { cardsOn, wome, label }) {
+    if (!cardsOn)
+      return promptStep(
+        state,
+        node,
+        "Draw one Character and one Strategy Event card for Queller" +
+          (wome ? ", and one Faction Event card" : "") +
+          ".",
+      );
+    engine.drawCard(state, DECK.CHARACTER);
+    engine.drawCard(state, DECK.STRATEGY);
+    if (wome) engine.drawCard(state, DECK.FACTION);
+    continueStep(
+      state,
+      label,
+      "hand: " +
+        engine.handCounts(state).total +
+        (wome ? " + " + engine.handCounts(state).faction + " faction" : ""),
+    );
+  }
+  // "Discard priority": discard the hand down to its limit by the box's priority list.
+  const discardToLimitStep = (hand) =>
+    function discardStep(state, node, { cardsOn, label }) {
+      const items = NODE.extra(node).items;
+      if (!cardsOn) return promptStep(state, node, label, { items });
+      const discarded = engine.autoDiscard(state, items, hand);
+      continueStep(
+        state,
+        label,
+        "discarded " +
+          discarded.map((id) => "“" + cardById[id].title + "”").join(", "),
+      );
+    };
+  function rollHuntAllocationStep(state, node, { diceOn, label }) {
+    if (!diceOn) return promptStep(state, node, label);
+    const roll = engine.randomBelow(6) + 1;
+    const placed = isLowRoll(roll) ? 0 : 1;
+    engine.log(
+      state,
+      "Rolled " + roll + " for the hunt allocation → " + placed + " dice.",
+    );
+    engine.assignHunt(state, placed);
+    continueStep(
+      state,
+      label,
+      "rolled " + roll + " → " + placed + " in the Hunt box",
+    );
+  }
+  function huntMaxStep(state, node, { diceOn, label }) {
+    if (!diceOn)
+      return promptStep(
+        state,
+        node,
+        label + " (up to the number of Companions, minimum 1).",
+      );
+    const placed = engine.assignHunt(state, engine.huntCap(state));
+    continueStep(
+      state,
+      label,
+      placed + " dice (Companions: " + (state.board.fs.companions ?? 0) + ")",
+    );
+  }
+  // "Assign N dice to the Hunt box": rule 34 may cap the number.
+  const huntFixedStep = (count) =>
+    function huntStep(state, node, { diceOn, label }) {
+      if (!diceOn) return FALL_THROUGH;
+      const placed = engine.assignHunt(state, count);
+      continueStep(
+        state,
+        label,
+        placed < count
+          ? "capped at " +
+              placed +
+              " (rule 34: " +
+              (state.board.fs.companions ?? 0) +
+              " Companions)"
+          : undefined,
+      );
+    };
+  function huntNoneStep(state, node, { diceOn, label }) {
+    if (!diceOn) return FALL_THROUGH;
+    engine.log(state, "No dice placed in the Hunt box before rolling.");
+    continueStep(state, label);
+  }
+  function rollRemainingStep(state, node, { diceOn, label }) {
+    if (!diceOn)
+      return promptStep(
+        state,
+        node,
+        "Roll Queller’s remaining action dice. Put every Eye in the Hunt box.",
+      );
+    const faces = engine.rollRemaining(state);
+    continueStep(state, label, faces.join(", "));
+  }
+  // "Roll a die" at the start of the game: 1-3 corruption, 4-6 military.
+  function strategyRollStep(state, node, { diceOn }) {
+    if (!diceOn)
+      return setPrompt(state, {
+        type: PROMPT.ROLL,
+        text: "Roll a die: 1-3 corruption strategy, 4-6 military strategy.",
+        node: state.walk.node,
+        options: [STRATEGY_ROLL.LOW, STRATEGY_ROLL.HIGH],
+      });
+    const roll = engine.randomBelow(6) + 1;
+    engine.log(state, "Strategy roll: " + roll + ".");
+    trail(state, {
+      kind: TRAIL.STEP,
+      text: "Roll a die",
+      auto: true,
+      why: "rolled " + roll,
+    });
+    follow(state, isLowRoll(roll) ? STRATEGY_ROLL.LOW : STRATEGY_ROLL.HIGH);
+  }
+  function playCombatCardStep(state, node, { walk, cardsOn, label }) {
+    if (!cardsOn) return FALL_THROUGH;
+    if (walk.chosen)
+      return promptPlayCard(state, node, walk.chosen, "Play combat card", {
+        combat: true,
+      });
+    continueStep(state, label, "no card to play");
+  }
+  // The step boxes the app can perform itself, keyed by page and node id. A handler returns FALL_THROUGH to leave the box
+  // to the generic prompt.
+  const STEP_HANDLERS = {
+    "C14.rec": recoverDiceStep,
+    "M14.rec": recoverDiceStep,
+    "C14.draw": drawTurnCardsStep,
+    "M14.draw": drawTurnCardsStep,
+    "C14.disc14": discardToLimitStep(HAND.EVENT),
+    "C14.disc18": discardToLimitStep(HAND.EVENT),
+    "M14.disc": discardToLimitStep(HAND.EVENT),
+    "C14.discF": discardToLimitStep(HAND.FACTION),
+    "M14.discF": discardToLimitStep(HAND.FACTION),
+    "C14.rollHunt": rollHuntAllocationStep,
+    "C14.huntMax": huntMaxStep,
+    "M14.huntMax": huntMaxStep,
+    "C14.hunt1a": huntFixedStep(1),
+    "C14.hunt1b": huntFixedStep(1),
+    "M14.hunt1": huntFixedStep(1),
+    "C14.hunt2a": huntFixedStep(2),
+    "C14.hunt2b": huntFixedStep(2),
+    "M14.hunt2": huntFixedStep(2),
+    "M14.hunt0": huntNoneStep,
+    "C14.rollRest": rollRemainingStep,
+    "M14.rollRest": rollRemainingStep,
+    "C14.sogRoll": strategyRollStep,
+    "M14.sogRoll": strategyRollStep,
+    "BA.playCard": playCombatCardStep,
+    "FA.drawT": drawStep,
+    "EV.drawPrefT": drawStep,
+  };
+  function promptGenericStep(state, node, label) {
+    promptStep(state, node, label, {
+      items: NODE.extra(node).items,
       move: label.startsWith("Move"),
     });
+  }
+  function handleStep(state, node) {
+    const walk = state.walk,
+      label = normalizeText(NODE.text(node));
+    const handler = STEP_HANDLERS[walk.page + "." + walk.node];
+    if (handler) {
+      const result = handler(state, node, stepFacts(state, label));
+      if (result !== FALL_THROUGH) return result;
+    }
+    promptGenericStep(state, node, label);
   }
 
   // ----- priority lists -----
