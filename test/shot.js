@@ -1,65 +1,61 @@
-// Screenshots of the main states for a visual check.
-const { chromium } = require("playwright");
-const fs = require("node:fs"),
-  path = require("node:path"),
-  http = require("node:http");
-(async () => {
-  const html =
-    '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"></head><body>' +
-    fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8") +
-    "</body></html>";
-  const server = http.createServer((request, response) => {
-    response.setHeader("content-type", "text/html; charset=utf-8");
-    response.end(html);
-  });
-  await new Promise((resolve) => server.listen(0, resolve));
-  const url = "http://127.0.0.1:" + server.address().port + "/";
-  const browser = await chromium.launch();
-  const page = await browser.newPage({
-    viewport: { width: 1280, height: 900 },
-  });
-  await page.route("https://fonts.googleapis.com/**", (route) =>
-    route.fulfill({ status: 200, body: "", contentType: "text/css" }),
-  );
-  await page.goto(url);
-  for (const option of ["dice", "cards", "tracker", "wome"])
-    await page.check("#opt-" + option);
-  await page.click("#start");
+// Screenshots of the main states for a visual check (test/shot-*.png).
+const path = require("node:path");
+const {
+  VIEWPORT,
+  SEL,
+  brokenAutosave,
+  launchBuiltPage,
+  startGameWithEverythingOn,
+} = require("./browser.js");
+const SHOT_PREFIX = "shot-";
+const shotPath = (name) => path.join(__dirname, SHOT_PREFIX + name + ".png");
+// The parts of the page the partial screenshots show.
+const CLIP = {
+  ERROR_BAR: { x: 0, y: 0, width: VIEWPORT.DESKTOP.width, height: 260 },
+  ERROR_BAR_PHONE: { x: 0, y: 0, width: VIEWPORT.PHONE.width, height: 300 },
+};
+
+// A Phase 5 game with rolled dice, a minion and three cards on the table.
+async function startShowcaseGame(page) {
+  await startGameWithEverythingOn(page);
   await page.evaluate(() => {
+    const engine = window.QB;
     window.QBUI.act(() => {
-      const state = window.QBUI.state,
-        engine = window.QB;
-      state.strategy = "corruption";
-      state.phase = "p5";
+      const state = window.QBUI.state;
+      state.strategy = engine.STRATEGY.CORRUPTION;
+      state.phase = engine.PHASE.P5;
       state.board.chars.saruman = true;
-      state.cards.table.push("sa009", "sa001b2", "sa051");
+      state.cards.table.push(
+        engine.CARD.FLOCKS_OF_CREBAIN,
+        engine.CARD.BALROG,
+        engine.CARD.WORMTONGUE,
+      );
       state.cards.discards.C = [];
       engine.recoverDice(state);
       engine.assignHunt(state, 2);
       engine.rollRemaining(state);
     });
   });
-  await page.screenshot({
-    path: path.join(__dirname, "shot-full.png"),
-    fullPage: true,
-  });
-  // the flowchart viewer: a visual oracle for the arrow routing
-  await page.click('[data-modal="flow"]');
-  await page.screenshot({
-    path: path.join(__dirname, "shot-flow.png"),
-    fullPage: true,
-  });
-  await page.click("#mclose");
+}
+// The flowchart viewer: a visual oracle for the arrow routing.
+async function shootFlowchart(page) {
+  await page.click(SEL.modal("flow"));
+  await page.screenshot({ path: shotPath("flow"), fullPage: true });
+  await page.click(SEL.MODAL_CLOSE);
+}
+// The game with the full board tracker, then with the minimal one.
+async function shootTrackerLayouts(page) {
+  await page.screenshot({ path: shotPath("full"), fullPage: true });
+  await shootFlowchart(page);
   await page.evaluate(() => {
     window.QBUI.act(() => {
       window.QBUI.state.settings.tracker = false;
     });
   });
-  await page.screenshot({
-    path: path.join(__dirname, "shot-minimal.png"),
-    fullPage: true,
-  });
-  // debug log: the error bar after a failed action, the modal (light and dark), the setup screen after a broken autosave
+  await page.screenshot({ path: shotPath("minimal"), fullPage: true });
+}
+// The error bar after a failed action and the debug log modal (light, dark, phone), then the phone-width error bar.
+async function shootErrorBarAndDebugLog(page) {
   await page.evaluate(() => {
     window.QBUI.act(
       () => {
@@ -68,31 +64,36 @@ const fs = require("node:fs"),
       { a: "answer" },
     );
   });
-  await page.screenshot({
-    path: path.join(__dirname, "shot-errbar.png"),
-    clip: { x: 0, y: 0, width: 1280, height: 260 },
-  });
-  await page.click("#errbarLog");
-  await page.screenshot({ path: path.join(__dirname, "shot-debug.png") });
+  await page.screenshot({ path: shotPath("errbar"), clip: CLIP.ERROR_BAR });
+  await page.click(SEL.ERROR_BAR_LOG);
+  await page.screenshot({ path: shotPath("debug") });
   await page.emulateMedia({ colorScheme: "dark" });
-  await page.screenshot({ path: path.join(__dirname, "shot-debug-dark.png") });
+  await page.screenshot({ path: shotPath("debug-dark") });
   await page.emulateMedia({ colorScheme: "light" });
-  await page.setViewportSize({ width: 400, height: 800 });
-  await page.screenshot({ path: path.join(__dirname, "shot-debug-phone.png") });
-  await page.click("#mclose");
+  await page.setViewportSize(VIEWPORT.PHONE);
+  await page.screenshot({ path: shotPath("debug-phone") });
+  await page.click(SEL.MODAL_CLOSE);
   await page.screenshot({
-    path: path.join(__dirname, "shot-errbar-phone.png"),
-    clip: { x: 0, y: 0, width: 400, height: 300 },
+    path: shotPath("errbar-phone"),
+    clip: CLIP.ERROR_BAR_PHONE,
   });
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.evaluate(() =>
-    localStorage.setItem("qb.autosave", '{"settings":{},"board":{}}'),
+  await page.setViewportSize(VIEWPORT.DESKTOP);
+}
+// The setup screen after an autosave that cannot be rendered.
+async function shootBrokenAutosave(page) {
+  await page.evaluate(
+    (save) => localStorage.setItem(window.QBUI.STORAGE_KEY.AUTOSAVE, save),
+    brokenAutosave(),
   );
   await page.reload();
-  await page.screenshot({
-    path: path.join(__dirname, "shot-broken.png"),
-    fullPage: true,
-  });
-  await browser.close();
-  server.close();
-})();
+  await page.screenshot({ path: shotPath("broken"), fullPage: true });
+}
+async function main() {
+  const { page, close } = await launchBuiltPage();
+  await startShowcaseGame(page);
+  await shootTrackerLayouts(page);
+  await shootErrorBarAndDebugLog(page);
+  await shootBrokenAutosave(page);
+  await close();
+}
+main();

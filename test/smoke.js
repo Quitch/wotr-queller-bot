@@ -1,62 +1,33 @@
 // Browser smoke test: boots the built page the way the artifact host does, plays through a turn with every option on,
 // exercises the tracker triggers, the table-card list, the die tap, undo and every modal. Fails on any page error.
-const { chromium } = require("playwright");
-const fs = require("node:fs"),
-  path = require("node:path"),
-  http = require("node:http");
-(async () => {
-  const html =
-    '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"></head><body>' +
-    fs.readFileSync(path.join(__dirname, "..", "index.html"), "utf8") +
-    "</body></html>";
-  const server = http.createServer((request, response) => {
-    response.setHeader("content-type", "text/html; charset=utf-8");
-    response.end(html);
-  });
-  await new Promise((resolve) => server.listen(0, resolve));
-  const url = "http://127.0.0.1:" + server.address().port + "/";
-  const browser = await chromium.launch();
-  const page = await browser.newPage({
-    viewport: { width: 1280, height: 900 },
-  });
-  const errors = [];
-  page.on("pageerror", (error) => errors.push("pageerror: " + error.message));
-  page.on("console", (message) => {
-    if (message.type() === "error") errors.push("console: " + message.text());
-  });
-  await page.route("https://fonts.googleapis.com/**", (route) =>
-    route.fulfill({ status: 200, body: "", contentType: "text/css" }),
-  );
-  await page.goto(url, { waitUntil: "load" });
-  const readState = () => page.evaluate(() => window.QBUI.state);
-  const click = async (selector) => {
-    await page.click(selector);
-  };
-  const answerAll = async (max) => {
-    // press the first answer button until the walk ends
-    for (let i = 0; i < (max || 60); i++) {
-      const button = await page.$(
-        ".prompt .answers .btn, .prompt #cntOk, .prompt #bfOk",
-      );
-      if (!button) break;
-      const id = await button.getAttribute("id");
-      if (id === "bfOk") {
-        await page.check("#bf-nearMoria").catch(() => {});
-      }
-      await button.click();
-    }
-  };
-  // 1. new game with everything on
-  for (const option of ["dice", "cards", "tracker", "wome"])
-    await page.check("#opt-" + option);
-  await click("#start");
-  await click('[data-phase="setup"]');
-  await answerAll();
-  let state = await readState();
+const path = require("node:path");
+const {
+  SEL,
+  WAIT_FOR_UNCAUGHT_MS,
+  MAX_PHASE5_WALKS,
+  brokenAutosave,
+  launchBuiltPage,
+  startGameWithEverythingOn,
+  readState,
+  answerAll,
+} = require("./browser.js");
+// The errors this script raises on purpose, and the console line the app prints when it falls back to the setup screen.
+const DELIBERATE_ERROR = /smoke: deliberate|could not render the saved game/;
+const debugFailures = [];
+const debugLog = async (page) =>
+  JSON.parse(await page.inputValue(SEL.DEBUG_TEXT));
+const usable = (state, status) =>
+  state.dice.pool.filter((die) => die.st === status).length;
+
+async function newGameWithEverythingOn(page) {
+  await startGameWithEverythingOn(page);
+  await page.click(SEL.phase("setup"));
+  await answerAll(page);
+  let state = await readState(page);
   console.log("strategy:", state.strategy, "phase:", state.phase);
-  await click('[data-phase="p1"]');
-  await answerAll();
-  state = await readState();
+  await page.click(SEL.phase("p1"));
+  await answerAll(page);
+  state = await readState(page);
   console.log(
     "after p1: hand",
     state.cards.hand.length,
@@ -66,92 +37,107 @@ const fs = require("node:fs"),
     state.phase,
   );
   if (state.strategy === "corruption") {
-    await click('[data-phase="p2"]');
-    await answerAll();
+    await page.click(SEL.phase("p2"));
+    await answerAll(page);
   }
-  await click('[data-phase="p3"]');
-  await answerAll();
-  await click('[data-phase="p4"]');
-  await answerAll();
-  state = await readState();
+  await page.click(SEL.phase("p3"));
+  await answerAll(page);
+  await page.click(SEL.phase("p4"));
+  await answerAll(page);
+  state = await readState(page);
   console.log(
     "after p4: hunt",
     state.dice.hunt,
     "avail",
-    state.dice.pool.filter((die) => die.st === "avail").length,
+    usable(state, "avail"),
     "phase",
     state.phase,
   );
-  // 2. Phase 5 walks until Phase 6 appears (bounded)
-  for (let i = 0; i < 20; i++) {
-    const phase5Btn = await page.$('[data-phase="p5"]');
+}
+// Phase 5 walks until the Phase 6 button appears (bounded).
+async function playPhase5UntilPhase6(page) {
+  for (let i = 0; i < MAX_PHASE5_WALKS; i++) {
+    const phase5Btn = await page.$(SEL.phase("p5"));
     if (!phase5Btn) break;
     await phase5Btn.click();
-    await answerAll();
+    await answerAll(page);
   }
-  state = await readState();
+  const state = await readState(page);
   console.log(
     "phase 5 done: avail",
-    state.dice.pool.filter((die) => die.st === "avail").length,
+    usable(state, "avail"),
     "reserved",
-    state.dice.pool.filter((die) => die.st === "reserved").length,
+    usable(state, "reserved"),
     "log",
     state.log.length,
   );
-  // 3. battle with the form
-  await click('[data-phase="battle1"]');
-  await answerAll();
-  // 4. tracker: tick Saruman, put Wormtongue + Palantír on the table, untick Saruman → auto-discards; Rohan active → ask dialog for Threats and Promises
+}
+async function playBattle(page) {
+  await page.click(SEL.phase("battle1"));
+  await answerAll(page);
+}
+// Tick Saruman, put Wormtongue + Palantír on the table, untick Saruman → auto-discards; Gondor to war → ask dialog for
+// Threats and Promises; the Fellowship revealed → ask dialog for Flocks of Crebain.
+async function exerciseTrackerTriggers(page) {
   await page.evaluate(() => {
+    const engine = window.QB;
     window.QBUI.act(() => {
       const state = window.QBUI.state;
+      const onTable = [
+        engine.CARD.WORMTONGUE,
+        engine.CARD.PALANTIR,
+        engine.CARD.THREATS_AND_PROMISES,
+        engine.CARD.FLOCKS_OF_CREBAIN,
+      ];
       state.board.chars.saruman = true;
-      state.cards.table.push("sa051", "sa045", "sa050", "sa009");
+      state.cards.table.push(...onTable);
       state.cards.discards.C = state.cards.discards.C.filter(
-        (id) => !["sa051", "sa045", "sa009"].includes(id),
+        (id) => !onTable.includes(id),
       );
     });
   });
-  await page.uncheck("#t-chars-saruman");
-  state = await readState();
+  await page.uncheck(SEL.TRACKER_SARUMAN);
+  let state = await readState(page);
   console.log(
     "after Saruman unticked: table",
     JSON.stringify(state.cards.table),
   );
-  await page.selectOption("#t-nations-gondor", "war"); // Threats and Promises: active→war asks
-  const askDialog = await page.$("#modal");
+  await page.selectOption(SEL.TRACKER_GONDOR, "war"); // Threats and Promises: active→war asks
+  const askDialog = await page.$(SEL.MODAL);
   console.log(
     "ask dialog open:",
     !!askDialog,
-    askDialog ? await page.textContent("#mtitle") : "",
+    askDialog ? await page.textContent(SEL.MODAL_TITLE) : "",
   );
-  if (askDialog) await page.click('#modal [data-ask="ok"]');
-  state = await readState();
+  if (askDialog) await page.click(SEL.ASK_OK);
+  state = await readState(page);
   console.log("after answer: table", JSON.stringify(state.cards.table));
-  await page.check("#t-fs-revealed");
-  const flocksDialog = await page.$("#modal");
+  await page.check(SEL.TRACKER_REVEALED);
+  const flocksDialog = await page.$(SEL.MODAL);
   console.log(
     "Flocks ask:",
-    flocksDialog ? await page.textContent("#mtitle") : "none",
+    flocksDialog ? await page.textContent(SEL.MODAL_TITLE) : "none",
   );
-  if (flocksDialog) await page.click('#modal [data-ask="no"]');
-  // 5. table card details + reminder, die tap, undo, minimal tracker fields via settings
-  const detailsBtn = await page.$('[data-card="show"]');
+  if (flocksDialog) await page.click(SEL.ASK_NO);
+}
+// Table card details and reminder, the die tap, undo, every modal, and a walk from another start point.
+async function exerciseTableCardsDiceUndoAndModals(page) {
+  const detailsBtn = await page.$(SEL.TABLE_CARD_DETAILS);
   if (detailsBtn) {
     await detailsBtn.click();
     console.log(
       "details shown:",
-      !!(await page.$(".tablecards .card")),
+      !!(await page.$(SEL.TABLE_CARD_SHOWN)),
       "reminder:",
-      !!(await page.$(".tablecards .rem")),
+      !!(await page.$(SEL.TABLE_CARD_REMINDER)),
     );
   }
-  const spend = await page.$("[data-spend]");
+  const spend = await page.$(SEL.DIE_SPEND);
   if (spend) {
     await spend.click();
-    await page.click('#modal [data-ask="ok"]');
+    await page.click(SEL.ASK_OK);
   }
-  await click("#undoBtn");
+  await page.click(SEL.UNDO);
   for (const modal of [
     "glossary",
     "flow",
@@ -161,20 +147,20 @@ const fs = require("node:fs"),
     "settings",
     "help",
   ]) {
-    await click('[data-modal="' + modal + '"]');
-    if (modal === "flow") {
-      await page.click("#flowToggle");
-    }
+    await page.click(SEL.modal(modal));
+    if (modal === "flow") await page.click(SEL.FLOW_TOGGLE);
     if (modal === "calc") {
-      await page.click('[data-cs="reg"][data-d="1"]');
-      await page.click("#calcClear");
+      await page.click(SEL.CALC_INCREASE_REGULARS);
+      await page.click(SEL.CALC_CLEAR);
     }
-    await click("#mclose");
+    await page.click(SEL.MODAL_CLOSE);
   }
-  await click('[data-phase="jumpto"]');
-  await click("#jumpGo");
-  await answerAll();
-  // 6. tracker off + dice on → minimal tracker shows Companions and Rings
+  await page.click(SEL.phase("jumpto"));
+  await page.click(SEL.JUMP_GO);
+  await answerAll(page);
+}
+// Tracker off + dice on → the minimal tracker shows Companions and Rings.
+async function checkMinimalTracker(page) {
   await page.evaluate(() => {
     window.QBUI.act(() => {
       window.QBUI.state.settings.tracker = false;
@@ -182,17 +168,19 @@ const fs = require("node:fs"),
   });
   console.log(
     "minimal tracker rings/companions:",
-    !!(await page.$('[data-step="rings"]')),
-    !!(await page.$('[data-step="fs.companions"]')),
+    !!(await page.$(SEL.RINGS_STEPPER)),
+    !!(await page.$(SEL.COMPANIONS_STEPPER)),
   );
-  await page.click('[data-step="rings"][data-d="1"]');
-  state = await readState();
+  await page.click(SEL.RINGS_INCREASE);
+  const state = await readState(page);
   console.log("rings now", state.board.rings);
-  // 7. debug log: from Settings, with a report; a failing action is rolled back and the error bar offers the log; an uncaught error too
-  await click('[data-modal="settings"]');
-  await click("#dbgOpen");
-  console.log("debug modal:", await page.textContent("#mtitle"));
-  let log = JSON.parse(await page.inputValue("#dbgTxt"));
+}
+// The debug log from Settings, with a report typed in.
+async function checkDebugLogExport(page) {
+  await page.click(SEL.modal("settings"));
+  await page.click(SEL.DEBUG_OPEN);
+  console.log("debug modal:", await page.textContent(SEL.MODAL_TITLE));
+  let log = await debugLog(page);
   console.log(
     "log format",
     log.format,
@@ -207,17 +195,20 @@ const fs = require("node:fs"),
     "dom prompt",
     log.dom.prompt !== undefined,
   );
-  await page.fill("#dbgReport", "smoke report");
-  await page.dispatchEvent("#dbgReport", "change");
-  log = JSON.parse(await page.inputValue("#dbgTxt"));
+  await page.fill(SEL.DEBUG_REPORT, "smoke report");
+  await page.dispatchEvent(SEL.DEBUG_REPORT, "change");
+  log = await debugLog(page);
   console.log("report in log:", log.report);
-  await click("#dbgCopy");
-  console.log("copy note:", await page.textContent("#dbgNote"));
-  await click("#dbgDl");
-  console.log("download note:", await page.textContent("#dbgNote"));
-  await click("#mclose");
-  const turnBefore = (await readState()).turn;
-  const debugFailures = [];
+  await page.click(SEL.DEBUG_COPY);
+  console.log("copy note:", await page.textContent(SEL.DEBUG_NOTE));
+  await page.click(SEL.DEBUG_DOWNLOAD);
+  console.log("download note:", await page.textContent(SEL.DEBUG_NOTE));
+  await page.click(SEL.MODAL_CLOSE);
+}
+// A failing action is rolled back and the error bar offers the log; an uncaught error is recorded too. Returns the
+// action count for the reload check.
+async function checkFailedActionAndUncaughtError(page) {
+  const turnBefore = (await readState(page)).turn;
   await page.evaluate(() => {
     window.QBUI.act(
       () => {
@@ -227,16 +218,16 @@ const fs = require("node:fs"),
       { a: "smokeFail" },
     );
   });
-  state = await readState();
+  const state = await readState(page);
   console.log(
     "after failing action: turn",
     state.turn,
     "(was",
     turnBefore + ")",
     "error bar",
-    !!(await page.$("#errbar")),
+    !!(await page.$(SEL.ERROR_BAR)),
     "text:",
-    (await page.textContent("#errbar")).slice(0, 80),
+    (await page.textContent(SEL.ERROR_BAR)).slice(0, 80),
   );
   if (state.turn !== turnBefore)
     debugFailures.push("failed action was not rolled back");
@@ -245,9 +236,9 @@ const fs = require("node:fs"),
       throw new Error("smoke: deliberate uncaught error");
     }, 0),
   );
-  await page.waitForTimeout(100);
-  await click("#errbarLog");
-  log = JSON.parse(await page.inputValue("#dbgTxt"));
+  await page.waitForTimeout(WAIT_FOR_UNCAUGHT_MS);
+  await page.click(SEL.ERROR_BAR_LOG);
+  const log = await debugLog(page);
   console.log(
     "errors in log:",
     log.errors
@@ -269,55 +260,53 @@ const fs = require("node:fs"),
     debugFailures.push("errors not recorded as expected");
   if (!log.summary.some((line) => /2 errors recorded/.test(line)))
     debugFailures.push("summary lacks the error count");
-  await click("#mclose");
-  await click("#errbarClose");
-  console.log("error bar dismissed:", !(await page.$("#errbar")));
-  const actionsBefore = log.actions.length;
-  // 8. reload from autosave; the action history survives the reload
+  await page.click(SEL.MODAL_CLOSE);
+  await page.click(SEL.ERROR_BAR_CLOSE);
+  console.log("error bar dismissed:", !(await page.$(SEL.ERROR_BAR)));
+  return log.actions.length;
+}
+// Reload from the autosave; the action history survives the reload and a new game clears the game.
+async function checkReloadKeepsHistory(page, actionsBefore) {
   await page.reload({ waitUntil: "load" });
-  state = await readState();
+  const state = await readState(page);
   console.log("reloaded turn", state?.turn, "phase", state?.phase);
-  await page.click("#newGameBtn");
-  await page.click('#modal [data-ask="ok"]');
-  console.log("setup screen:", !!(await page.$("#start")));
-  await click("#debugBtn");
-  log = JSON.parse(await page.inputValue("#dbgTxt"));
+  await page.click(SEL.NEW_GAME);
+  await page.click(SEL.ASK_OK);
+  console.log("setup screen:", !!(await page.$(SEL.START)));
+  await page.click(SEL.DEBUG_BUTTON);
+  const log = await debugLog(page);
+  const pageLoads = log.actions.filter(
+    (record) => record.a === "pageLoad",
+  ).length;
   console.log(
     "log from the setup screen: state",
     log.state,
     "actions",
     log.actions.length,
     "page loads",
-    log.actions.filter((record) => record.a === "pageLoad").length,
+    pageLoads,
   );
-  if (
-    log.actions.length < actionsBefore ||
-    log.actions.filter((record) => record.a === "pageLoad").length < 2
-  )
+  if (log.actions.length < actionsBefore || pageLoads < 2)
     debugFailures.push("action history did not survive the reload");
-  await click("#mclose");
-  // 9. an autosave that cannot be rendered: the app falls back to the setup screen, keeps the save and offers the log
-  await page.evaluate(() =>
-    localStorage.setItem(
-      "qb.autosave",
-      JSON.stringify({
-        settings: { dice: true, cards: true, tracker: true, wome: true },
-        board: {},
-        turn: 3,
-      }),
-    ),
+  await page.click(SEL.MODAL_CLOSE);
+}
+// An autosave that cannot be rendered: the app falls back to the setup screen, keeps the save and offers the log.
+async function checkBrokenAutosave(page) {
+  await page.evaluate(
+    (save) => localStorage.setItem(window.QBUI.STORAGE_KEY.AUTOSAVE, save),
+    brokenAutosave(),
   );
   await page.reload({ waitUntil: "load" });
   console.log(
     "broken autosave: setup screen",
-    !!(await page.$("#start")),
+    !!(await page.$(SEL.START)),
     "notice",
-    !!(await page.$('.setup [role="status"]')),
+    !!(await page.$(SEL.BROKEN_AUTOSAVE_NOTICE)),
     "error bar",
-    !!(await page.$("#errbar")),
+    !!(await page.$(SEL.ERROR_BAR)),
   );
-  await click("#debugBtn");
-  log = JSON.parse(await page.inputValue("#dbgTxt"));
+  await page.click(SEL.DEBUG_BUTTON);
+  const log = await debugLog(page);
   console.log(
     "broken save in log: turn",
     log.brokenAutosave?.turn,
@@ -329,30 +318,44 @@ const fs = require("node:fs"),
     !log.errors.some((record) => record.a === "boot-render")
   )
     debugFailures.push("broken autosave not captured");
-  await click("#mclose");
-  await page.click("#start");
+  await page.click(SEL.MODAL_CLOSE);
+  await page.click(SEL.START);
   console.log(
     "after Start game the broken save is cleared:",
-    await page.evaluate(() => !localStorage.getItem("qb.autosave.broken")),
+    await page.evaluate(
+      () => !localStorage.getItem(window.QBUI.STORAGE_KEY.BROKEN_AUTOSAVE),
+    ),
   );
+}
+async function main() {
+  const { page, errors, close } = await launchBuiltPage({
+    captureErrors: true,
+  });
+  await newGameWithEverythingOn(page);
+  await playPhase5UntilPhase6(page);
+  await playBattle(page);
+  await exerciseTrackerTriggers(page);
+  await exerciseTableCardsDiceUndoAndModals(page);
+  await checkMinimalTracker(page);
+  await checkDebugLogExport(page);
+  const actionsBefore = await checkFailedActionAndUncaughtError(page);
+  await checkReloadKeepsHistory(page, actionsBefore);
+  await checkBrokenAutosave(page);
   await page.screenshot({
     path: path.join(__dirname, "smoke.png"),
     fullPage: true,
   });
-  for (const failure of debugFailures) errors.push("debug: " + failure);
-  await browser.close();
-  server.close();
-  const unexpected = errors.filter(
-    (error) => !/smoke: deliberate|could not render the saved game/.test(error),
-  );
+  await close();
+  const unexpected = errors
+    .filter((error) => !DELIBERATE_ERROR.test(error))
+    .concat(debugFailures.map((failure) => "debug: " + failure));
   console.log(
     unexpected.length
       ? "ERRORS:\n" + unexpected.join("\n")
       : "no page errors (" +
-          (errors.length - unexpected.length) +
+          (errors.length - (unexpected.length - debugFailures.length)) +
           " deliberate ones ignored)",
   );
-  errors.length = 0;
-  errors.push(...unexpected);
-  process.exit(errors.length ? 1 : 0);
-})();
+  process.exit(unexpected.length ? 1 : 0);
+}
+main();
