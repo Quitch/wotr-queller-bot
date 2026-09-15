@@ -1,6 +1,6 @@
 // The board tracker (full or minimal), reading and changing the board, and the table cards a change may trigger.
 import * as engine from "../qb.js";
-import { FP_STANCE, cardById } from "../qb.js";
+import { FP_STANCE, MINION_STATUS, cardById } from "../qb.js";
 import { act } from "./actions.js";
 import { ask } from "./ask.js";
 import { escapeHTML } from "./dom.js";
@@ -8,7 +8,8 @@ import { state } from "./session.js";
 import { checkboxRowHTML, numberRowHTML } from "./widgets.js";
 
 // The board tracker.
-// Tracker rows: a checkbox, a number stepper and a Free Peoples nation selector, keyed by the tracker path (e.g. "fs.progress").
+// Tracker rows: a checkbox, a number stepper and a selector (a Free Peoples nation's stance or a minion's status), keyed by
+// the tracker path (e.g. "fs.progress").
 const trackerId = (path) => "t-" + path.replaceAll(".", "-");
 const trackerCheckbox = (path, label) =>
   checkboxRowHTML(
@@ -24,7 +25,8 @@ const trackerNumber = (path, label) =>
     boardValue(path),
     'data-step="' + path + '"',
   );
-const trackerSelect = (path, label) =>
+// A select over string values: `options` is a list of [value, label].
+const trackerSelect = (path, label, options) =>
   '<div class="row"><label for="' +
   trackerId(path) +
   '">' +
@@ -34,23 +36,34 @@ const trackerSelect = (path, label) =>
   '" data-t="' +
   path +
   '">' +
-  [
-    [FP_STANCE.PASSIVE, "Passive"],
-    [FP_STANCE.ACTIVE, "Active"],
-    [FP_STANCE.WAR, "At war"],
-  ]
+  options
     .map(
-      ([stance, label]) =>
+      ([value, optionLabel]) =>
         '<option value="' +
-        stance +
+        value +
         '"' +
-        (boardValue(path) === stance ? " selected" : "") +
+        (boardValue(path) === value ? " selected" : "") +
         ">" +
-        label +
+        optionLabel +
         "</option>",
     )
     .join("") +
   "</select></div>";
+const FP_STANCE_OPTIONS = [
+  [FP_STANCE.PASSIVE, "Passive"],
+  [FP_STANCE.ACTIVE, "Active"],
+  [FP_STANCE.WAR, "At war"],
+];
+const fpNationSelect = (path, label) =>
+  trackerSelect(path, label, FP_STANCE_OPTIONS);
+// A minion is available, in play or eliminated (an eliminated Character never returns, so it is never mustered again).
+const MINION_STATUS_OPTIONS = [
+  [MINION_STATUS.AVAILABLE, "Available"],
+  [MINION_STATUS.IN_PLAY, "In play"],
+  [MINION_STATUS.ELIMINATED, "Eliminated"],
+];
+const minionSelect = (path, label) =>
+  trackerSelect(path, label, MINION_STATUS_OPTIONS);
 // A Shadow nation's steps above At War on the Political Track.
 const shadowNationSelect = (path, label, max) => {
   let options = "";
@@ -104,9 +117,9 @@ const minionsSectionHTML = (heading) =>
   "<h3>" +
   heading +
   "</h3>" +
-  trackerCheckbox("chars.saruman", "Saruman") +
-  trackerCheckbox("chars.witchKing", "Witch King") +
-  trackerCheckbox("chars.mouth", "Mouth of Sauron");
+  minionSelect("chars.saruman", "Saruman") +
+  minionSelect("chars.witchKing", "Witch King") +
+  minionSelect("chars.mouth", "Mouth of Sauron");
 const shadowFactionsHTML = () =>
   trackerCheckbox("factions.corsairs", "Corsairs") +
   trackerCheckbox("factions.dunlendings", "Dunlendings") +
@@ -131,7 +144,7 @@ const huntSectionHTML = () =>
 function minimalTrackerHTML() {
   let html = "";
   if (state.settings.dice)
-    html += minionsSectionHTML("Minions in play (sizes the dice pool)");
+    html += minionsSectionHTML("Minions (in play sizes the dice pool)");
   if ((state.settings.cards || state.settings.dice) && state.settings.wome)
     html += minimalFactionsSectionHTML();
   if (state.settings.dice) html += huntSectionHTML();
@@ -169,10 +182,7 @@ const fellowshipSectionHTML = () =>
   trackerCheckbox("fs.inStrongholdOrSea", "Figure in a Stronghold or at sea") +
   trackerCheckbox("fs.guideGollum", "Gollum is the Guide");
 const charactersSectionHTML = () =>
-  "<h3>Characters in play</h3>" +
-  trackerCheckbox("chars.saruman", "Saruman") +
-  trackerCheckbox("chars.witchKing", "Witch King") +
-  trackerCheckbox("chars.mouth", "Mouth of Sauron") +
+  minionsSectionHTML("Characters") +
   trackerNumber("nazgul", "Nazgûl on the map") +
   trackerCheckbox("chars.gandalfWhite", "Gandalf the White") +
   trackerCheckbox("chars.aragorn", "Aragorn, Heir to Isildur");
@@ -183,11 +193,11 @@ const shadowNationsSectionHTML = () =>
   shadowNationSelect("nations.se", "Southrons & Easterlings", 3);
 const fpNationsSectionHTML = () =>
   "<h3>Free Peoples nations</h3>" +
-  trackerSelect("nations.gondor", "Gondor") +
-  trackerSelect("nations.rohan", "Rohan") +
-  trackerSelect("nations.north", "North") +
-  trackerSelect("nations.dwarves", "Dwarves") +
-  trackerSelect("nations.elves", "Elves");
+  fpNationSelect("nations.gondor", "Gondor") +
+  fpNationSelect("nations.rohan", "Rohan") +
+  fpNationSelect("nations.north", "North") +
+  fpNationSelect("nations.dwarves", "Dwarves") +
+  fpNationSelect("nations.elves", "Elves");
 const factionsSectionHTML = () =>
   "<h3>Factions in play</h3>" +
   shadowFactionsHTML() +

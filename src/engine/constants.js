@@ -70,6 +70,13 @@ export const FP_STANCE_RANK = {
 };
 export const SHADOW_NATIONS = ["sauron", "isengard", "se"];
 export const FP_NATIONS = ["gondor", "rohan", "north", "dwarves", "elves"];
+// The minions Queller can muster (tracker fields under board.chars) and where each one is: an eliminated Character never returns.
+export const MINIONS = ["saruman", "witchKing", "mouth"];
+export const MINION_STATUS = {
+  AVAILABLE: "available",
+  IN_PLAY: "inPlay",
+  ELIMINATED: "eliminated",
+};
 export const SHADOW_FACTIONS = ["corsairs", "dunlendings", "spiders"];
 // Cards the engine or the UI single out by id.
 export const CARD = {

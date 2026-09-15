@@ -1,6 +1,10 @@
 // Card preconditions: the board facts a card's event half needs (`pre`) and the battle facts its combat half needs
 // (`cpre`); a situational question is asked of the player once per turn.
-import { allShadowNationsAtWar, shadowNationAtWar } from "./board.js";
+import {
+  allShadowNationsAtWar,
+  minionInPlay,
+  shadowNationAtWar,
+} from "./board.js";
 import { cardById } from "./cards.js";
 import { DECK, DIE_KIND } from "./constants.js";
 import { availableDice } from "./dice.js";
@@ -28,8 +32,8 @@ const PRECONDITIONS = {
   fsNotInFPSettlement: (state) => !state.board.fs.inFPSettlement,
   fsProgress1: (state) => state.board.fs.progress >= 1,
   fsRevealed: (state) => state.board.fs.revealed,
-  saruman: (state) => state.board.chars.saruman,
-  witchKing: (state) => state.board.chars.witchKing,
+  saruman: (state) => minionInPlay(state, "saruman"),
+  witchKing: (state) => minionInPlay(state, "witchKing"),
   aragorn: (state) => state.board.chars.aragorn,
   isengardAtWar: (state) => shadowNationAtWar(state, "isengard"),
   sauronAtWar: (state) => shadowNationAtWar(state, "sauron"),
@@ -46,11 +50,11 @@ const PRECONDITIONS = {
   elvenStronghold: (state) => situationalAnswer(state, "elvenStronghold"),
   fpNotWar: (state) => situationalAnswer(state, "fpNotWar"),
   wkBesieging: (state) =>
-    state.board.chars.witchKing
+    minionInPlay(state, "witchKing")
       ? situationalAnswer(state, "wkBesieging")
       : false,
   isenBesieging: (state) =>
-    state.board.chars.saruman
+    minionInPlay(state, "saruman")
       ? situationalAnswer(state, "isenBesieging")
       : false,
   // The Lidless Eye has no effect without an unused die (rule 17); only checkable when the app rolls the dice.

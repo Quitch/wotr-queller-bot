@@ -1,6 +1,6 @@
 // Decision handlers for the Muster page: (state, node, facts), each answering a box from the state or asking the player.
 import * as engine from "../../engine/index.js";
-import { cardById } from "../../engine/index.js";
+import { MINIONS, MINION_STATUS, cardById } from "../../engine/index.js";
 import { answerAuto, answerFromTracker, ask } from "./common.js";
 import { decidePlayableMusterCard } from "./phase-5.js";
 
@@ -24,20 +24,20 @@ function decideWillOfTheWest(state, node, { trackerOn, board, walk }) {
       false,
       "the die set aside for the minion must be used now (Rulings)",
     );
-  if (
-    trackerOn &&
-    (board.chars.gandalfWhite ||
-      board.chars.saruman ||
-      board.chars.witchKing ||
-      board.chars.mouth)
-  )
+  if (!trackerOn) return ask(state, node);
+  // "No minions have been recruited": one in play, or one recruited and eliminated since, both answer No.
+  if (board.chars.gandalfWhite)
+    return answerAuto(state, node, false, "Gandalf the White is in play");
+  const anyMinion = (status) =>
+    MINIONS.some((key) => board.chars[key] === status);
+  if (anyMinion(MINION_STATUS.IN_PLAY))
+    return answerAuto(state, node, false, "a minion is already in play");
+  if (anyMinion(MINION_STATUS.ELIMINATED))
     return answerAuto(
       state,
       node,
       false,
-      board.chars.gandalfWhite
-        ? "Gandalf the White is in play"
-        : "a minion is already in play",
+      "a minion was recruited (eliminated since)",
     );
   ask(state, node);
 }

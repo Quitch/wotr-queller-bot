@@ -50,8 +50,8 @@ function decideCharacterCardsWithFellowshipOut(
     "Character cards > 0? (the Fellowship is on the Mordor track or revealed)",
   );
 }
-export function decideWitchKingInPlay(state, node, { trackerOn, board }) {
-  if (trackerOn && !board.chars.witchKing)
+export function decideWitchKingInPlay(state, node, { trackerOn }) {
+  if (trackerOn && !engine.minionInPlay(state, "witchKing"))
     return answerAuto(state, node, false, "Witch King not in play");
   ask(state, node);
 }

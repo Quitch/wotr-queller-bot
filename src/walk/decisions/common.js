@@ -1,6 +1,6 @@
 // What every decision handler builds on: recording an answer, asking the player, board facts and playable-card counts.
 import * as engine from "../../engine/index.js";
-import { DECK, TRAIL } from "../../engine/index.js";
+import { DECK, MINION_STATUS, TRAIL } from "../../engine/index.js";
 import { NODE, NODE_KIND } from "../../flow/index.js";
 import { endWalk, follow, setPrompt, trail } from "../core.js";
 import { evalPlayable } from "../playable.js";
@@ -9,8 +9,8 @@ import { PENDING, PROMPT, WALK_RESULT } from "../prompt.js";
 // Board consequences of a decision the player answered (the tracker keeps up with what the flowchart just established).
 const DECIDE_HOOKS = {
   "CH.musteredWK": (state, answer) => {
-    if (answer && !state.board.chars.witchKing) {
-      state.board.chars.witchKing = true;
+    if (answer && !engine.minionInPlay(state, "witchKing")) {
+      state.board.chars.witchKing = MINION_STATUS.IN_PLAY;
       state.playable = {};
       engine.log(
         state,

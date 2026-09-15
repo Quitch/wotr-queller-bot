@@ -108,8 +108,8 @@ async function playBattle(page) {
   await page.click(SEL.phase("battle1"));
   await answerAll(page);
 }
-// Tick Saruman, put Wormtongue + Palantír on the table, untick Saruman → auto-discards; Gondor to war → ask dialog for
-// Threats and Promises; the Fellowship revealed → ask dialog for Flocks of Crebain.
+// Put Saruman in play with Wormtongue + Palantír on the table, set him to eliminated → auto-discards; Gondor to war →
+// ask dialog for Threats and Promises; the Fellowship revealed → ask dialog for Flocks of Crebain.
 async function exerciseTrackerTriggers(page) {
   await page.evaluate(() => {
     const engine = window.QB;
@@ -121,17 +121,17 @@ async function exerciseTrackerTriggers(page) {
         engine.CARD.THREATS_AND_PROMISES,
         engine.CARD.FLOCKS_OF_CREBAIN,
       ];
-      state.board.chars.saruman = true;
+      state.board.chars.saruman = engine.MINION_STATUS.IN_PLAY;
       state.cards.table.push(...onTable);
       state.cards.discards.C = state.cards.discards.C.filter(
         (id) => !onTable.includes(id),
       );
     });
   });
-  await page.uncheck(SEL.TRACKER_SARUMAN);
+  await page.selectOption(SEL.TRACKER_SARUMAN, "eliminated");
   let state = await readState(page);
   console.log(
-    "after Saruman unticked: table",
+    "after Saruman eliminated: table",
     JSON.stringify(state.cards.table),
   );
   await page.selectOption(SEL.TRACKER_GONDOR, "war"); // Threats and Promises: active→war asks
