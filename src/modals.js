@@ -28,17 +28,11 @@
 
   let opener = null,
     flowText = false;
-  ui.renderModal = function () {
-    const modal = ui.getModal();
-    if (!modal) return;
-    const existing = ui.find("#modal");
-    const reopen = !!existing;
-    if (existing) existing.remove();
-    else opener = document.activeElement;
+  // The modal's element: a dialog box with a header (title, the calculator's Clear button, Close) and the content's body.
+  function buildModalElement(modal, { title, body, narrow }) {
     const el = document.createElement("div");
     el.className = "modal";
     el.id = "modal";
-    const [title, body, narrow] = modalContent(modal);
     const headerButtons =
       modal.name === MODAL.CALC
         ? '<button type="button" class="btn" id="calcClear">Clear</button>'
@@ -53,13 +47,10 @@
       '<button class="btn x" id="mclose">Close</button></span></header>' +
       body +
       "</div>";
-    document.body.appendChild(el);
-    const app = ui.find("#app");
-    if (app) app.setAttribute("inert", "");
-    ui.find("#mclose").onclick = ui.closeModal;
-    el.addEventListener("click", (event) => {
-      if (event.target === el) ui.closeModal();
-    });
+    return el;
+  }
+  // Tab and Shift+Tab stay inside the modal while it is open.
+  function trapTabFocus(el) {
     el.addEventListener("keydown", (event) => {
       if (event.key !== "Tab") return;
       const focusable = [
@@ -80,12 +71,17 @@
         event.preventDefault();
       }
     });
+  }
+  // The scrollable body of a modal is a focusable landmark for keyboard and screen-reader users.
+  function labelBodyRegions(el, title) {
     el.querySelectorAll(".body").forEach((region) => {
       region.setAttribute("tabindex", "0");
       region.setAttribute("role", "region");
       region.setAttribute("aria-label", title + " content");
     });
-    wireModal(modal);
+  }
+  // Where focus goes when a modal opens: the glossary term it was opened for, else the title (a re-render keeps the current focus).
+  function focusOnOpen(modal, el, reopen) {
     if (modal.name === MODAL.GLOSSARY && modal.arg) {
       const term = el.querySelector('[data-gl="' + modal.arg + '"]');
       if (term) {
@@ -93,6 +89,35 @@
         term.focus();
       }
     } else if (!reopen) ui.find("#mtitle").focus();
+  }
+  // The flowchart modal opened from the game screen starts on the walk's page; the request is consumed so re-renders keep the tab chosen since.
+  function selectFlowPage(modal) {
+    if (modal.name === MODAL.FLOW && modal.arg?.current) {
+      flowPage = currentPage();
+      modal.arg = null;
+    }
+  }
+  ui.renderModal = function () {
+    const modal = ui.getModal();
+    if (!modal) return;
+    const existing = ui.find("#modal");
+    const reopen = !!existing;
+    if (existing) existing.remove();
+    else opener = document.activeElement;
+    selectFlowPage(modal);
+    const content = modalContent(modal);
+    const el = buildModalElement(modal, content);
+    document.body.appendChild(el);
+    const app = ui.find("#app");
+    if (app) app.setAttribute("inert", "");
+    ui.find("#mclose").onclick = ui.closeModal;
+    el.addEventListener("click", (event) => {
+      if (event.target === el) ui.closeModal();
+    });
+    trapTabFocus(el);
+    labelBodyRegions(el, content.title);
+    wireModal(modal, el);
+    focusOnOpen(modal, el, reopen);
   };
   ui.closeModal = function () {
     ui.setModal(null);
@@ -105,125 +130,157 @@
     }
     opener = null;
   };
-  function modalContent(modal) {
-    switch (modal.name) {
-      case MODAL.GLOSSARY:
-        return [
-          "Glossary of terms",
-          '<div class="body"><p class="notice">Words in italics on the flowcharts are defined here. Hover a term anywhere in the app for its definition; click it to open this list.</p><dl class="gl">' +
-            Object.keys(GLOSSARY)
-              .map(
-                (term) =>
-                  '<dt data-gl="' +
-                  term +
-                  '" tabindex="-1">' +
-                  esc(term) +
-                  "</dt><dd>" +
-                  fmt(GLOSSARY[term]) +
-                  "</dd>",
-              )
-              .join("") +
-            "</dl></div>",
-          true,
-        ];
-      case MODAL.RULES:
-        return ["General rules", rulesHTML(), true];
-      case MODAL.FLOW:
-        if (modal.arg?.current) {
-          flowPage = currentPage();
-          modal.arg = null;
-        }
-        return [
-          "Flowcharts",
-          '<div class="tabs">' +
-            Object.keys(FLOW)
-              .map(
-                (pageKey) =>
-                  '<button class="btn small' +
-                  (pageKey === flowPage ? " on" : "") +
-                  '" data-fp="' +
-                  pageKey +
-                  '">' +
-                  esc(
-                    FLOW[pageKey].name
-                      .replace("Strategy ", "")
-                      .replace("Move/Recruit/Play/Draw ", ""),
-                  ) +
-                  "</button>",
-              )
-              .join("") +
-            '</div><div class="body"><p class="notice" style="margin:0 0 8px">Green: start point. Red: action. Yellow/blue: decision. Grey: jump to another page. Purple: priority list. Orange: step. The current node of the walk is outlined; visited nodes are shaded.</p><p style="margin:0 0 8px"><button class="btn small" id="flowToggle" aria-pressed="' +
-            flowText +
+
+  // The content of each modal: {title, body, narrow}.
+  const glossaryContent = () => ({
+    title: "Glossary of terms",
+    body:
+      '<div class="body"><p class="notice">Words in italics on the flowcharts are defined here. Hover a term anywhere in the app for its definition; click it to open this list.</p><dl class="gl">' +
+      Object.keys(GLOSSARY)
+        .map(
+          (term) =>
+            '<dt data-gl="' +
+            term +
+            '" tabindex="-1">' +
+            esc(term) +
+            "</dt><dd>" +
+            fmt(GLOSSARY[term]) +
+            "</dd>",
+        )
+        .join("") +
+      "</dl></div>",
+    narrow: true,
+  });
+  const rulesContent = () => ({
+    title: "General rules",
+    body: rulesHTML(),
+    narrow: true,
+  });
+  const flowContent = () => ({
+    title: "Flowcharts",
+    body:
+      '<div class="tabs">' +
+      Object.keys(FLOW)
+        .map(
+          (pageKey) =>
+            '<button class="btn small' +
+            (pageKey === flowPage ? " on" : "") +
+            '" data-fp="' +
+            pageKey +
             '">' +
-            (flowText ? "Show the diagram" : "Show as text") +
-            "</button></p>" +
-            (flowText
-              ? textPage(flowPage)
-              : '<div class="flowwrap">' + svgPage(flowPage) + "</div>") +
-            "</div>",
-          false,
-        ];
-      case MODAL.CALC:
-        return ["Army value calculator", calcHTML(), true];
-      case MODAL.SAVE:
-        return ["Save and load", saveHTML(), true];
-      case MODAL.SETTINGS:
-        return ["Settings", settingsHTML(), true];
-      case MODAL.JUMP:
-        return ["Walk from another start point", jumpHTML(), true];
-      case MODAL.HELP:
-        return ["Help", helpHTML(), true];
-      case MODAL.DEBUG:
-        return ["Debug log", debugHTML(), true];
-      case MODAL.ASK: {
-        const spec = modal.arg;
-        let input = "";
-        if (spec.input === "select")
-          input =
-            '<p><label for="askInput">' +
-            esc(spec.inputLabel) +
-            '</label><br><select id="askInput" class="askctl">' +
-            spec.options
-              .map(
-                (option, i) =>
-                  '<option value="' + i + '">' + esc(option) + "</option>",
-              )
-              .join("") +
-            "</select></p>";
-        else if (spec.input === "number")
-          input =
-            '<p><label for="askInput">' +
-            esc(spec.inputLabel) +
-            '</label><br><input id="askInput" class="askctl" type="number" min="0" max="' +
-            ASK_NUMBER_MAX +
-            '" value="' +
-            (spec.value || 1) +
-            '"></p>';
-        return [
-          spec.title,
-          '<div class="body"><p class="notice" style="font-size:.95rem;color:var(--ink)">' +
-            esc(spec.text) +
-            "</p>" +
-            input +
-            '<div class="answers" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">' +
-            spec.buttons
-              .map(
-                (button) =>
-                  '<button class="btn' +
-                  (button.primary ? " primary" : "") +
-                  '" data-ask="' +
-                  button.v +
-                  '">' +
-                  esc(button.label) +
-                  "</button>",
-              )
-              .join("") +
-            "</div></div>",
-          true,
-        ];
-      }
-    }
-    return ["", ""];
+            esc(
+              FLOW[pageKey].name
+                .replace("Strategy ", "")
+                .replace("Move/Recruit/Play/Draw ", ""),
+            ) +
+            "</button>",
+        )
+        .join("") +
+      '</div><div class="body"><p class="notice" style="margin:0 0 8px">Green: start point. Red: action. Yellow/blue: decision. Grey: jump to another page. Purple: priority list. Orange: step. The current node of the walk is outlined; visited nodes are shaded.</p><p style="margin:0 0 8px"><button class="btn small" id="flowToggle" aria-pressed="' +
+      flowText +
+      '">' +
+      (flowText ? "Show the diagram" : "Show as text") +
+      "</button></p>" +
+      (flowText
+        ? textPage(flowPage)
+        : '<div class="flowwrap">' + svgPage(flowPage) + "</div>") +
+      "</div>",
+    narrow: false,
+  });
+  const calcContent = () => ({
+    title: "Army value calculator",
+    body: calcHTML(),
+    narrow: true,
+  });
+  const saveContent = () => ({
+    title: "Save and load",
+    body: saveHTML(),
+    narrow: true,
+  });
+  const settingsContent = () => ({
+    title: "Settings",
+    body: settingsHTML(),
+    narrow: true,
+  });
+  const jumpContent = () => ({
+    title: "Walk from another start point",
+    body: jumpHTML(),
+    narrow: true,
+  });
+  const helpContent = () => ({ title: "Help", body: helpHTML(), narrow: true });
+  const debugContent = () => ({
+    title: "Debug log",
+    body: debugHTML(),
+    narrow: true,
+  });
+  // A question from the app (ui.ask): text, an optional select or number input, and its buttons.
+  function askInputHTML(spec) {
+    if (spec.input === "select")
+      return (
+        '<p><label for="askInput">' +
+        esc(spec.inputLabel) +
+        '</label><br><select id="askInput" class="askctl">' +
+        spec.options
+          .map(
+            (option, i) =>
+              '<option value="' + i + '">' + esc(option) + "</option>",
+          )
+          .join("") +
+        "</select></p>"
+      );
+    if (spec.input === "number")
+      return (
+        '<p><label for="askInput">' +
+        esc(spec.inputLabel) +
+        '</label><br><input id="askInput" class="askctl" type="number" min="0" max="' +
+        ASK_NUMBER_MAX +
+        '" value="' +
+        (spec.value || 1) +
+        '"></p>'
+      );
+    return "";
+  }
+  function askContent(modal) {
+    const spec = modal.arg;
+    return {
+      title: spec.title,
+      body:
+        '<div class="body"><p class="notice" style="font-size:.95rem;color:var(--ink)">' +
+        esc(spec.text) +
+        "</p>" +
+        askInputHTML(spec) +
+        '<div class="answers" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">' +
+        spec.buttons
+          .map(
+            (button) =>
+              '<button class="btn' +
+              (button.primary ? " primary" : "") +
+              '" data-ask="' +
+              button.v +
+              '">' +
+              esc(button.label) +
+              "</button>",
+          )
+          .join("") +
+        "</div></div>",
+      narrow: true,
+    };
+  }
+  const MODAL_CONTENT = {
+    [MODAL.GLOSSARY]: glossaryContent,
+    [MODAL.RULES]: rulesContent,
+    [MODAL.FLOW]: flowContent,
+    [MODAL.CALC]: calcContent,
+    [MODAL.SAVE]: saveContent,
+    [MODAL.SETTINGS]: settingsContent,
+    [MODAL.JUMP]: jumpContent,
+    [MODAL.HELP]: helpContent,
+    [MODAL.DEBUG]: debugContent,
+    [MODAL.ASK]: askContent,
+  };
+  function modalContent(modal) {
+    const content = MODAL_CONTENT[modal.name];
+    return content ? content(modal) : { title: "", body: "", narrow: false };
   }
   // The page the flowchart viewer opens on: the walk's page, else the strategy's page for the current phase.
   function currentPage() {
@@ -238,10 +295,10 @@
   function helpHTML() {
     return (
       '<div class="body"><div class="notice" style="max-width:75ch;font-size:.9rem;color:var(--ink)">' +
-      "<h4>What this app does</h4><p>It plays the Shadow side using the Queller Bot. You play the Free Peoples on your physical copy of War of the Ring. The app rolls Queller\u2019s dice, holds its cards and asks you the yes/no questions from the flowcharts; you answer from the board and carry out the action it names.</p>" +
-      "<h4>A turn</h4><p>The buttons at the top of the walkthrough are the green start points of the flowcharts, in turn order: Phase 1 (dice and cards), Phase 2 (strategy check, corruption strategy only), Phase 3 (Hunt box), Phase 4 (roll), then \u201cPhase 5\u201d each time Queller is eligible to act. When a battle starts, use \u201cBattle\u201d for the first round; the button becomes \u201cBattle (next round)\u201d while the battle continues. \u201cPhase 6\u201d is the victory check; the next turn then begins at Phase 1.</p>" +
+      "<h4>What this app does</h4><p>It plays the Shadow side using the Queller Bot. You play the Free Peoples on your physical copy of War of the Ring. The app rolls Queller’s dice, holds its cards and asks you the yes/no questions from the flowcharts; you answer from the board and carry out the action it names.</p>" +
+      "<h4>A turn</h4><p>The buttons at the top of the walkthrough are the green start points of the flowcharts, in turn order: Phase 1 (dice and cards), Phase 2 (strategy check, corruption strategy only), Phase 3 (Hunt box), Phase 4 (roll), then “Phase 5” each time Queller is eligible to act. When a battle starts, use “Battle” for the first round; the button becomes “Battle (next round)” while the battle continues. “Phase 6” is the victory check; the next turn then begins at Phase 1.</p>" +
       "<h4>Answering</h4><p>Each step is coloured like the paper flowchart and named in the line above it: a decision asks a question, an action tells you what Queller does (press Done, or Not possible if the game rules prevent it), a step is something to do before continuing. Italic terms show their definition when you hover or focus them; press Enter to open the glossary at that term.</p>" +
-      "<h4>The board tracker</h4><p>Keep it up to date: it answers questions about the Fellowship, minions, nations and factions for you, and decides which of Queller\u2019s cards can be played without showing you the rest of the hand. Card checks it asks you about are remembered for the turn; press Forget if the board has changed.</p>" +
+      "<h4>The board tracker</h4><p>Keep it up to date: it answers questions about the Fellowship, minions, nations and factions for you, and decides which of Queller’s cards can be played without showing you the rest of the hand. Card checks it asks you about are remembered for the turn; press Forget if the board has changed.</p>" +
       "<h4>Mistakes</h4><p>Undo reverses your last action (up to " +
       ui.UNDO_DEPTH +
       " steps). The game is saved automatically in this browser; Save / Load keeps named copies or moves a game to another device.</p>" +
@@ -296,7 +353,8 @@
       " is an Elven Ring condition (rule 36): if it is true and Queller lacks the die the next step needs, it uses a ring. “Phase 5 – continue from where you came” means return to the grey box that sent you here and follow its arrow out.</p></div>";
     return html;
   }
-  // ---------- flowchart SVG ----------
+
+  // The flowchart as an SVG: the boxes of a page with the arrows between them, the walk's current box outlined and its visited boxes shaded.
   const SVG_COLOUR = {
     ARROW: "#333",
     LABEL_TEXT: "#333",
@@ -331,10 +389,9 @@
     [NODE_KIND.STEP]: { fill: "#ffe6cc", stroke: "#d79b00" },
     [NODE_KIND.NOTE]: { fill: null, stroke: null },
   };
-  function svgPage(pageKey) {
-    const page = FLOW[pageKey];
-    const state = ui.state;
-    const walk = state?.walk;
+  // What the walk marks on a page: its current box (when it is on this page) and the boxes its trail visited.
+  function walkMarks(pageKey) {
+    const walk = ui.state?.walk;
     const curNode =
       walk && !walk.done && walk.page === pageKey ? walk.node : null;
     const visited = new Set();
@@ -345,6 +402,10 @@
       walk.trail.forEach((entry) => {
         if (entry.page === pageKey && entry.node) visited.add(entry.node);
       });
+    return { curNode, visited };
+  }
+  // The extent of a page's boxes and arrow waypoints.
+  function pageBounds(page) {
     let maxX = 0,
       maxY = 0;
     for (const id in page.nodes) {
@@ -358,7 +419,10 @@
         maxY = Math.max(maxY, waypoint[1]);
       }
     }
-    let svg =
+    return { maxX, maxY };
+  }
+  function svgOpen(page, { maxX, maxY }) {
+    return (
       '<svg xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Flowchart: ' +
       esc(page.name) +
       '. Use Show as text for a readable version." viewBox="0 0 ' +
@@ -371,244 +435,248 @@
       SVG_COLOUR.HATCH +
       '" stroke-width="1"/></pattern></defs><rect width="100%" height="100%" fill="' +
       SVG_COLOUR.BACKGROUND +
-      '"/>';
-    // edges first, so the boxes are drawn over them
-    let labels = "";
-    for (const edge of page.edges) {
-      const fromNode = page.nodes[EDGE.from(edge)],
-        toNode = page.nodes[EDGE.to(edge)];
-      if (!fromNode || !toNode) continue;
-      const points = route(
-        NODE.box(fromNode),
-        NODE.box(toNode),
-        EDGE.waypoints(edge),
-        EDGE.anchors(edge),
-        EDGE.isElbow(edge),
-      );
-      svg +=
+      '"/>'
+    );
+  }
+  function edgeLabelSVG(label, points) {
+    const [labelX, labelY] = midpoint(points);
+    const labelWidth =
+      label.length * FLOW_GEOMETRY.LABEL_CHAR_WIDTH + FLOW_GEOMETRY.LABEL_PAD;
+    return (
+      '<rect x="' +
+      (labelX - labelWidth / 2) +
+      '" y="' +
+      (labelY - 7) +
+      '" width="' +
+      labelWidth +
+      '" height="13" rx="2" fill="' +
+      SVG_COLOUR.LABEL_BACKGROUND +
+      '"/><text x="' +
+      labelX +
+      '" y="' +
+      (labelY + 3) +
+      '" text-anchor="middle" font-size="10" fill="' +
+      SVG_COLOUR.LABEL_TEXT +
+      '">' +
+      esc(label) +
+      "</text>"
+    );
+  }
+  // An arrow between two boxes: its polyline and, when it has a shown label, the label drawn at its midpoint.
+  function edgeSVG(page, edge) {
+    const fromNode = page.nodes[EDGE.from(edge)],
+      toNode = page.nodes[EDGE.to(edge)];
+    if (!fromNode || !toNode) return { line: "", label: "" };
+    const points = route(
+      NODE.box(fromNode),
+      NODE.box(toNode),
+      EDGE.waypoints(edge),
+      EDGE.anchors(edge),
+      EDGE.isElbow(edge),
+    );
+    const label = EDGE.label(edge);
+    return {
+      line:
         '<polyline points="' +
         points.map((point) => point.join(",")).join(" ") +
         '" fill="none" stroke="' +
         SVG_COLOUR.ARROW +
-        '" stroke-width="1.2" marker-end="url(#arr)"/>';
-      const label = EDGE.label(edge);
-      if (label && !EDGE.hidesLabel(edge)) {
-        const [labelX, labelY] = midpoint(points);
-        const labelWidth =
-          label.length * FLOW_GEOMETRY.LABEL_CHAR_WIDTH +
-          FLOW_GEOMETRY.LABEL_PAD;
-        labels +=
-          '<rect x="' +
-          (labelX - labelWidth / 2) +
-          '" y="' +
-          (labelY - 7) +
-          '" width="' +
-          labelWidth +
-          '" height="13" rx="2" fill="' +
-          SVG_COLOUR.LABEL_BACKGROUND +
-          '"/><text x="' +
-          labelX +
-          '" y="' +
-          (labelY + 3) +
-          '" text-anchor="middle" font-size="10" fill="' +
-          SVG_COLOUR.LABEL_TEXT +
-          '">' +
-          esc(label) +
-          "</text>";
-      }
-    }
-    for (const id in page.nodes) {
-      const node = page.nodes[id];
-      const kind = NODE.kind(node),
-        { x, y, width, height } = NODE.box(node),
-        text = NODE.text(node),
-        nodeExtra = NODE.extra(node);
-      const style = NODE_STYLE[kind];
-      const isCurrent = id === curNode,
-        wasVisited = visited.has(id);
-      let shape = "";
-      const fill = style.fill || "none",
-        stroke = style.stroke || "none";
-      if (kind === NODE_KIND.START || kind === NODE_KIND.ACTION)
-        shape =
-          '<ellipse cx="' +
-          (x + width / 2) +
-          '" cy="' +
-          (y + height / 2) +
-          '" rx="' +
-          width / 2 +
-          '" ry="' +
-          height / 2 +
-          '" fill="' +
-          fill +
-          '" stroke="' +
-          stroke +
-          '"/>';
-      else if (kind === NODE_KIND.NOTE) {
-        if (id === "grp")
-          shape =
-            '<rect x="' +
-            x +
-            '" y="' +
-            y +
-            '" width="' +
-            width +
-            '" height="' +
-            height +
-            '" rx="8" fill="none" stroke="' +
-            SVG_COLOUR.GROUP_STROKE +
-            '" stroke-dasharray="4 3"/>';
-      } else if (kind === NODE_KIND.JUMP)
-        shape =
-          '<rect x="' +
-          x +
-          '" y="' +
-          y +
-          '" width="' +
-          width +
-          '" height="' +
-          height +
-          '" fill="' +
-          fill +
-          '" stroke="' +
-          stroke +
-          '"/><rect x="' +
-          x +
-          '" y="' +
-          y +
-          '" width="8" height="' +
-          height +
-          '" fill="url(#hatch)" stroke="' +
-          stroke +
-          '"/><rect x="' +
-          (x + width - 8) +
-          '" y="' +
-          y +
-          '" width="8" height="' +
-          height +
-          '" fill="url(#hatch)" stroke="' +
-          stroke +
-          '"/>';
-      else
-        shape =
-          '<rect x="' +
-          x +
-          '" y="' +
-          y +
-          '" width="' +
-          width +
-          '" height="' +
-          height +
-          '" rx="' +
-          (kind === NODE_KIND.STEP ? 0 : 8) +
-          '" fill="' +
-          fill +
-          '" stroke="' +
-          stroke +
-          '"/>';
-      if (wasVisited && !isCurrent && kind !== NODE_KIND.NOTE) {
-        const shade =
-          'fill="' +
-          SVG_COLOUR.VISITED_SHADE +
-          '" fill-opacity=".22" stroke="none"';
-        const rx = kind === NODE_KIND.STEP || kind === NODE_KIND.JUMP ? 0 : 8;
-        shape +=
-          kind === NODE_KIND.START || kind === NODE_KIND.ACTION
-            ? '<ellipse cx="' +
-              (x + width / 2) +
-              '" cy="' +
-              (y + height / 2) +
-              '" rx="' +
-              width / 2 +
-              '" ry="' +
-              height / 2 +
-              '" ' +
-              shade +
-              "/>"
-            : '<rect x="' +
-              x +
-              '" y="' +
-              y +
-              '" width="' +
-              width +
-              '" height="' +
-              height +
-              '" rx="' +
-              rx +
-              '" ' +
-              shade +
-              "/>";
-      }
-      if (isCurrent)
-        shape +=
-          '<rect x="' +
-          (x - 5) +
-          '" y="' +
-          (y - 5) +
-          '" width="' +
-          (width + 10) +
-          '" height="' +
-          (height + 10) +
-          '" rx="12" fill="none" stroke="' +
-          SVG_COLOUR.CURRENT_OUTLINE +
-          '" stroke-width="3"/>';
-      let inner;
-      const bold = nodeExtra?.bold;
-      const pad = kind === NODE_KIND.NOTE ? 0 : 4;
-      const label = nodeLabel(kind, id, text, node);
-      const extraHeight = id === "ringNote" ? 14 : 0;
-      inner =
-        '<foreignObject x="' +
-        (x + pad) +
-        '" y="' +
-        (y + pad) +
-        '" width="' +
-        (width - 2 * pad) +
-        '" height="' +
-        (height - 2 * pad + extraHeight) +
-        '"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;display:flex;align-items:' +
-        (nodeExtra?.items || id === "grp" ? "flex-start" : "center") +
-        ";justify-content:center;text-align:center;color:" +
-        SVG_COLOUR.TEXT +
-        ";line-height:1.15;font-size:11px;overflow:hidden;" +
-        (bold ? "font-weight:700;" : "") +
-        '"><div style="width:100%">' +
-        label +
-        "</div></div></foreignObject>";
-      let mark = bold
-        ? '<g transform="translate(' +
-          (x + width - 18) +
-          "," +
-          (y - 8) +
-          ') scale(0.75)" style="color:' +
-          SVG_COLOUR.RING +
-          '"><title>Elven Ring condition (rule 36)</title><circle cx="12" cy="13.5" r="9.5" fill="' +
-          SVG_COLOUR.RING_BACKGROUND +
-          '"/>' +
-          ui.RING_PATH +
-          "</g>"
+        '" stroke-width="1.2" marker-end="url(#arr)"/>',
+      label: label && !EDGE.hidesLabel(edge) ? edgeLabelSVG(label, points) : "",
+    };
+  }
+  const isEllipse = (kind) =>
+    kind === NODE_KIND.START || kind === NODE_KIND.ACTION;
+  const ellipseSVG = ({ x, y, width, height }, attrs) =>
+    '<ellipse cx="' +
+    (x + width / 2) +
+    '" cy="' +
+    (y + height / 2) +
+    '" rx="' +
+    width / 2 +
+    '" ry="' +
+    height / 2 +
+    '" ' +
+    attrs +
+    "/>";
+  const rectSVG = ({ x, y, width, height }, rx, attrs) =>
+    '<rect x="' +
+    x +
+    '" y="' +
+    y +
+    '" width="' +
+    width +
+    '" height="' +
+    height +
+    '" rx="' +
+    rx +
+    '" ' +
+    attrs +
+    "/>";
+  // A box's outline by kind: an ellipse, a hatched jump box, a dashed group frame, a square step or a rounded rectangle.
+  function nodeShapeSVG(kind, id, box, style) {
+    const fill = style.fill || "none",
+      stroke = style.stroke || "none";
+    const paint = 'fill="' + fill + '" stroke="' + stroke + '"';
+    if (isEllipse(kind)) return ellipseSVG(box, paint);
+    if (kind === NODE_KIND.NOTE)
+      return id === "grp"
+        ? rectSVG(
+            box,
+            8,
+            'fill="none" stroke="' +
+              SVG_COLOUR.GROUP_STROKE +
+              '" stroke-dasharray="4 3"',
+          )
         : "";
-      if (id === "ringNote")
-        mark =
-          '<g transform="translate(' +
-          (x - 2) +
-          "," +
-          (y + 8) +
-          ') scale(0.85)" style="color:' +
-          SVG_COLOUR.RING +
-          '"><title>Elven Ring condition (rule 36)</title>' +
-          ui.RING_PATH +
-          "</g>";
-      svg += '<g data-node="' + id + '">' + shape + inner + mark + "</g>";
+    if (kind === NODE_KIND.JUMP) {
+      const { x, y, width, height } = box;
+      return (
+        '<rect x="' +
+        x +
+        '" y="' +
+        y +
+        '" width="' +
+        width +
+        '" height="' +
+        height +
+        '" ' +
+        paint +
+        '/><rect x="' +
+        x +
+        '" y="' +
+        y +
+        '" width="8" height="' +
+        height +
+        '" fill="url(#hatch)" stroke="' +
+        stroke +
+        '"/><rect x="' +
+        (x + width - 8) +
+        '" y="' +
+        y +
+        '" width="8" height="' +
+        height +
+        '" fill="url(#hatch)" stroke="' +
+        stroke +
+        '"/>'
+      );
     }
-    return svg + labels + "</svg>";
+    return rectSVG(box, kind === NODE_KIND.STEP ? 0 : 8, paint);
+  }
+  function visitedShadeSVG(kind, box) {
+    const shade =
+      'fill="' +
+      SVG_COLOUR.VISITED_SHADE +
+      '" fill-opacity=".22" stroke="none"';
+    if (isEllipse(kind)) return ellipseSVG(box, shade);
+    const rx = kind === NODE_KIND.STEP || kind === NODE_KIND.JUMP ? 0 : 8;
+    return rectSVG(box, rx, shade);
+  }
+  function currentOutlineSVG({ x, y, width, height }) {
+    return (
+      '<rect x="' +
+      (x - 5) +
+      '" y="' +
+      (y - 5) +
+      '" width="' +
+      (width + 10) +
+      '" height="' +
+      (height + 10) +
+      '" rx="12" fill="none" stroke="' +
+      SVG_COLOUR.CURRENT_OUTLINE +
+      '" stroke-width="3"/>'
+    );
+  }
+  // The box's text, laid out as HTML inside a foreignObject.
+  function nodeTextSVG(kind, id, node, { x, y, width, height }) {
+    const nodeExtra = NODE.extra(node);
+    const pad = kind === NODE_KIND.NOTE ? 0 : 4;
+    const extraHeight = id === "ringNote" ? 14 : 0;
+    return (
+      '<foreignObject x="' +
+      (x + pad) +
+      '" y="' +
+      (y + pad) +
+      '" width="' +
+      (width - 2 * pad) +
+      '" height="' +
+      (height - 2 * pad + extraHeight) +
+      '"><div xmlns="http://www.w3.org/1999/xhtml" style="width:100%;height:100%;display:flex;align-items:' +
+      (nodeExtra.items || id === "grp" ? "flex-start" : "center") +
+      ";justify-content:center;text-align:center;color:" +
+      SVG_COLOUR.TEXT +
+      ";line-height:1.15;font-size:11px;overflow:hidden;" +
+      (nodeExtra.bold ? "font-weight:700;" : "") +
+      '"><div style="width:100%">' +
+      nodeLabel(kind, id, NODE.text(node), node) +
+      "</div></div></foreignObject>"
+    );
+  }
+  // The ring mark: at the top-right corner of a box with an Elven Ring condition, or beside the ring note.
+  function ringMarkSVG(id, { x, y, width }, bold) {
+    if (id === "ringNote")
+      return (
+        '<g transform="translate(' +
+        (x - 2) +
+        "," +
+        (y + 8) +
+        ') scale(0.85)" style="color:' +
+        SVG_COLOUR.RING +
+        '"><title>Elven Ring condition (rule 36)</title>' +
+        ui.RING_PATH +
+        "</g>"
+      );
+    if (!bold) return "";
+    return (
+      '<g transform="translate(' +
+      (x + width - 18) +
+      "," +
+      (y - 8) +
+      ') scale(0.75)" style="color:' +
+      SVG_COLOUR.RING +
+      '"><title>Elven Ring condition (rule 36)</title><circle cx="12" cy="13.5" r="9.5" fill="' +
+      SVG_COLOUR.RING_BACKGROUND +
+      '"/>' +
+      ui.RING_PATH +
+      "</g>"
+    );
+  }
+  function nodeSVG(id, node, { curNode, visited }) {
+    const kind = NODE.kind(node),
+      box = NODE.box(node);
+    const isCurrent = id === curNode;
+    let shape = nodeShapeSVG(kind, id, box, NODE_STYLE[kind]);
+    if (visited.has(id) && !isCurrent && kind !== NODE_KIND.NOTE)
+      shape += visitedShadeSVG(kind, box);
+    if (isCurrent) shape += currentOutlineSVG(box);
+    return (
+      '<g data-node="' +
+      id +
+      '">' +
+      shape +
+      nodeTextSVG(kind, id, node, box) +
+      ringMarkSVG(id, box, NODE.extra(node).bold) +
+      "</g>"
+    );
+  }
+  function svgPage(pageKey) {
+    const page = FLOW[pageKey];
+    const marks = walkMarks(pageKey);
+    // edges first, so the boxes are drawn over them; the labels last, over everything
+    const edges = page.edges.map((edge) => edgeSVG(page, edge));
+    return (
+      svgOpen(page, pageBounds(page)) +
+      edges.map((edge) => edge.line).join("") +
+      Object.entries(page.nodes)
+        .map(([id, node]) => nodeSVG(id, node, marks))
+        .join("") +
+      edges.map((edge) => edge.label).join("") +
+      "</svg>"
+    );
   }
   function textPage(pageKey) {
     const page = FLOW[pageKey];
-    const state = ui.state,
-      walk = state?.walk;
-    const curNode =
-      walk && !walk.done && walk.page === pageKey ? walk.node : null;
+    const { curNode } = walkMarks(pageKey);
     const nodeName = (id) => {
       const node = page.nodes[id];
       return node
@@ -750,49 +818,31 @@
     }
     return points[points.length - 1];
   }
+
+  // Arrow routing. Boxes are {x, y, width, height}; points and waypoints are [x, y].
+  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+  // A point along a box's top or bottom edge, kept off the corners.
+  const alongTop = (box, px) =>
+    clamp(
+      px,
+      box.x + FLOW_GEOMETRY.SIDE_INSET_X,
+      box.x + box.width - FLOW_GEOMETRY.SIDE_INSET_X,
+    );
+  // A point along a box's left or right edge, kept off the corners.
+  const alongSide = (box, py) =>
+    clamp(
+      py,
+      box.y + FLOW_GEOMETRY.SIDE_INSET_Y,
+      box.y + box.height - FLOW_GEOMETRY.SIDE_INSET_Y,
+    );
   // The point on a box's edge nearest to (px, py): on the top or bottom edge when the point is more above/below than beside it.
   function anchor(box, px, py) {
     const { x, y, width, height } = box;
-    const centreX = x + width / 2,
-      centreY = y + height / 2;
-    const dx = px - centreX,
-      dy = py - centreY;
-    if (Math.abs(dy) * width > Math.abs(dx) * height) {
-      return dy > 0
-        ? [
-            clamp(
-              px,
-              x + FLOW_GEOMETRY.SIDE_INSET_X,
-              x + width - FLOW_GEOMETRY.SIDE_INSET_X,
-            ),
-            y + height,
-          ]
-        : [
-            clamp(
-              px,
-              x + FLOW_GEOMETRY.SIDE_INSET_X,
-              x + width - FLOW_GEOMETRY.SIDE_INSET_X,
-            ),
-            y,
-          ];
-    }
-    return dx > 0
-      ? [
-          x + width,
-          clamp(
-            py,
-            y + FLOW_GEOMETRY.SIDE_INSET_Y,
-            y + height - FLOW_GEOMETRY.SIDE_INSET_Y,
-          ),
-        ]
-      : [
-          x,
-          clamp(
-            py,
-            y + FLOW_GEOMETRY.SIDE_INSET_Y,
-            y + height - FLOW_GEOMETRY.SIDE_INSET_Y,
-          ),
-        ];
+    const dx = px - (x + width / 2),
+      dy = py - (y + height / 2);
+    if (Math.abs(dy) * width > Math.abs(dx) * height)
+      return [alongTop(box, px), dy > 0 ? y + height : y];
+    return [dx > 0 ? x + width : x, alongSide(box, py)];
   }
   // anchor towards a draw.io waypoint: leave from the side the point lies beyond (horizontal when it is outside the box's x-range), like draw.io's orthogonal router
   function waypointAnchor(box, px, py) {
@@ -817,10 +867,13 @@
       ];
     return anchor(box, px, py);
   }
-  const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
   const onTopOrBottomEdge = (box, point) =>
     Math.abs(point[1] - box.y) < FLOW_GEOMETRY.ON_EDGE_TOLERANCE ||
     Math.abs(point[1] - box.y - box.height) < FLOW_GEOMETRY.ON_EDGE_TOLERANCE; // an anchor there means a vertical exit/entry
+  // Two points that differ in both x and y need a bend between them.
+  const needsBend = (from, to) =>
+    Math.abs(to[0] - from[0]) > FLOW_GEOMETRY.STRAIGHT_TOLERANCE &&
+    Math.abs(to[1] - from[1]) > FLOW_GEOMETRY.STRAIGHT_TOLERANCE;
   // A point on a box from a draw.io anchor (fractions of the width and height).
   const anchorAt = (box, anchorFraction) => [
     box.x + box.width * anchorFraction[0],
@@ -868,248 +921,236 @@
       ) + jog
     );
   }
-  // Boxes are {x, y, width, height}; points and waypoints are [x, y].
   function boxCentre(box) {
     return [box.x + box.width / 2, box.y + box.height / 2];
   }
-  function route(fromBox, toBox, waypoints, anchors, elbow) {
+  // Both ends leave their boxes the same way (both right, or both down): step out past the farther one and across.
+  function sameSideDetour(previous, end, exitDir, vertical, jog) {
+    if (vertical) {
+      const outY =
+        exitDir > 0
+          ? Math.max(previous[1], end[1]) + jog
+          : Math.min(previous[1], end[1]) - jog;
+      return [
+        [previous[0], outY],
+        [end[0], outY],
+      ];
+    }
+    const outX =
+      exitDir > 0
+        ? Math.max(previous[0], end[0]) + jog
+        : Math.min(previous[0], end[0]) - jog;
+    return [
+      [outX, previous[1]],
+      [outX, end[1]],
+    ];
+  }
+  // The ends face away from each other: step out of each box and run along a lane between (or beside) them.
+  function oppositeSideDetour(
+    fromBox,
+    toBox,
+    previous,
+    end,
+    exitDir,
+    vertical,
+    jog,
+  ) {
+    if (vertical) {
+      const outY = previous[1] + jog * exitDir,
+        inY = end[1] - jog * exitDir;
+      const laneX = lane(fromBox, toBox, "x", end[0] < previous[0], jog);
+      return [
+        [previous[0], outY],
+        [laneX, outY],
+        [laneX, inY],
+        [end[0], inY],
+      ];
+    }
+    const outX = previous[0] + jog * exitDir,
+      inX = end[0] - jog * exitDir;
+    const laneY = lane(fromBox, toBox, "y", end[1] < previous[1], jog);
+    return [
+      [outX, previous[1]],
+      [outX, laneY],
+      [inX, laneY],
+      [inX, end[1]],
+    ];
+  }
+  // Both ends on the same axis: a Z through the midpoint.
+  function midpointBend(previous, end, vertical) {
+    if (vertical) {
+      const midY = (previous[1] + end[1]) / 2;
+      return [
+        [previous[0], midY],
+        [end[0], midY],
+      ];
+    }
+    const midX = (previous[0] + end[0]) / 2;
+    return [
+      [midX, previous[1]],
+      [midX, end[1]],
+    ];
+  }
+  // One end vertical, the other horizontal: a single corner.
+  const cornerBend = (previous, end, exitVertical) =>
+    exitVertical ? [previous[0], end[1]] : [end[0], previous[1]];
+  // The bend between the last point reached and the entry point, chosen by how the two ends leave their boxes.
+  function bendPoints(
+    fromBox,
+    toBox,
+    start,
+    previous,
+    end,
+    { exitVertical, entryVertical, hasWaypoints },
+  ) {
+    const jog = FLOW_GEOMETRY.JOG;
+    const sameAxis = exitVertical === entryVertical;
+    if (sameAxis && !hasWaypoints) {
+      const exitDir = exitDirection(fromBox, start, exitVertical),
+        entryDir = exitDirection(toBox, end, entryVertical);
+      if (exitDir === entryDir)
+        return sameSideDetour(previous, end, exitDir, exitVertical, jog);
+      const axis = exitVertical ? 1 : 0;
+      if ((end[axis] - previous[axis]) * exitDir < 0)
+        return oppositeSideDetour(
+          fromBox,
+          toBox,
+          previous,
+          end,
+          exitDir,
+          exitVertical,
+          jog,
+        );
+    }
+    if (sameAxis) return midpointBend(previous, end, exitVertical);
+    return [cornerBend(previous, end, exitVertical)];
+  }
+  // draw.io elbowEdgeStyle: one elbow positioned by the first waypoint.
+  function routeElbow(fromBox, toBox, waypoints, anchors) {
+    const start = anchorAt(fromBox, anchors.ex),
+      end = anchorAt(toBox, anchors.en);
+    const exitVertical = anchors.ex[1] === 0 || anchors.ex[1] === 1;
+    return exitVertical
+      ? [start, [start[0], waypoints[0][1]], [end[0], waypoints[0][1]], end]
+      : [start, [waypoints[0][0], start[1]], [waypoints[0][0], end[1]], end];
+  }
+  // Explicit draw.io exit/entry anchors (fractions of the box); a missing side falls back to the nearest-point heuristic.
+  function routeWithAnchors(fromBox, toBox, waypoints, anchors) {
     const fromCentre = boxCentre(fromBox),
       toCentre = boxCentre(toBox);
-    if (elbow && waypoints?.length && anchors?.ex && anchors.en) {
-      // draw.io elbowEdgeStyle: one elbow positioned by the first waypoint
-      const start = anchorAt(fromBox, anchors.ex),
-        end = anchorAt(toBox, anchors.en);
-      const exitVertical = anchors.ex[1] === 0 || anchors.ex[1] === 1;
-      return exitVertical
-        ? [start, [start[0], waypoints[0][1]], [end[0], waypoints[0][1]], end]
-        : [start, [waypoints[0][0], start[1]], [waypoints[0][0], end[1]], end];
+    const hasWaypoints = !!waypoints?.length;
+    const first = towards(waypoints?.[0], anchors.en, toBox, toCentre),
+      last = towards(waypoints?.at(-1), anchors.ex, fromBox, fromCentre);
+    const start = edgeEnd(fromBox, anchors.ex, hasWaypoints, first);
+    const end = edgeEnd(toBox, anchors.en, hasWaypoints, last);
+    const exitVertical = onTopOrBottomEdge(fromBox, start),
+      entryVertical = onTopOrBottomEdge(toBox, end);
+    const points = [start];
+    let previous = start;
+    for (const waypoint of waypoints || []) {
+      if (needsBend(previous, waypoint))
+        points.push(
+          exitVertical
+            ? [previous[0], waypoint[1]]
+            : [waypoint[0], previous[1]],
+        );
+      points.push(waypoint);
+      previous = waypoint;
     }
-    if (anchors && (anchors.ex || anchors.en)) {
-      // explicit draw.io exit/entry anchors (fractions of the box); a missing side falls back to the nearest-point heuristic
-      const first = towards(waypoints?.[0], anchors.en, toBox, toCentre),
-        last = towards(waypoints?.at(-1), anchors.ex, fromBox, fromCentre);
-      const start = edgeEnd(fromBox, anchors.ex, waypoints?.length, first);
-      const end = edgeEnd(toBox, anchors.en, waypoints?.length, last);
-      const exitVertical = onTopOrBottomEdge(fromBox, start),
-        entryVertical = onTopOrBottomEdge(toBox, end);
-      const points = [start];
-      let previous = start;
-      if (waypoints?.length) {
-        for (const waypoint of waypoints) {
-          if (
-            Math.abs(waypoint[0] - previous[0]) >
-              FLOW_GEOMETRY.STRAIGHT_TOLERANCE &&
-            Math.abs(waypoint[1] - previous[1]) >
-              FLOW_GEOMETRY.STRAIGHT_TOLERANCE
-          )
-            points.push(
-              exitVertical
-                ? [previous[0], waypoint[1]]
-                : [waypoint[0], previous[1]],
-            );
-          points.push(waypoint);
-          previous = waypoint;
-        }
-      }
-      if (
-        Math.abs(end[0] - previous[0]) > FLOW_GEOMETRY.STRAIGHT_TOLERANCE &&
-        Math.abs(end[1] - previous[1]) > FLOW_GEOMETRY.STRAIGHT_TOLERANCE
-      ) {
-        const jog = FLOW_GEOMETRY.JOG;
-        const exitDir = exitDirection(fromBox, start, exitVertical),
-          entryDir = exitDirection(toBox, end, entryVertical);
-        if (
-          !waypoints?.length &&
-          !exitVertical &&
-          !entryVertical &&
-          exitDir === entryDir
-        ) {
-          const outX =
-            exitDir > 0
-              ? Math.max(previous[0], end[0]) + jog
-              : Math.min(previous[0], end[0]) - jog;
-          points.push([outX, previous[1]], [outX, end[1]]);
-        } else if (
-          !waypoints?.length &&
-          !exitVertical &&
-          !entryVertical &&
-          (end[0] - previous[0]) * exitDir < 0
-        ) {
-          const outX = previous[0] + jog * exitDir,
-            inX = end[0] - jog * exitDir;
-          const laneY = lane(fromBox, toBox, "y", end[1] < previous[1], jog);
-          points.push(
-            [outX, previous[1]],
-            [outX, laneY],
-            [inX, laneY],
-            [inX, end[1]],
-          );
-        } else if (
-          !waypoints?.length &&
-          exitVertical &&
-          entryVertical &&
-          exitDir === entryDir
-        ) {
-          const outY =
-            exitDir > 0
-              ? Math.max(previous[1], end[1]) + jog
-              : Math.min(previous[1], end[1]) - jog;
-          points.push([previous[0], outY], [end[0], outY]);
-        } else if (
-          !waypoints?.length &&
-          exitVertical &&
-          entryVertical &&
-          (end[1] - previous[1]) * exitDir < 0
-        ) {
-          const outY = previous[1] + jog * exitDir,
-            inY = end[1] - jog * exitDir;
-          const laneX = lane(fromBox, toBox, "x", end[0] < previous[0], jog);
-          points.push(
-            [previous[0], outY],
-            [laneX, outY],
-            [laneX, inY],
-            [end[0], inY],
-          );
-        } else if (exitVertical && entryVertical) {
-          const midY = (previous[1] + end[1]) / 2;
-          points.push([previous[0], midY], [end[0], midY]);
-        } else if (!exitVertical && !entryVertical) {
-          const midX = (previous[0] + end[0]) / 2;
-          points.push([midX, previous[1]], [midX, end[1]]);
-        } else if (exitVertical) points.push([previous[0], end[1]]);
-        else points.push([end[0], previous[1]]);
-      }
-      points.push(end);
-      return points;
-    }
-    if (waypoints?.length) {
-      const start = waypointAnchor(fromBox, waypoints[0][0], waypoints[0][1]);
-      const end = waypointAnchor(
-        toBox,
-        waypoints[waypoints.length - 1][0],
-        waypoints[waypoints.length - 1][1],
+    if (needsBend(previous, end))
+      points.push(
+        ...bendPoints(fromBox, toBox, start, previous, end, {
+          exitVertical,
+          entryVertical,
+          hasWaypoints,
+        }),
       );
-      const points = [start];
-      let previous = start;
-      for (const waypoint of waypoints) {
-        if (
-          Math.abs(waypoint[0] - previous[0]) >
-            FLOW_GEOMETRY.STRAIGHT_TOLERANCE &&
-          Math.abs(waypoint[1] - previous[1]) > FLOW_GEOMETRY.STRAIGHT_TOLERANCE
-        )
-          points.push([waypoint[0], previous[1]]);
-        points.push(waypoint);
-        previous = waypoint;
-      }
-      if (
-        Math.abs(end[0] - previous[0]) > FLOW_GEOMETRY.STRAIGHT_TOLERANCE &&
-        Math.abs(end[1] - previous[1]) > FLOW_GEOMETRY.STRAIGHT_TOLERANCE
-      )
-        points.push([previous[0], end[1]]);
-      points.push(end);
-      return points;
+    points.push(end);
+    return points;
+  }
+  // draw.io waypoints without anchors: leave and enter facing the nearest waypoint, bending horizontally first.
+  function routeWithWaypoints(fromBox, toBox, waypoints) {
+    const start = waypointAnchor(fromBox, waypoints[0][0], waypoints[0][1]);
+    const end = waypointAnchor(
+      toBox,
+      waypoints[waypoints.length - 1][0],
+      waypoints[waypoints.length - 1][1],
+    );
+    const points = [start];
+    let previous = start;
+    for (const waypoint of waypoints) {
+      if (needsBend(previous, waypoint))
+        points.push([waypoint[0], previous[1]]);
+      points.push(waypoint);
+      previous = waypoint;
     }
+    if (needsBend(previous, end)) points.push([previous[0], end[1]]);
+    points.push(end);
+    return points;
+  }
+  // A straight or Z-shaped line between two points, bending at the midpoint of the given axis (0 = x, 1 = y).
+  function zigzag(start, finish, axis) {
+    const other = 1 - axis;
+    if (
+      Math.abs(start[other] - finish[other]) < FLOW_GEOMETRY.STRAIGHT_TOLERANCE
+    )
+      return [start, finish];
+    const mid = (start[axis] + finish[axis]) / 2;
+    const bend = (point) => (axis === 1 ? [point[0], mid] : [mid, point[1]]);
+    return [start, bend(start), bend(finish), finish];
+  }
+  // Boxes one above the other: leave from the facing top or bottom edge, aimed at the other box's centre.
+  function verticalRoute(fromBox, toBox, fromCentre, toCentre, downward) {
+    const start = [
+        alongTop(fromBox, toCentre[0]),
+        downward ? fromBox.y + fromBox.height : fromBox.y,
+      ],
+      finish = [
+        alongTop(toBox, fromCentre[0]),
+        downward ? toBox.y : toBox.y + toBox.height,
+      ];
+    return zigzag(start, finish, 1);
+  }
+  // Boxes side by side: leave from the facing left or right edge, aimed at the other box's centre.
+  function horizontalRoute(fromBox, toBox, fromCentre, toCentre, rightward) {
+    const start = [
+        rightward ? fromBox.x + fromBox.width : fromBox.x,
+        alongSide(fromBox, toCentre[1]),
+      ],
+      finish = [
+        rightward ? toBox.x : toBox.x + toBox.width,
+        alongSide(toBox, fromCentre[1]),
+      ];
+    return zigzag(start, finish, 0);
+  }
+  // No anchors and no waypoints: route by where the boxes lie relative to each other.
+  function routeGeometric(fromBox, toBox) {
+    const fromCentre = boxCentre(fromBox),
+      toCentre = boxCentre(toBox);
     const below = toCentre[1] > fromBox.y + fromBox.height,
       above = toCentre[1] + toBox.height / 2 < fromBox.y,
       right = toCentre[0] > fromBox.x + fromBox.width,
       left = toCentre[0] + toBox.width / 2 < fromBox.x;
-    if (
-      (below && !(right || left)) ||
-      (below &&
-        Math.abs(toCentre[0] - fromCentre[0]) <
-          Math.abs(toCentre[1] - fromCentre[1]))
-    ) {
-      const start = [
-          clamp(
-            toCentre[0],
-            fromBox.x + FLOW_GEOMETRY.SIDE_INSET_X,
-            fromBox.x + fromBox.width - FLOW_GEOMETRY.SIDE_INSET_X,
-          ),
-          fromBox.y + fromBox.height,
-        ],
-        finish = [
-          clamp(
-            fromCentre[0],
-            toBox.x + FLOW_GEOMETRY.SIDE_INSET_X,
-            toBox.x + toBox.width - FLOW_GEOMETRY.SIDE_INSET_X,
-          ),
-          toBox.y,
-        ];
-      const midY = (start[1] + finish[1]) / 2;
-      return Math.abs(start[0] - finish[0]) < 1
-        ? [start, finish]
-        : [start, [start[0], midY], [finish[0], midY], finish];
-    }
-    if (
-      above &&
+    const moreVertical =
       Math.abs(toCentre[0] - fromCentre[0]) <
-        Math.abs(toCentre[1] - fromCentre[1])
-    ) {
-      const start = [
-          clamp(
-            toCentre[0],
-            fromBox.x + FLOW_GEOMETRY.SIDE_INSET_X,
-            fromBox.x + fromBox.width - FLOW_GEOMETRY.SIDE_INSET_X,
-          ),
-          fromBox.y,
-        ],
-        finish = [
-          clamp(
-            fromCentre[0],
-            toBox.x + FLOW_GEOMETRY.SIDE_INSET_X,
-            toBox.x + toBox.width - FLOW_GEOMETRY.SIDE_INSET_X,
-          ),
-          toBox.y + toBox.height,
-        ];
-      const midY = (start[1] + finish[1]) / 2;
-      return Math.abs(start[0] - finish[0]) < 1
-        ? [start, finish]
-        : [start, [start[0], midY], [finish[0], midY], finish];
-    }
-    if (right) {
-      const start = [
-          fromBox.x + fromBox.width,
-          clamp(
-            toCentre[1],
-            fromBox.y + FLOW_GEOMETRY.SIDE_INSET_Y,
-            fromBox.y + fromBox.height - FLOW_GEOMETRY.SIDE_INSET_Y,
-          ),
-        ],
-        finish = [
-          toBox.x,
-          clamp(
-            fromCentre[1],
-            toBox.y + FLOW_GEOMETRY.SIDE_INSET_Y,
-            toBox.y + toBox.height - FLOW_GEOMETRY.SIDE_INSET_Y,
-          ),
-        ];
-      const midX = (start[0] + finish[0]) / 2;
-      return Math.abs(start[1] - finish[1]) < 1
-        ? [start, finish]
-        : [start, [midX, start[1]], [midX, finish[1]], finish];
-    }
-    const start = [
-        fromBox.x,
-        clamp(
-          toCentre[1],
-          fromBox.y + FLOW_GEOMETRY.SIDE_INSET_Y,
-          fromBox.y + fromBox.height - FLOW_GEOMETRY.SIDE_INSET_Y,
-        ),
-      ],
-      finish = [
-        toBox.x + toBox.width,
-        clamp(
-          fromCentre[1],
-          toBox.y + FLOW_GEOMETRY.SIDE_INSET_Y,
-          toBox.y + toBox.height - FLOW_GEOMETRY.SIDE_INSET_Y,
-        ),
-      ];
-    const midX = (start[0] + finish[0]) / 2;
-    return Math.abs(start[1] - finish[1]) < 1
-      ? [start, finish]
-      : [start, [midX, start[1]], [midX, finish[1]], finish];
+      Math.abs(toCentre[1] - fromCentre[1]);
+    if ((below && !(right || left)) || (below && moreVertical))
+      return verticalRoute(fromBox, toBox, fromCentre, toCentre, true);
+    if (above && moreVertical)
+      return verticalRoute(fromBox, toBox, fromCentre, toCentre, false);
+    return horizontalRoute(fromBox, toBox, fromCentre, toCentre, right);
   }
-  // ---------- calculator ----------
+  // The polyline of an arrow from one box to another, using whatever draw.io recorded for it.
+  function route(fromBox, toBox, waypoints, anchors, elbow) {
+    if (elbow && waypoints?.length && anchors?.ex && anchors.en)
+      return routeElbow(fromBox, toBox, waypoints, anchors);
+    if (anchors && (anchors.ex || anchors.en))
+      return routeWithAnchors(fromBox, toBox, waypoints, anchors);
+    if (waypoints?.length) return routeWithWaypoints(fromBox, toBox, waypoints);
+    return routeGeometric(fromBox, toBox);
+  }
+
+  // The army value calculator.
   const CALC_MAX = { reg: 10, elite: 10, lead: 10, cotw: 5 };
   // The army value rules (glossary: *value*).
   const ARMY_VALUE = {
@@ -1150,10 +1191,7 @@
       '</p><div class="calc tracker">' +
       number("reg", "Regular units") +
       number("elite", "Elite units") +
-      number(
-        "lead",
-        "Leadership (Nazgûl, leaders, minions, Companions)\u00b9",
-      ) +
+      number("lead", "Leadership (Nazgûl, leaders, minions, Companions)¹") +
       number("cotw", "Captains of the West (Free Peoples only)") +
       checkbox("fort", "Defends in a Fortification or City region") +
       checkbox(
@@ -1167,7 +1205,7 @@
       calcOut() +
       '</div><p class="notice" style="margin-top:10px">' +
       fmt(
-        "\u00b9 When testing whether an army is *mobile*, do not count Saruman in its leadership.",
+        "¹ When testing whether an army is *mobile*, do not count Saruman in its leadership.",
       ) +
       "</p></div></div>"
     );
@@ -1215,7 +1253,8 @@
       "</ul>"
     );
   }
-  // ---------- transfer helpers (save file, debug log) ----------
+
+  // Transfer helpers (save file, debug log).
   // The artifact host offers a downloads capability; a plain <a download> may be inert for viewers, so the copy button (and the text box) is the fallback.
   async function downloadText({ fileName, data, noteEl, fallbackLabel }) {
     try {
@@ -1260,7 +1299,8 @@
       noteEl.textContent = "Copy the text from the box below.";
     }
   }
-  // ---------- debug log ----------
+
+  // The debug log modal.
   function environment() {
     const mediaMatches = (query) => {
       try {
@@ -1344,10 +1384,6 @@
     };
   }
   function debugText() {
-    let opts = null;
-    try {
-      opts = JSON.parse(ui.storageGet(ui.STORAGE_KEY.OPTIONS) || "null");
-    } catch {}
     return debug.text({
       state: ui.state,
       history: ui.history,
@@ -1356,7 +1392,10 @@
       dom: domSnapshot(),
       storage: storageOverview(),
       brokenAutosave: ui.storageGet(ui.STORAGE_KEY.BROKEN_AUTOSAVE) || null,
-      opts,
+      opts: ui.parseJSONOr(
+        ui.storageGet(ui.STORAGE_KEY.OPTIONS) || "null",
+        null,
+      ),
     });
   }
   function debugHTML() {
@@ -1369,7 +1408,7 @@
       '<p style="margin-top:12px"><label for="dbgTxt" class="notice">The log (select all and copy if the buttons do not work)</label><textarea id="dbgTxt" readonly spellcheck="false" style="min-height:200px"></textarea></p></div>'
     );
   }
-  function wireDebug(el) {
+  function wireDebug(modal, el) {
     const textarea = el.querySelector("#dbgTxt");
     if (!textarea) return;
     const refresh = () => {
@@ -1412,14 +1451,10 @@
       });
     };
   }
-  // ---------- save / load ----------
-  function slots() {
-    try {
-      return JSON.parse(ui.storageGet(ui.STORAGE_KEY.SLOTS) || "[]");
-    } catch {
-      return [];
-    }
-  }
+
+  // Save and load.
+  const slots = () =>
+    ui.parseJSONOr(ui.storageGet(ui.STORAGE_KEY.SLOTS) || "[]", []);
   function saveHTML() {
     const slotList = slots();
     let html =
@@ -1451,20 +1486,20 @@
   ui.loadHTML = function () {
     return '<p class="notice" style="margin:0 0 6px">Paste a save code, or choose a save file.</p><label for="loadTxt" class="notice">Save code</label><textarea id="loadTxt" placeholder="Paste the save code here"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="loadTxtBtn">Load from code</button><label class="notice">Save file <input type="file" id="loadFile" accept=".json,application/json"></label></div><div id="loadErr" class="notice" role="alert" style="color:var(--bad)"></div>';
   };
-  // Replace the game with a parsed save, confirming first when a game is in progress.
-  function loadGame(save, title) {
-    const replace = () => {
-      debug.begin(
-        { a: "load", title, turn: save.turn, version: save.appVersion },
-        ui.state,
-      );
-      ui.history = [];
-      ui.state = save;
-      debug.finishAction(save);
-      ui.closeModal();
-      ui.commit();
-    };
-    if (!ui.state) return replace();
+  // Replace the game with a parsed save.
+  function replaceGame(save, title) {
+    debug.begin(
+      { a: "load", title, turn: save.turn, version: save.appVersion },
+      ui.state,
+    );
+    ui.history = [];
+    ui.state = save;
+    debug.finishAction(save);
+    ui.closeModal();
+    ui.commit();
+  }
+  // Ask before replacing a game in progress; No returns to the save modal.
+  function confirmReplace(save, title) {
     ui.ask({
       title,
       text: "The game in progress will be replaced.",
@@ -1473,10 +1508,14 @@
         { v: "no", label: "Cancel" },
       ],
       onPick: (choice) => {
-        if (choice === "ok") replace();
+        if (choice === "ok") replaceGame(save, title);
         else ui.openModal(MODAL.SAVE);
       },
     });
+  }
+  function loadGame(save, title) {
+    if (ui.state) confirmReplace(save, title);
+    else replaceGame(save, title);
   }
   ui.wireLoad = function (root) {
     const doLoad = (text) => {
@@ -1500,6 +1539,8 @@
         file.text().then(doLoad);
       };
   };
+
+  // Settings.
   function settingsHTML() {
     const settings = ui.state.settings;
     const checkbox = (key, label, description, disabled) =>
@@ -1538,6 +1579,23 @@
       "</div>"
     );
   }
+  // A setting changed mid-game: the decks are rebuilt when WoME changes (or cards come on before any were dealt), and the
+  // Faction die leaves the pool when WoME goes off.
+  function applySetting(key, checked) {
+    const state = ui.state;
+    state.settings[key] = checked;
+    if (
+      key === "wome" ||
+      (key === "cards" &&
+        checked &&
+        !state.cards.decks.C.length &&
+        !state.cards.hand.length)
+    ) {
+      engine.buildDecks(state);
+      engine.log(state, "Decks rebuilt.");
+    }
+    if (key === "wome" && !checked) state.dice.factionDie = false;
+  }
   function jumpHTML() {
     let html =
       '<div class="body"><p class="notice">Walk a page from any green start point — for example when a card tells Queller to make a choice (rule 12), to place Nazgûl, or to choose a discard. The walk uses no die unless you pick one.</p><div style="display:grid;gap:8px;grid-template-columns:1fr auto;align-items:center"><select id="jumpSel" aria-label="Start point">';
@@ -1572,22 +1630,25 @@
       '</select></div><div style="margin-top:12px"><button class="btn primary" id="jumpGo">Walk</button></div></div>';
     return html;
   }
-  function wireModal(modal) {
-    const el = ui.find("#modal");
-    el.querySelectorAll("[data-fp]").forEach(
-      (button) =>
-        (button.onclick = () => {
-          flowPage = button.dataset.fp;
-          ui.renderModal();
-        }),
-    );
-    const flowToggleBtn = ui.find("#flowToggle");
-    if (flowToggleBtn)
-      flowToggleBtn.onclick = () => {
-        flowText = !flowText;
+
+  // Wiring: one function per modal, run after its element is in the page.
+  function wireFlowModal(modal, el) {
+    ui.onClickEach(
+      "[data-fp]",
+      (button) => {
+        flowPage = button.dataset.fp;
         ui.renderModal();
-        ui.find("#flowToggle").focus();
-      };
+      },
+      el,
+    );
+    el.querySelector("#flowToggle").onclick = () => {
+      flowText = !flowText;
+      ui.renderModal();
+      ui.find("#flowToggle").focus();
+    };
+  }
+  function wireCalcModal(modal, el) {
+    const showResult = () => (el.querySelector(".out").innerHTML = calcOut());
     el.querySelectorAll("[data-c]").forEach(
       (input) =>
         (input.oninput = () => {
@@ -1596,149 +1657,146 @@
             input.type === "checkbox"
               ? input.checked
               : Math.max(0, +input.value || 0);
-          el.querySelector(".out").innerHTML = calcOut();
+          showResult();
         }),
     );
-    el.querySelectorAll("[data-cs]").forEach(
-      (button) =>
-        (button.onclick = () => {
-          const key = button.dataset.cs;
-          calc[key] = Math.max(
-            0,
-            Math.min(CALC_MAX[key], calc[key] + +button.dataset.d),
+    ui.onClickEach(
+      "[data-cs]",
+      (button) => {
+        const key = button.dataset.cs;
+        calc[key] = Math.max(
+          0,
+          Math.min(CALC_MAX[key], calc[key] + +button.dataset.d),
+        );
+        el.querySelector("#c-" + key + "-n").textContent = calc[key];
+        showResult();
+      },
+      el,
+    );
+    el.querySelector("#calcClear").onclick = () => {
+      Object.assign(calc, CALC_DEFAULTS);
+      for (const key in CALC_MAX) {
+        const counter = el.querySelector("#c-" + key + "-n");
+        if (counter) counter.textContent = calc[key];
+      }
+      el.querySelectorAll("[data-c]").forEach((input) => {
+        if (input.type === "checkbox") input.checked = !!calc[input.dataset.c];
+        else input.value = calc[input.dataset.c];
+      });
+      showResult();
+    };
+  }
+  function wireSaveModal(modal, el) {
+    ui.onClickEach(
+      "[data-save]",
+      (button) => {
+        debug.action({ a: "saveSlot", slot: +button.dataset.save }, ui.state);
+        const slotList = slots();
+        slotList[+button.dataset.save] = {
+          turn: ui.state.turn,
+          when: new Date().toLocaleString(),
+          data: JSON.stringify(ui.state),
+        };
+        ui.storageSet(ui.STORAGE_KEY.SLOTS, JSON.stringify(slotList));
+        ui.renderModal();
+      },
+      el,
+    );
+    ui.onClickEach(
+      "[data-load]",
+      (button) => {
+        const slot = slots()[+button.dataset.load];
+        if (slot)
+          loadGame(
+            ui.loadJSON(slot.data),
+            "Load slot " + (+button.dataset.load + 1) + "?",
           );
-          el.querySelector("#c-" + key + "-n").textContent = calc[key];
-          el.querySelector(".out").innerHTML = calcOut();
-        }),
+      },
+      el,
     );
-    const calcClearBtn = ui.find("#calcClear");
-    if (calcClearBtn)
-      calcClearBtn.onclick = () => {
-        Object.assign(calc, CALC_DEFAULTS);
-        for (const key in CALC_MAX) {
-          const counter = el.querySelector("#c-" + key + "-n");
-          if (counter) counter.textContent = calc[key];
-        }
-        el.querySelectorAll("[data-c]").forEach((input) => {
-          if (input.type === "checkbox")
-            input.checked = !!calc[input.dataset.c];
-          else input.value = calc[input.dataset.c];
-        });
-        el.querySelector(".out").innerHTML = calcOut();
-      };
-    el.querySelectorAll("[data-save]").forEach(
-      (button) =>
-        (button.onclick = () => {
-          debug.action({ a: "saveSlot", slot: +button.dataset.save }, ui.state);
-          const slotList = slots();
-          slotList[+button.dataset.save] = {
-            turn: ui.state.turn,
-            when: new Date().toLocaleString(),
-            data: JSON.stringify(ui.state),
-          };
-          ui.storageSet(ui.STORAGE_KEY.SLOTS, JSON.stringify(slotList));
-          ui.renderModal();
-        }),
-    );
-    el.querySelectorAll("[data-load]").forEach(
-      (button) =>
-        (button.onclick = () => {
-          const slot = slots()[+button.dataset.load];
-          if (slot)
-            loadGame(
-              ui.loadJSON(slot.data),
-              "Load slot " + (+button.dataset.load + 1) + "?",
-            );
-        }),
-    );
-    const downloadBtn = ui.find("#dlBtn");
-    if (downloadBtn)
-      downloadBtn.onclick = () =>
-        downloadText({
-          fileName: "queller-turn" + ui.state.turn + ".json",
-          data: JSON.stringify(ui.state),
-          noteEl: ui.find("#dlNote"),
-          fallbackLabel: "Copy save code",
-        });
-    const copyBtn = ui.find("#copyBtn");
-    if (copyBtn)
-      copyBtn.onclick = () =>
-        copyText({
-          data: JSON.stringify(ui.state),
-          noteEl: ui.find("#dlNote"),
-          label: "Save code",
-          textarea: ui.find("#loadTxt"),
-        });
-    const debugOpenBtn = ui.find("#dbgOpen");
-    if (debugOpenBtn) debugOpenBtn.onclick = () => ui.openModal(MODAL.DEBUG);
-    wireDebug(el);
+    el.querySelector("#dlBtn").onclick = () =>
+      downloadText({
+        fileName: "queller-turn" + ui.state.turn + ".json",
+        data: JSON.stringify(ui.state),
+        noteEl: el.querySelector("#dlNote"),
+        fallbackLabel: "Copy save code",
+      });
+    el.querySelector("#copyBtn").onclick = () =>
+      copyText({
+        data: JSON.stringify(ui.state),
+        noteEl: el.querySelector("#dlNote"),
+        label: "Save code",
+        textarea: el.querySelector("#loadTxt"),
+      });
     ui.wireLoad(el);
+  }
+  function wireSettingsModal(modal, el) {
+    el.querySelector("#dbgOpen").onclick = () => ui.openModal(MODAL.DEBUG);
     el.querySelectorAll("[data-set]").forEach(
       (input) =>
         (input.onchange = () =>
           ui.act(
             () => {
-              const key = input.dataset.set;
-              ui.state.settings[key] = input.checked;
-              if (
-                key === "wome" ||
-                (key === "cards" &&
-                  input.checked &&
-                  !ui.state.cards.decks.C.length &&
-                  !ui.state.cards.hand.length)
-              ) {
-                engine.buildDecks(ui.state);
-                engine.log(ui.state, "Decks rebuilt.");
-              }
-              if (key === "wome" && !input.checked) {
-                ui.state.dice.factionDie = false;
-              }
+              applySetting(input.dataset.set, input.checked);
               ui.renderModal();
             },
             { a: "setting", key: input.dataset.set, value: input.checked },
           )),
     );
-    el.querySelectorAll("[data-ask]").forEach(
-      (button) =>
-        (button.onclick = () => {
-          const spec = modal.arg;
-          const input = ui.find("#askInput");
-          const inputValue = input ? input.value : undefined;
-          debug.action(
-            {
-              a: "ask",
-              title: spec.title,
-              pick: button.dataset.ask,
-              input: inputValue,
-            },
+  }
+  function wireAskModal(modal, el) {
+    ui.onClickEach(
+      "[data-ask]",
+      (button) => {
+        const spec = modal.arg;
+        const input = ui.find("#askInput");
+        const inputValue = input ? input.value : undefined;
+        debug.action(
+          {
+            a: "ask",
+            title: spec.title,
+            pick: button.dataset.ask,
+            input: inputValue,
+          },
+          ui.state,
+        );
+        ui.closeModal();
+        if (spec.onPick) spec.onPick(button.dataset.ask, inputValue);
+      },
+      el,
+    );
+  }
+  function wireJumpModal(modal, el) {
+    el.querySelector("#jumpGo").onclick = () => {
+      const [pageKey, id] = el.querySelector("#jumpSel").value.split("|");
+      const die = el.querySelector("#jumpDie").value || null;
+      ui.act(
+        () => {
+          ui.state.walk = null;
+          engine.startWalk(
             ui.state,
+            pageKey,
+            NODE.text(FLOW[pageKey].nodes[id]),
+            { die },
           );
           ui.closeModal();
-          if (spec.onPick) spec.onPick(button.dataset.ask, inputValue);
-        }),
-    );
-
-    const jumpGoBtn = ui.find("#jumpGo");
-    if (jumpGoBtn)
-      jumpGoBtn.onclick = () => {
-        const [pageKey, id] = ui.find("#jumpSel").value.split("|");
-        const die = ui.find("#jumpDie").value || null;
-        ui.act(
-          () => {
-            ui.state.walk = null;
-            engine.startWalk(
-              ui.state,
-              pageKey,
-              NODE.text(FLOW[pageKey].nodes[id]),
-              {
-                die,
-              },
-            );
-            ui.closeModal();
-          },
-          { a: "jump", page: pageKey, start: id, die },
-        );
-      };
+        },
+        { a: "jump", page: pageKey, start: id, die },
+      );
+    };
+  }
+  const MODAL_WIRERS = {
+    [MODAL.FLOW]: wireFlowModal,
+    [MODAL.CALC]: wireCalcModal,
+    [MODAL.SAVE]: wireSaveModal,
+    [MODAL.SETTINGS]: wireSettingsModal,
+    [MODAL.ASK]: wireAskModal,
+    [MODAL.JUMP]: wireJumpModal,
+    [MODAL.DEBUG]: wireDebug,
+  };
+  function wireModal(modal, el) {
+    const wire = MODAL_WIRERS[modal.name];
+    if (wire) wire(modal, el);
   }
   window.QBUI.svgPage = svgPage;
   document.addEventListener("DOMContentLoaded", ui.boot);

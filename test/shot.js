@@ -43,6 +43,13 @@ const fs = require("node:fs"),
     path: path.join(__dirname, "shot-full.png"),
     fullPage: true,
   });
+  // the flowchart viewer: a visual oracle for the arrow routing
+  await page.click('[data-modal="flow"]');
+  await page.screenshot({
+    path: path.join(__dirname, "shot-flow.png"),
+    fullPage: true,
+  });
+  await page.click("#mclose");
   await page.evaluate(() => {
     window.QBUI.act(() => {
       window.QBUI.state.settings.tracker = false;
