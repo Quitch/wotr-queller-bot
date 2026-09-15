@@ -14,19 +14,24 @@ const fail = (message) => {
 };
 // A "PAGE.node" string literal, as the walker's handler tables and jump specs use them.
 const NODE_KEY = /"([A-Z0-9]+)\.([A-Za-z0-9]+)"/g;
-// Every "PAGE.node" key in walk.js names a real node. Returns how many keys were checked, so a regex that stops matching is visible.
+const WALK_DIR = path.join(import.meta.dirname, "..", "src", "walk");
+const MIN_NODE_KEYS = 129; // the keys the walker held when this check was written; a split that lost a file would show here
+// Every "PAGE.node" key in the walker's modules names a real node. Returns how many keys were checked, so a regex that
+// stops matching (or a module the scan no longer reaches) is visible.
 function checkNodeKeysExist() {
-  const walkSource = fs.readFileSync(
-    path.join(import.meta.dirname, "..", "src", "walk.js"),
-    "utf8",
-  );
   const keys = new Set();
-  for (const [, pageKey, nodeId] of walkSource.matchAll(NODE_KEY)) {
-    if (!FLOW[pageKey]) continue;
-    keys.add(pageKey + "." + nodeId);
-    if (!FLOW[pageKey].nodes[nodeId])
-      fail("walk.js refers to missing node " + pageKey + "." + nodeId);
+  for (const file of fs.readdirSync(WALK_DIR, { recursive: true })) {
+    if (!file.endsWith(".js")) continue;
+    const source = fs.readFileSync(path.join(WALK_DIR, file), "utf8");
+    for (const [, pageKey, nodeId] of source.matchAll(NODE_KEY)) {
+      if (!FLOW[pageKey]) continue;
+      keys.add(pageKey + "." + nodeId);
+      if (!FLOW[pageKey].nodes[nodeId])
+        fail(file + " refers to missing node " + pageKey + "." + nodeId);
+    }
   }
+  if (keys.size < MIN_NODE_KEYS)
+    fail("only " + keys.size + " node keys found under src/walk/");
   return keys.size;
 }
 // Every criterion on a card priority list is understood by criterionTest.
