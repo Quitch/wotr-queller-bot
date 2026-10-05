@@ -28,7 +28,7 @@ jobs:
       - run: npm run build # a bundle that no longer builds fails here (esbuild's platform binary is an optional dependency, so no install script is needed)
       - name: SonarQube Cloud scan
         if: ${{ env.SONAR_TOKEN != '' }} # a fork's pull request has no secret; the rest of the job still verifies it
-        uses: SonarSource/sonarqube-scan-action@ba9859eae8dd6bd29e412f25ddbbef3d032000f4 # v8.2.2
+        uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
   browser:
     name: Browser tests
     runs-on: ubuntu-latest
