@@ -7,7 +7,8 @@ import { cur, endWalk, follow, trail } from "./core.js";
 import { recordDecision } from "./decisions/common.js";
 import { dieWithArticle } from "./jumps-table.js";
 import { SHADOW_NATION_NAME } from "./nations.js";
-import { PROMPT, WALK_RESULT } from "./prompt.js";
+import { payForcedDiscard } from "./forced.js";
+import { FORCE_ANSWER_PREFIX, PROMPT, WALK_RESULT } from "./prompt.js";
 import { run } from "./run.js";
 
 // A yes/no answer to a board question asked once per node.
@@ -241,6 +242,11 @@ const ANSWER_HANDLERS = {
 export function answer(state, value) {
   const walk = state.walk;
   if (!walk?.prompt) return;
+  // Force discard replaces the open action, which it reads, so it runs before the prompt is cleared.
+  if (typeof value === "string" && value.startsWith(FORCE_ANSWER_PREFIX)) {
+    payForcedDiscard(state, value.slice(FORCE_ANSWER_PREFIX.length));
+    return;
+  }
   const prompt = walk.prompt;
   walk.prompt = null;
   const handler = ANSWER_HANDLERS[prompt.type];

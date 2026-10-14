@@ -14,8 +14,6 @@ export const MODAL = {
   ASK: "ask",
   TOOLS: "tools",
 };
-// The prompt answer that forces a Free Peoples card off the table: this prefix and the card's key.
-export const FORCE_ANSWER_PREFIX = "force:";
 export const UNDO_DEPTH = 60; // snapshots kept for Undo
 export const LOG_ROWS_SHOWN = 40;
 export const TOOLTIP = {

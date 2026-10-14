@@ -1081,6 +1081,23 @@ function forcedDiscardPaysArmyCharacterAndActionDie() {
       paidAfterMark.die.status === DIE_STATE.USED,
     "an action die the player already marked used never pays; another Action die does",
   );
+  const viaAnswer = atBlockedAttack(["sa013", "sa001b2"]);
+  engine.answer(viaAnswer, engine.FORCE_ANSWER_PREFIX + "powerTooGreat");
+  ok(
+    viaAnswer.walk.done &&
+      viaAnswer.walk.result === WALK_RESULT.ACTION &&
+      viaAnswer.cards.hand.length === 0,
+    "the Force discard answer goes through engine.answer and ends the walk",
+  );
+  const unclaimed = atBlockedAttack(["sa013", "sa001b2"]);
+  unclaimed.walk.dieIndex = null;
+  const paidMatching = engine.payForcedDiscard(unclaimed, "bombadil");
+  ok(
+    paidMatching.die === unclaimed.dice.pool[2] &&
+      unclaimed.dice.pool.filter((pooled) => pooled.status === DIE_STATE.USED)
+        .length === 1,
+    "an action holding a requirement but no claimed die pays with a die matching it",
+  );
   const noDie = atBlockedAttack([]);
   noDie.dice.pool.forEach((pooled) => {
     if (pooled.kind === engine.DIE_KIND.ACTION) pooled.status = DIE_STATE.USED;

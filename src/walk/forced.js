@@ -14,7 +14,7 @@ import {
   handCardsOfDeck,
 } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
-import { spendCurrentDie } from "./actions.js";
+import { releaseCurrentDie, spendCurrentDie } from "./actions.js";
 import { endWalk, trail } from "./core.js";
 import { nodeByKey } from "./priority.js";
 import { PROMPT, WALK_RESULT, offersNotPossible } from "./prompt.js";
@@ -58,23 +58,24 @@ export function forceDiscardOpen(state) {
     !prompt.pass
   );
 }
-// The action's own die when it is an unused Action die (a Faction die cannot pay; the player may have marked it used).
+// The die the action would use, when it is an unused Action die: the one the walk claimed, else one matching the walk's
+// die requirement. A Faction die cannot pay, and the player may have marked the claimed die used.
 function walkActionDie(state) {
-  const index = state.walk.dieIndex;
-  const die = index == null ? null : state.dice.pool[index];
-  return die?.kind === DIE_KIND.ACTION && die.status === DIE_STATE.AVAIL
-    ? die
-    : null;
+  const walk = state.walk,
+    usable = (die) =>
+      die?.kind === DIE_KIND.ACTION && die.status === DIE_STATE.AVAIL;
+  const claimed = walk.dieIndex == null ? null : state.dice.pool[walk.dieIndex];
+  if (usable(claimed)) return claimed;
+  if (engine.isFactionRequirement(walk.die)) return null;
+  const matching = engine.findDie(state, walk.die);
+  return usable(matching) ? matching : null;
 }
 // The strategy's Phases 1–4 discard priority: the order Queller gives up cards in. Under corruption the flowchart picks
 // the list by "Holding more than 1 strategy card" (C14.strat1: Yes → disc14, No → disc18).
 function discardPriority(state) {
   let key = "M14.disc";
   if (state.strategy !== STRATEGY.MILITARY)
-    key =
-      handCardsOfDeck(state, DECK.STRATEGY).length > 1
-        ? "C14.disc14"
-        : "C14.disc18";
+    key = engine.handCounts(state).strategy > 1 ? "C14.disc14" : "C14.disc18";
   return NODE.extra(nodeByKey(key)).items;
 }
 // Faction cards never count (WoME rules: a discard condition naming a deck does not apply to Faction cards).
@@ -83,8 +84,8 @@ const armyEventCards = (state) =>
     (id) => cardById[id].type === "Army",
   );
 
-// What Queller would pay now: {army, character, dice, ownDie} (the dice it may use, none with dice off; ownDie: the
-// action's own Action die, if any), or {blocked}.
+// What Queller would pay now: {army, character, ownDie, dice} (ownDie: the action's own Action die, which pays when
+// there is one; dice: the other Action dice that may pay otherwise; both empty with dice off), or {blocked}.
 export function forcedDiscardCost(state) {
   if (!forceDiscardOpen(state))
     return { blocked: FORCED_DISCARD_BLOCK.NO_ACTION };
@@ -92,20 +93,21 @@ export function forcedDiscardCost(state) {
     ownDie = null;
   if (state.settings.dice) {
     ownDie = walkActionDie(state);
-    dice = ownDie ? [ownDie] : engine.availableActionDice(state);
-    if (!dice.length) return { blocked: FORCED_DISCARD_BLOCK.DIE };
+    if (!ownDie) dice = engine.availableActionDice(state);
+    if (!ownDie && !dice.length) return { blocked: FORCED_DISCARD_BLOCK.DIE };
   }
   const army = armyEventCards(state),
     character = handCardsOfDeck(state, DECK.CHARACTER);
   if (!army.length || !character.length)
     return { blocked: FORCED_DISCARD_BLOCK.CARDS };
-  return { army, character, dice, ownDie };
+  return { army, character, ownDie, dice };
 }
-// Pay the cost to discard the Free Peoples card `key` as the open action, and end the walk. `cost`: forcedDiscardCost
-// of this state, when the caller has already checked it. Returns {army, character, die}, or {blocked} and changes nothing.
-export function payForcedDiscard(state, key, cost = forcedDiscardCost(state)) {
+// Pay the cost to discard the Free Peoples card `key` as the open action, and end the walk (the walk's answer
+// FORCE_ANSWER_PREFIX + key). Returns {army, character, die}, or {blocked} and changes nothing.
+export function payForcedDiscard(state, key) {
   const fpCard = fpCardByKey(key);
   if (!fpCard) throw new Error("Unknown Free Peoples card " + key);
+  const cost = forcedDiscardCost(state);
   if (cost.blocked) return cost;
   const criteria = discardPriority(state);
   const army = engine.applyPriority(state, cost.army, criteria).chosen,
@@ -114,14 +116,20 @@ export function payForcedDiscard(state, key, cost = forcedDiscardCost(state)) {
   engine.discardCard(state, army, why);
   engine.discardCard(state, character, why);
   let die = null;
+  const claimed =
+    state.walk.dieIndex == null ? null : state.dice.pool[state.walk.dieIndex];
   if (state.settings.dice) {
-    // When the action holds a Faction die (or one already marked used), another Action die pays.
-    die = engine.nonPreferredFirst(state, cost.dice, 1)[0];
-    spendCurrentDie(state, why, die === cost.ownDie ? null : die);
+    die = cost.ownDie ?? engine.nonPreferredFirst(state, cost.dice, 1)[0];
+    if (die === claimed) spendCurrentDie(state, why);
+    else {
+      // Another die pays (a matching one, or any Action die when the action held a Faction die or a used one).
+      engine.spendDie(state, die, why);
+      releaseCurrentDie(state);
+    }
   } else if (!engine.isFactionRequirement(state.walk.die))
     spendCurrentDie(state, why);
   else {
-    state.walk.die = null;
+    releaseCurrentDie(state);
     engine.log(state, "Queller used an Action die — " + why + ".");
   }
   trail(state, {

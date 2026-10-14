@@ -3,6 +3,7 @@ export {
   PROMPT,
   YES_NO_PROMPTS,
   offersNotPossible,
+  FORCE_ANSWER_PREFIX,
   WALK_RESULT,
   phaseResult,
   phaseFromResult,

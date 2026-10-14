@@ -4,6 +4,7 @@ import * as engine from "../qb.js";
 import {
   DIE_KIND,
   DIE_STATE,
+  FORCE_ANSWER_PREFIX,
   PHASE,
   WALK_RESULT,
   YES_NO_PROMPTS,
@@ -12,26 +13,32 @@ import {
 } from "../qb.js";
 import { act } from "./actions.js";
 import { ask, openModal } from "./ask.js";
-import { FORCE_ANSWER_PREFIX, MODAL } from "./constants.js";
+import { MODAL } from "./constants.js";
 import { PHASE_BY_LABEL } from "./header.js";
 import { render } from "./render.js";
 import { setShownCard, shownCard, state } from "./session.js";
 import { PHASE_ACTION } from "./walkthrough.js";
 
 export function onAnswer(answer) {
-  const walk = state.walk,
-    prompt = walk?.prompt;
-  if (!prompt) return;
+  if (!state.walk?.prompt) return;
   if (answer.startsWith(FORCE_ANSWER_PREFIX)) {
     onForceDiscard(answer.slice(FORCE_ANSWER_PREFIX.length));
     return;
   }
+  answerInAct(answer);
+}
+// Give the walk an answer inside act(); returns whether it ran (false: act() rolled back and showed the error bar).
+function answerInAct(answer) {
+  const walk = state.walk,
+    prompt = walk.prompt;
+  let ran = false;
   act(
     () => {
       let value = answer;
       if (YES_NO_PROMPTS.includes(prompt.type)) value = answer === "yes";
       engine.answer(state, value);
       afterWalk();
+      ran = true;
     },
     {
       action: "answer",
@@ -43,6 +50,7 @@ export function onAnswer(answer) {
       value: answer,
     },
   );
+  return ran;
 }
 // A tracker field's value: checkboxes give a boolean, numeric fields a number, the rest their text.
 export function trackerValue(el) {
@@ -204,16 +212,7 @@ function forceDiscardConfirmed(fpCard) {
     );
     return;
   }
-  let paid = false;
-  act(
-    () => {
-      engine.payForcedDiscard(state, fpCard.key, cost);
-      afterWalk();
-      paid = true;
-    },
-    { action: "forceDiscard", card: fpCard.key },
-  );
-  if (!paid) return; // act() rolled back and showed the error bar
+  if (!answerInAct(FORCE_ANSWER_PREFIX + fpCard.key)) return;
   told(
     "“" + fpCard.title + "” discarded",
     "Queller paid the cost as its action. Discard “" +

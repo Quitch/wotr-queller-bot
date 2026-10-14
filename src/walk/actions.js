@@ -330,12 +330,15 @@ export function handleAction(state, node) {
   if (isEndBox(label)) return endAction(state, walk);
   promptAction(state, node, label, { help: NODE.extra(node).help });
 }
-// Spend the die the walk holds and release it. `payWith`: another die pays instead; the walk's own die is released unspent.
-export function spendCurrentDie(state, why, payWith) {
+// The walk no longer holds a die (spent, or given up unspent).
+export function releaseCurrentDie(state) {
+  state.walk.die = null;
+  state.walk.dieIndex = null;
+}
+export function spendCurrentDie(state, why) {
   const walk = state.walk;
-  if (!walk || (!walk.die && !payWith)) return;
-  if (payWith) engine.spendDie(state, payWith, why);
-  else if (state.settings.dice && walk.dieIndex != null) {
+  if (!walk?.die) return;
+  if (state.settings.dice && walk.dieIndex != null) {
     engine.spendDie(state, state.dice.pool[walk.dieIndex], why);
   } else
     engine.log(
@@ -346,8 +349,7 @@ export function spendCurrentDie(state, why, payWith) {
         (why ? " — " + why : "") +
         ".",
     );
-  walk.die = null;
-  walk.dieIndex = null;
+  releaseCurrentDie(state);
 }
 // Rule 29: an action Queller cannot take is skipped — follow the arrow out of the box, or return to the page that sent us here.
 export function exitAction(state) {

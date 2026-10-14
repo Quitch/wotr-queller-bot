@@ -1,11 +1,10 @@
 // The open prompt as HTML: one renderer per prompt type, each giving the body and the answer buttons.
 import { FLOW, NODE, NODE_KIND } from "../flow/index.js";
 import * as engine from "../qb.js";
-import { PROMPT, cardById } from "../qb.js";
+import { FORCE_ANSWER_PREFIX, PROMPT, cardById } from "../qb.js";
 import { battleFormHTML, dieHelpText } from "./battle-form.js";
 import { CARD_HALF, cardHTML } from "./card.js";
 import { ringIcon } from "./dice.js";
-import { FORCE_ANSWER_PREFIX } from "./constants.js";
 import { escapeHTML, formatText } from "./dom.js";
 import { state } from "./session.js";
 
