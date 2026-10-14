@@ -198,6 +198,7 @@ async function exerciseForceDiscard(page) {
   await page.evaluate(() => {
     window.QBUI.act(() => {
       const state = window.QBUI.state;
+      state.walk = null;
       state.cards.hand = ["sa013", "sa001b2", "sa002"];
       state.dice.pool.forEach((die) => {
         if (die.kind === window.QB.DIE_KIND.ACTION)

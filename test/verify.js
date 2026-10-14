@@ -1006,6 +1006,24 @@ function forcedDiscardPaysArmyCharacterAndActionDie() {
     engine.forcedDiscardCost(noDie).blocked === engine.FORCED_DISCARD_BLOCK.DIE,
     "no unused Action die: the cost cannot be paid",
   );
+  const noDieEmptyHand = phase5State(settings);
+  noDieEmptyHand.dice.pool = [die("Army", DIE_STATE.USED)];
+  ok(
+    engine.forcedDiscardCost(noDieEmptyHand).blocked ===
+      engine.FORCED_DISCARD_BLOCK.DIE,
+    "the die is checked before the cards, so the public reason never depends on the hand",
+  );
+  const walkOpen = phase5State(settings);
+  walkOpen.cards.hand = ["sa013", "sa001b2"];
+  walkOpen.dice.pool = [die("Army")];
+  walkOpen.walk = { done: false, dieIndex: 0 };
+  ok(
+    engine.payForcedDiscard(walkOpen, "powerTooGreat").blocked ===
+      engine.FORCED_DISCARD_BLOCK.WALK &&
+      walkOpen.cards.hand.length === 2 &&
+      walkOpen.dice.pool[0].status === DIE_STATE.AVAIL,
+    "refused while a walk waits for an answer, so the walk's die and cards stay untouched",
+  );
   const diceOff = phase5State({ ...settings, dice: false });
   diceOff.cards.hand = ["sa013", "sa001b2"];
   diceOff.dice.pool = [];

@@ -168,21 +168,59 @@ export function onCard(action, id) {
 }
 // Force a Free Peoples protection card off the table (A Power too Great, The Power of Tom Bombadil). The button looks the
 // same whatever Queller holds; whether the cost can be paid is told only after the player confirms.
+const FORCE_BLOCKED_TEXT = {
+  [engine.FORCED_DISCARD_BLOCK.WALK]:
+    "Finish the current walk first. If a Queller army is blocked by the card, press Not possible, then force the discard.",
+  [engine.FORCED_DISCARD_BLOCK.DIE]: "Queller has no unused Action die.",
+  [engine.FORCED_DISCARD_BLOCK.CARDS]: "Queller cannot pay the cost now.",
+};
+function told(title, text) {
+  ask({
+    title,
+    text,
+    buttons: [{ v: "ok", label: "OK", primary: true }],
+    onPick: () => {},
+  });
+}
+function forceDiscardConfirmed(fpCard) {
+  const stays = " “" + fpCard.title + "” stays on the table.";
+  // Checked before act() so that a refusal leaves no empty step on the undo stack.
+  const cost = engine.forcedDiscardCost(state);
+  if (cost.blocked) {
+    debug.action(
+      { action: "forceDiscard", card: fpCard.key, blocked: cost.blocked },
+      state,
+    );
+    told("Queller cannot pay", FORCE_BLOCKED_TEXT[cost.blocked] + stays);
+    return;
+  }
+  let paid = null;
+  act(
+    () => {
+      paid = engine.payForcedDiscard(state, fpCard.key);
+    },
+    { action: "forceDiscard", card: fpCard.key },
+  );
+  if (!paid) return; // act() rolled back and showed the error bar
+  if (paid.blocked)
+    told("Queller cannot pay", FORCE_BLOCKED_TEXT[paid.blocked] + stays);
+  else
+    told(
+      "“" + fpCard.title + "” discarded",
+      "Queller paid the cost. Discard “" +
+        fpCard.title +
+        "” from the table on the board.",
+    );
+}
 export function onForceDiscard(key) {
   const fpCard = engine.FP_PROTECTION_CARDS.find((c) => c.key === key);
-  const told = (title, text) =>
-    ask({
-      title,
-      text,
-      buttons: [{ v: "ok", label: "OK", primary: true }],
-      onPick: () => {},
-    });
+  if (!fpCard) return;
   ask({
     title: "Force “" + fpCard.title + "” off the table?",
     text:
       "Queller can discard this Free Peoples card by using one Action die and discarding one Army Event card and one Character card from its hand. Do this when a Queller army is blocked from " +
       fpCard.regions +
-      " by the card and you would otherwise press Not possible." +
+      " by the card and you have pressed Not possible." +
       (state.settings.dice
         ? ""
         : " The app does not roll Queller’s dice: set aside one Queller Action die yourself."),
@@ -191,35 +229,7 @@ export function onForceDiscard(key) {
       { v: "no", label: "Cancel" },
     ],
     onPick: (choice) => {
-      if (choice !== "ok") return;
-      const cost = engine.forcedDiscardCost(state);
-      if (cost.blocked) {
-        debug.action(
-          { action: "forceDiscard", card: key, blocked: cost.blocked },
-          state,
-        );
-        told(
-          "Queller cannot pay",
-          cost.blocked === engine.FORCED_DISCARD_BLOCK.DIE
-            ? "Queller has no unused Action die. “" +
-                fpCard.title +
-                "” stays on the table."
-            : "Queller cannot pay the cost now. “" +
-                fpCard.title +
-                "” stays on the table.",
-        );
-        return;
-      }
-      act(() => engine.payForcedDiscard(state, key), {
-        action: "forceDiscard",
-        card: key,
-      });
-      told(
-        "“" + fpCard.title + "” discarded",
-        "Queller paid the cost. Discard “" +
-          fpCard.title +
-          "” from the table on the board.",
-      );
+      if (choice === "ok") forceDiscardConfirmed(fpCard);
     },
   });
 }

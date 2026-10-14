@@ -96,7 +96,8 @@ const chooseCombatCardByPriority = (withCallToBattle) =>
     if (withCallToBattle) candidates = candidates.concat(walk.ctb || []);
     return chooseAmong(state, node, walk, candidates);
   };
-const nodeByKey = (key) => {
+// The node a literal "PAGE.node" key names.
+export const nodeByKey = (key) => {
   const [page, id] = key.split(".");
   return FLOW[page].nodes[id];
 };

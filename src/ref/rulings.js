@@ -28,6 +28,6 @@ export const RULINGS = [
   ],
   [
     "“A Power too Great” or “The Power of Tom Bombadil” blocks a Queller army. What does Queller do?",
-    "The move or attack is not possible (rule 29). Queller can force the card off the table by using one Action die and discarding one Army Event card and one Character card from its hand. With the app holding Queller’s cards, press “Force discard” under Queller’s cards: the app selects the cards by the strategy’s Phases 1–4 discard priority and a die that does not show a *preferred* result.",
+    "The move or attack is not possible (rule 29). Queller can force the card off the table by using one Action die and discarding one Army Event card and one Character card from its hand. With the app holding Queller’s cards, press Not possible, then “Force discard” under Queller’s cards: the app selects the cards by the strategy’s Phases 1–4 discard priority and a die that does not show a *preferred* result.",
   ],
 ];

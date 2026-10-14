@@ -3,7 +3,8 @@
 // nor the rules say when; the player presses the control when a Queller army is blocked by the card.
 import * as engine from "../engine/index.js";
 import { DECK, DIE_KIND, STRATEGY, cardById } from "../engine/index.js";
-import { FLOW, NODE } from "../flow/index.js";
+import { NODE } from "../flow/index.js";
+import { nodeByKey } from "./priority.js";
 
 export const FP_PROTECTION_CARDS = [
   {
@@ -17,16 +18,20 @@ export const FP_PROTECTION_CARDS = [
     regions: "The Old Forest, The Shire and Buckland",
   },
 ];
-// Why the cost cannot be paid. CARDS stays vague on purpose: the player must not learn what Queller holds.
-export const FORCED_DISCARD_BLOCK = { CARDS: "cards", DIE: "die" };
+// Why the cost cannot be paid, checked in this order so that only CARDS depends on the hand. CARDS stays vague on
+// purpose: the player must not learn what Queller holds. WALK: a walk is waiting for an answer and may hold a die or
+// a card, so the player finishes it first (Not possible, when the army is blocked).
+export const FORCED_DISCARD_BLOCK = {
+  WALK: "walk",
+  DIE: "die",
+  CARDS: "cards",
+};
 
 // The strategy's Phases 1–4 discard priority: the order Queller gives up cards in.
 function discardPriority(state) {
-  const [page, node] =
-    state.strategy === STRATEGY.MILITARY
-      ? ["M14", "disc"] // "M14.disc"
-      : ["C14", "disc18"]; // "C14.disc18"
-  return NODE.extra(FLOW[page].nodes[node]).items;
+  return NODE.extra(
+    nodeByKey(state.strategy === STRATEGY.MILITARY ? "M14.disc" : "C14.disc18"),
+  ).items;
 }
 // Faction cards never count (WoME rules: a discard condition naming a deck does not apply to Faction cards).
 const armyEventCards = (state) =>
@@ -40,18 +45,21 @@ const actionDice = (state) =>
 
 // What Queller would pay now: {army, character, die} (die only with dice on), or {blocked: FORCED_DISCARD_BLOCK.*}.
 export function forcedDiscardCost(state) {
+  if (state.walk && !state.walk.done)
+    return { blocked: FORCED_DISCARD_BLOCK.WALK };
+  const dice = state.settings.dice ? actionDice(state) : [];
+  if (state.settings.dice && !dice.length)
+    return { blocked: FORCED_DISCARD_BLOCK.DIE };
   const army = armyEventCards(state),
     character = characterCards(state);
   if (!army.length || !character.length)
     return { blocked: FORCED_DISCARD_BLOCK.CARDS };
-  const dice = state.settings.dice ? actionDice(state) : [];
-  if (state.settings.dice && !dice.length)
-    return { blocked: FORCED_DISCARD_BLOCK.DIE };
   return { army, character, dice };
 }
 // Pay the cost to discard the Free Peoples card `key`. Returns the cost paid, or {blocked} and changes nothing.
 export function payForcedDiscard(state, key) {
   const fpCard = FP_PROTECTION_CARDS.find((c) => c.key === key);
+  if (!fpCard) throw new Error("Unknown Free Peoples card " + key);
   const cost = forcedDiscardCost(state);
   if (cost.blocked) return cost;
   const criteria = discardPriority(state);
