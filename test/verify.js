@@ -947,90 +947,125 @@ function eliminatedMinionIsNeverMusteredAgain() {
     "setting Saruman to eliminated discards Wormtongue and the Palantír",
   );
 }
-// "A Power too Great" / "The Power of Tom Bombadil": Queller pays one Action die, one Army Event card and one
-// Character card; a Faction Army card does not count, and nothing changes when the cost cannot be paid.
-function forcedDiscardPaysArmyCharacterAndActionDie() {
-  const settings = { dice: true, cards: true, tracker: true, wome: true };
+// "A Power too Great" / "The Power of Tom Bombadil": from an open Phase 5 action, Queller pays that action's Action die,
+// one Army Event card and one Character card, and the walk ends with that as its action. A Faction Army card does not
+// count, and nothing changes when the cost cannot be paid.
+const FORCE_SETTINGS = { dice: true, cards: true, tracker: true, wome: true };
+// A military Phase 5 walk stopped at "Attack using character die", holding the Character die (index 2).
+function atBlockedAttack(hand, settings = FORCE_SETTINGS) {
   const state = phase5State(settings, STRATEGY.MILITARY);
-  state.cards.hand = ["sa013", "sa014", "sa001b2", "sa003", "sa002"];
+  state.cards.hand = hand;
   state.dice.pool = [
+    die("Army"),
+    die("Army"),
+    die("Character"),
+    die("Muster"),
     { kind: engine.DIE_KIND.FACTION, face: "Faction", status: DIE_STATE.AVAIL },
-    die("Event"),
   ];
+  engine.startPhase(state, PHASE.P5);
+  let guard = 0;
+  while (
+    !state.walk.done &&
+    state.walk.prompt.type !== PROMPT.ACTION &&
+    guard++ < 60
+  ) {
+    const prompt = state.walk.prompt;
+    engine.answer(
+      state,
+      engine.YES_NO_PROMPTS.includes(prompt.type) ? true : "done",
+    );
+  }
+  return state;
+}
+function forcedDiscardPaysArmyCharacterAndActionDie() {
+  const state = atBlockedAttack([
+    "sa013",
+    "sa014",
+    "sa001b2",
+    "sa003",
+    "sa002",
+  ]);
+  const actionDie = state.dice.pool[state.walk.dieIndex];
+  ok(
+    state.walk.prompt.type === PROMPT.ACTION && actionDie.face === "Character",
+    "set-up: a Phase 5 attack prompt holding the Character die",
+  );
   const paid = engine.payForcedDiscard(state, "powerTooGreat");
   ok(
     ["sa013", "sa014"].includes(paid.army) &&
-      ["sa001b2", "sa003"].includes(paid.character),
-    "one Army Event card and one Character card are discarded",
+      ["sa001b2", "sa003"].includes(paid.character) &&
+      state.cards.hand.length === 3 &&
+      state.cards.hand.includes("sa002"),
+    "one Army Event card and one Character card are discarded; the Muster card stays",
   );
   ok(
-    state.cards.hand.length === 3 && state.cards.hand.includes("sa002"),
-    "the other cards, the Muster card among them, stay in the hand",
+    paid.die === actionDie &&
+      actionDie.status === DIE_STATE.USED &&
+      state.dice.pool.filter((pooled) => pooled.status === DIE_STATE.USED)
+        .length === 1,
+    "the blocked action's own die pays, and no other die is used",
   );
   ok(
-    state.dice.pool[1].status === DIE_STATE.USED &&
-      state.dice.pool[0].status === DIE_STATE.AVAIL,
-    "an Action die is used, never the Faction die",
-  );
-  ok(
-    state.log.some((entry) =>
-      entry.text.includes("Forced “A Power too Great”"),
-    ),
-    "the log names the Free Peoples card",
+    state.walk.done &&
+      state.walk.result === WALK_RESULT.ACTION &&
+      state.log.some((entry) =>
+        entry.text.includes("Queller forces “A Power too Great”"),
+      ),
+    "the forced discard is Queller's action: the walk ends and the log names the card",
   );
 
-  const noCharacter = phase5State(settings, STRATEGY.CORRUPTION);
-  noCharacter.cards.hand = ["sa013"];
+  const noAction = phase5State(FORCE_SETTINGS);
+  noAction.cards.hand = ["sa013", "sa001b2"];
+  noAction.dice.pool = [die("Army")];
+  ok(
+    engine.payForcedDiscard(noAction, "bombadil").blocked ===
+      engine.FORCED_DISCARD_BLOCK.NO_ACTION &&
+      noAction.cards.hand.length === 2 &&
+      noAction.dice.pool[0].status === DIE_STATE.AVAIL,
+    "refused with no Phase 5 action open, and nothing changes",
+  );
+  const noCharacter = atBlockedAttack(["sa013"]);
   noCharacter.cards.factionHand = ["sa_Faction04"];
-  noCharacter.dice.pool = [die("Army")];
   ok(
     engine.payForcedDiscard(noCharacter, "bombadil").blocked ===
-      engine.FORCED_DISCARD_BLOCK.CARDS &&
-      noCharacter.cards.hand.length === 1 &&
-      noCharacter.dice.pool[0].status === DIE_STATE.AVAIL,
-    "no Character card: the cost is not paid and nothing changes",
+      engine.FORCED_DISCARD_BLOCK.CARDS && !noCharacter.walk.done,
+    "no Character card: the cost is not paid and the action stays open",
   );
-  const factionArmyOnly = phase5State(settings);
-  factionArmyOnly.cards.hand = ["sa001b2"];
+  const factionArmyOnly = atBlockedAttack(["sa001b2"]);
   factionArmyOnly.cards.factionHand = ["sa_Faction04"];
-  factionArmyOnly.dice.pool = [die("Army")];
   ok(
     engine.forcedDiscardCost(factionArmyOnly).blocked ===
       engine.FORCED_DISCARD_BLOCK.CARDS,
     "a Faction Army card does not count as an Army Event card",
   );
-  const noDie = phase5State(settings);
-  noDie.cards.hand = ["sa013", "sa001b2"];
-  noDie.dice.pool = [die("Army", DIE_STATE.USED)];
+  const factionDieAction = atBlockedAttack(["sa013", "sa001b2"]);
+  factionDieAction.walk.dieIndex = 4;
+  factionDieAction.dice.pool[2].status = DIE_STATE.USED;
+  const paidOther = engine.payForcedDiscard(factionDieAction, "bombadil");
+  ok(
+    paidOther.die.kind === engine.DIE_KIND.ACTION &&
+      factionDieAction.dice.pool[4].status === DIE_STATE.AVAIL,
+    "an action holding the Faction die is paid with another Action die; the Faction die stays free",
+  );
+  const noDie = atBlockedAttack([]);
+  noDie.dice.pool.forEach((pooled) => {
+    if (pooled.kind === engine.DIE_KIND.ACTION) pooled.status = DIE_STATE.USED;
+  });
+  noDie.walk.dieIndex = null;
   ok(
     engine.forcedDiscardCost(noDie).blocked === engine.FORCED_DISCARD_BLOCK.DIE,
-    "no unused Action die: the cost cannot be paid",
-  );
-  const noDieEmptyHand = phase5State(settings);
-  noDieEmptyHand.dice.pool = [die("Army", DIE_STATE.USED)];
-  ok(
-    engine.forcedDiscardCost(noDieEmptyHand).blocked ===
-      engine.FORCED_DISCARD_BLOCK.DIE,
     "the die is checked before the cards, so the public reason never depends on the hand",
   );
-  const walkOpen = phase5State(settings);
-  walkOpen.cards.hand = ["sa013", "sa001b2"];
-  walkOpen.dice.pool = [die("Army")];
-  walkOpen.walk = { done: false, dieIndex: 0 };
+  const diceOff = atBlockedAttack(["sa013", "sa001b2"], {
+    ...FORCE_SETTINGS,
+    dice: false,
+  });
   ok(
-    engine.payForcedDiscard(walkOpen, "powerTooGreat").blocked ===
-      engine.FORCED_DISCARD_BLOCK.WALK &&
-      walkOpen.cards.hand.length === 2 &&
-      walkOpen.dice.pool[0].status === DIE_STATE.AVAIL,
-    "refused while a walk waits for an answer, so the walk's die and cards stay untouched",
-  );
-  const diceOff = phase5State({ ...settings, dice: false });
-  diceOff.cards.hand = ["sa013", "sa001b2"];
-  diceOff.dice.pool = [];
-  ok(
-    engine.payForcedDiscard(diceOff, "powerTooGreat").die === null &&
-      diceOff.cards.hand.length === 0,
-    "with dice off the cards are discarded and the player sets aside the die",
+    diceOff.walk.prompt?.type === PROMPT.ACTION &&
+      engine.payForcedDiscard(diceOff, "powerTooGreat").die === null &&
+      diceOff.cards.hand.length === 0 &&
+      diceOff.walk.done,
+    "with dice off the cards are discarded and the walk ends; the player sets aside the die",
   );
 }
 // The scenarios, with the section of the change log each one guards.

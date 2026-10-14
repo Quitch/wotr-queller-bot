@@ -161,6 +161,9 @@ export function dieSatisfies(have, need) {
 export function availableDice(state) {
   return state.dice.pool.filter((die) => die.status === DIE_STATE.AVAIL);
 }
+export function availableActionDice(state) {
+  return availableDice(state).filter((die) => die.kind === DIE_KIND.ACTION);
+}
 export function findDie(state, req) {
   const faces = DIE_REQUIREMENT_FACES[req] || [req];
   const available = availableDice(state);
@@ -189,9 +192,7 @@ export function nonPreferredFirst(state, dice, count) {
 }
 // Elven Ring (rule 36): change one non-preferred available die to the required result.
 export function ringChange(state, req) {
-  const available = availableDice(state).filter(
-    (die) => die.kind === DIE_KIND.ACTION,
-  );
+  const available = availableActionDice(state);
   if (!available.length) return null;
   const die = nonPreferredFirst(state, available, 1)[0];
   const from = die.face;

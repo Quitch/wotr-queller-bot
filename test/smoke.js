@@ -193,29 +193,48 @@ async function exerciseTableCardsDiceUndoAndModals(page) {
   await page.click(SEL.JUMP_GO);
   await answerAll(page);
 }
-// Force discard of "A Power too Great": Queller pays two cards and an Action die, then Undo restores them.
+// Force discard of "A Power too Great" from an open Phase 5 action: Queller pays two cards and the action's die and the
+// walk ends; both the force and its set-up are then undone, so the later checks see the game as it was.
 async function exerciseForceDiscard(page) {
   await page.evaluate(() => {
     window.QBUI.act(() => {
-      const state = window.QBUI.state;
-      state.walk = null;
+      const { QB } = window,
+        state = window.QBUI.state;
+      state.strategy = QB.STRATEGY.MILITARY;
+      state.phase = QB.PHASE.P5;
       state.cards.hand = ["sa013", "sa001b2", "sa002"];
-      state.dice.pool.forEach((die) => {
-        if (die.kind === window.QB.DIE_KIND.ACTION)
-          die.status = window.QB.DIE_STATE.AVAIL;
-      });
+      state.dice.pool = ["Army", "Army", "Character", "Muster"].map((face) => ({
+        kind: QB.DIE_KIND.ACTION,
+        face,
+        status: QB.DIE_STATE.AVAIL,
+      }));
+      QB.startPhase(state, QB.PHASE.P5);
+      for (let guard = 0; guard < 60; guard++) {
+        const prompt = state.walk.prompt;
+        if (state.walk.done || prompt.type === QB.PROMPT.ACTION) break;
+        QB.answer(state, QB.YES_NO_PROMPTS.includes(prompt.type) || "done");
+      }
     });
   });
   await page.click(SEL.FORCE_DISCARD);
   await axeCheck(page, "force discard dialog");
   await page.click(SEL.ASK_OK);
   await page.click(SEL.ASK_OK);
-  const hand = await page.evaluate(() => window.QBUI.state.cards.hand);
-  console.log("force discard left in hand:", hand.join(", "));
-  if (hand.length !== 1 || hand[0] !== "sa002")
+  const after = await page.evaluate(() => ({
+    hand: window.QBUI.state.cards.hand,
+    done: window.QBUI.state.walk?.done,
+  }));
+  console.log(
+    "force discard left in hand:",
+    after.hand.join(", "),
+    "walk ended:",
+    after.done,
+  );
+  if (after.hand.length !== 1 || after.hand[0] !== "sa002" || !after.done)
     debugFailures.push(
-      "force discard did not discard the Army and Character cards",
+      "force discard did not discard the Army and Character cards as the action",
     );
+  await page.click(SEL.UNDO);
   await page.click(SEL.UNDO);
 }
 // Tracker off + dice on → the minimal tracker shows Companions and Rings.

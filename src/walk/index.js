@@ -24,6 +24,7 @@ export {
 export { normalizeText, findStart } from "./graph.js";
 export {
   FP_PROTECTION_CARDS,
+  fpCardByKey,
   FORCED_DISCARD_BLOCK,
   forcedDiscardCost,
   payForcedDiscard,
