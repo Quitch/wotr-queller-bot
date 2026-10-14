@@ -1,12 +1,11 @@
 // The open prompt as HTML: one renderer per prompt type, each giving the body and the answer buttons.
 import { FLOW, NODE, NODE_KIND } from "../flow/index.js";
 import * as engine from "../qb.js";
-import { FORCE_ANSWER_PREFIX, PROMPT, cardById } from "../qb.js";
+import { PROMPT, cardById } from "../qb.js";
 import { battleFormHTML, dieHelpText } from "./battle-form.js";
 import { CARD_HALF, cardHTML } from "./card.js";
 import { ringIcon } from "./dice.js";
 import { escapeHTML, formatText } from "./dom.js";
-import { state } from "./session.js";
 
 export const NODE_KIND_NAME = {
   [NODE_KIND.START]: "Start point",
@@ -22,20 +21,6 @@ export const NODE_KIND_NAME = {
 const YES_NO_BUTTONS =
   '<button class="btn yes" data-ans="yes">Yes</button><button class="btn no" data-ans="no">No</button>';
 const DONE_BUTTON = '<button class="btn yes" data-ans="done">Done</button>';
-// "Force discard" answers for the Free Peoples cards Queller may pay to remove, in place of Not possible. Whether they
-// show never depends on Queller's hand, so they give nothing away.
-const forceDiscardButtons = () =>
-  state?.settings.cards && engine.forceDiscardOpen(state)
-    ? engine.FP_PROTECTION_CARDS.map(
-        (fpCard) =>
-          '<button class="btn" data-ans="' +
-          FORCE_ANSWER_PREFIX +
-          fpCard.key +
-          '">Force discard: ' +
-          escapeHTML(fpCard.title) +
-          "</button>",
-      ).join("")
-    : "";
 const orderedListHTML = (items) =>
   items
     ? "<ol>" +
@@ -154,8 +139,7 @@ function renderActionPrompt(prompt, walk) {
     answers:
       DONE_BUTTON +
       (engine.offersNotPossible(prompt)
-        ? '<button class="btn no" data-ans="no">Not possible (rule 29)</button>' +
-          forceDiscardButtons()
+        ? '<button class="btn no" data-ans="no">Not possible (rule 29)</button>'
         : ""),
   };
 }
@@ -180,9 +164,27 @@ function renderStepPrompt(prompt) {
     body: questionHTML(prompt.text) + orderedListHTML(prompt.items),
     answers: engine.offersNotPossible(prompt)
       ? DONE_BUTTON +
-        '<button class="btn no" data-ans="no">Not possible</button>' +
-        forceDiscardButtons()
+        '<button class="btn no" data-ans="no">Not possible</button>'
       : '<button class="btn yes" data-ans="done">Continue</button>',
+  };
+}
+// After Not possible: was it a Free Peoples card on the table that blocked it? (Rule 15.) Asked whatever Queller holds.
+function renderBlockedPrompt(prompt) {
+  return {
+    body:
+      '<p class="q">Was “' +
+      formatText(prompt.text) +
+      "” blocked by a Free Peoples card on the table?</p>" +
+      '<div class="help">If so, Queller must remove the card (rule 15): it uses one Action die and discards one Army Event card and one Character card, chosen by the Event page discard priority, and that is its action. If Queller cannot pay, the action is not possible.</div>',
+    answers:
+      engine.FP_PROTECTION_CARDS.map(
+        (fpCard) =>
+          '<button class="btn" data-ans="' +
+          fpCard.key +
+          '">Yes: ' +
+          escapeHTML(fpCard.title) +
+          "</button>",
+      ).join("") + '<button class="btn no" data-ans="no">No</button>',
   };
 }
 function renderRollPrompt(prompt) {
@@ -238,6 +240,7 @@ export const PROMPT_RENDERERS = {
   [PROMPT.ACTION]: renderActionPrompt,
   [PROMPT.PLAY_CARD]: renderPlayCardPrompt,
   [PROMPT.STEP]: renderStepPrompt,
+  [PROMPT.BLOCKED]: renderBlockedPrompt,
   [PROMPT.ROLL]: renderRollPrompt,
   [PROMPT.PRIORITY]: renderPriorityPrompt,
   [PROMPT.BATTLE_FORM]: renderBattleFormPrompt,

@@ -1,14 +1,15 @@
-// Free Peoples table cards the Shadow may force off the table by using one Action die and discarding one Army Event card
-// and one Character card from the hand (A Power too Great, The Power of Tom Bombadil). Neither the Queller flowcharts
-// nor the rules say when. The player uses it from a Phase 5 action that the card blocks, in place of Not possible: the
-// forced discard becomes that action, paid with the action's own die.
+// Free Peoples table cards that stop a Shadow Army moving into or attacking certain regions until the Shadow pays to
+// remove them: one Action die, one Army Event card and one Character card (A Power too Great, The Power of Tom
+// Bombadil). Rule 15: when a card in play prevents a Queller action, Queller does what is necessary to remove it, and
+// only when it tries that action. Rule 12: the Event page chooses discards ("Event card discard" priority). With the
+// app holding Queller's cards, the walk asks after Not possible whether one of these cards blocked the action; if so,
+// Queller pays when it can, and the removal is that action.
 import * as engine from "../engine/index.js";
 import {
   DECK,
   DIE_KIND,
   DIE_STATE,
   PHASE,
-  STRATEGY,
   TRAIL,
   cardById,
   handCardsOfDeck,
@@ -33,22 +34,14 @@ export const FP_PROTECTION_CARDS = [
 ];
 export const fpCardByKey = (key) =>
   FP_PROTECTION_CARDS.find((fpCard) => fpCard.key === key);
-// Why the cost cannot be paid, checked in this order so that only CARDS depends on the hand; CARDS stays vague on
-// purpose, so the player does not learn what Queller holds. NO_ACTION: no Phase 5 action prompt with Not possible is open.
-export const FORCED_DISCARD_BLOCK = {
-  NO_ACTION: "noAction",
-  DIE: "die",
-  CARDS: "cards",
-};
 
-// The open prompt the forced discard can replace: a Phase 5 action, outside a battle, that the player could call not
-// possible, whose die is still unspent (no earlier move paid with it) and is not the Muster die set aside for a minion.
-// It never depends on the hand, so the UI may show it.
-export function forceDiscardOpen(state) {
-  const walk = state.walk,
-    prompt = walk && !walk.done ? walk.prompt : null;
+// Whether Not possible on `prompt` first asks if a protection card blocked it: a Phase 5 action or move outside a
+// battle, holding an unspent die that is not the Muster die set aside for a minion. Never depends on the hand, so the
+// question gives nothing away.
+export function asksIfBlocked(state, prompt) {
+  const walk = state.walk;
   return (
-    !!prompt &&
+    state.settings.cards &&
     state.phase === PHASE.P5 &&
     walk.entry.page !== "BA" &&
     !!walk.die &&
@@ -58,97 +51,73 @@ export function forceDiscardOpen(state) {
     !prompt.pass
   );
 }
-// The die the action would use, when it is an unused Action die: the one the walk claimed, else one matching the walk's
-// die requirement. A Faction die cannot pay, and the player may have marked the claimed die used.
-function walkActionDie(state) {
-  const walk = state.walk,
-    usable = (die) =>
-      die?.kind === DIE_KIND.ACTION && die.status === DIE_STATE.AVAIL;
+const usableActionDie = (die) =>
+  die?.kind === DIE_KIND.ACTION && die.status === DIE_STATE.AVAIL;
+// The die that pays, as {die, claimed}: the action's own die, else a die matching its requirement, else any Action
+// die not showing a preferred result (rule 23); null when Queller has none. With dice off: {die: null} (the player's).
+function payingDie(state) {
+  if (!state.settings.dice) return { die: null, claimed: false };
+  const walk = state.walk;
   const claimed = walk.dieIndex == null ? null : state.dice.pool[walk.dieIndex];
-  if (usable(claimed)) return claimed;
-  if (engine.isFactionRequirement(walk.die)) return null;
-  const matching = engine.findDie(state, walk.die);
-  return usable(matching) ? matching : null;
-}
-// The strategy's Phases 1–4 discard priority: the order Queller gives up cards in. Under corruption the flowchart picks
-// the list by "Holding more than 1 strategy card" (C14.strat1: Yes → disc14, No → disc18).
-function discardPriority(state) {
-  let key = "M14.disc";
-  if (state.strategy !== STRATEGY.MILITARY)
-    key = engine.handCounts(state).strategy > 1 ? "C14.disc14" : "C14.disc18";
-  return NODE.extra(nodeByKey(key)).items;
+  if (usableActionDie(claimed)) return { die: claimed, claimed: true };
+  if (!engine.isFactionRequirement(walk.die)) {
+    const matching = engine.findDie(state, walk.die);
+    if (usableActionDie(matching)) return { die: matching, claimed: false };
+  }
+  const other = engine.nonPreferredFirst(
+    state,
+    engine.availableActionDice(state),
+    1,
+  )[0];
+  return other ? { die: other, claimed: false } : null;
 }
 // Faction cards never count (WoME rules: a discard condition naming a deck does not apply to Faction cards).
 const armyEventCards = (state) =>
   handCardsOfDeck(state, DECK.STRATEGY).filter(
     (id) => cardById[id].type === "Army",
   );
-
-// What Queller would pay now: {army, character, ownDie, dice} (ownDie: the action's own Action die, which pays when
-// there is one; dice: the other Action dice that may pay otherwise; both empty with dice off), or {blocked}.
-export function forcedDiscardCost(state) {
-  if (!forceDiscardOpen(state))
-    return { blocked: FORCED_DISCARD_BLOCK.NO_ACTION };
-  let dice = [],
-    ownDie = null;
-  if (state.settings.dice) {
-    ownDie = walkActionDie(state);
-    if (!ownDie) dice = engine.availableActionDice(state);
-    if (!ownDie && !dice.length) return { blocked: FORCED_DISCARD_BLOCK.DIE };
-  }
-  const army = armyEventCards(state),
-    character = handCardsOfDeck(state, DECK.CHARACTER);
-  if (!army.length || !character.length)
-    return { blocked: FORCED_DISCARD_BLOCK.CARDS };
-  return { army, character, ownDie, dice };
-}
-// Pay the cost to discard the Free Peoples card `key` as the open action, and end the walk (the walk's answer
-// FORCE_ANSWER_PREFIX + key). Returns {army, character, die}, or {blocked} and changes nothing.
-export function payForcedDiscard(state, key) {
+// Pay to remove the Free Peoples card `key` that blocked `prompt` (the action or move step), as Queller's action, and
+// end the walk. Returns false, changing nothing, when Queller cannot pay.
+export function payForcedDiscard(state, key, prompt) {
   const fpCard = fpCardByKey(key);
   if (!fpCard) throw new Error("Unknown Free Peoples card " + key);
-  const cost = forcedDiscardCost(state);
-  if (cost.blocked) return cost;
-  const criteria = discardPriority(state);
-  const army = engine.applyPriority(state, cost.army, criteria).chosen,
-    character = engine.applyPriority(state, cost.character, criteria).chosen;
-  const why = "to force “" + fpCard.title + "” off the table";
+  const paying = payingDie(state),
+    armyCards = armyEventCards(state),
+    characterCards = handCardsOfDeck(state, DECK.CHARACTER);
+  if (!paying || !armyCards.length || !characterCards.length) return false;
+  const criteria = NODE.extra(nodeByKey("EV.discPri")).items;
+  const army = engine.applyPriority(state, armyCards, criteria).chosen,
+    character = engine.applyPriority(state, characterCards, criteria).chosen;
+  const why = "to remove “" + fpCard.title + "” from the table";
   engine.discardCard(state, army, why);
   engine.discardCard(state, character, why);
-  let die = null;
-  const claimed =
-    state.walk.dieIndex == null ? null : state.dice.pool[state.walk.dieIndex];
-  if (state.settings.dice) {
-    die = cost.ownDie ?? engine.nonPreferredFirst(state, cost.dice, 1)[0];
-    if (die === claimed) spendCurrentDie(state, why);
-    else {
-      // Another die pays (a matching one, or any Action die when the action held a Faction die or a used one).
-      engine.spendDie(state, die, why);
-      releaseCurrentDie(state);
-    }
-  } else if (!engine.isFactionRequirement(state.walk.die))
-    spendCurrentDie(state, why);
+  const walk = state.walk;
+  const ownDie = !state.settings.dice && !engine.isFactionRequirement(walk.die);
+  if (paying.claimed || ownDie) spendCurrentDie(state, why);
   else {
+    if (paying.die) engine.spendDie(state, paying.die, why);
+    else engine.log(state, "Queller used an Action die — " + why + ".");
     releaseCurrentDie(state);
-    engine.log(state, "Queller used an Action die — " + why + ".");
   }
   trail(state, {
-    kind: state.walk.prompt.type === PROMPT.STEP ? TRAIL.STEP : TRAIL.ACTION,
-    text: state.walk.prompt.text,
-    answer: "force “" + fpCard.title + "” off the table",
+    kind: prompt.type === PROMPT.STEP ? TRAIL.STEP : TRAIL.ACTION,
+    text: prompt.text,
+    answer: "blocked by “" + fpCard.title + "”: Queller removes it",
   });
   endWalk(
     state,
     WALK_RESULT.ACTION,
-    "Queller forces “" +
+    "Queller removes “" +
       fpCard.title +
-      "” off the table: it discards “" +
+      "” (rule 15): it discards “" +
       cardById[army].title +
       "” and “" +
       cardById[character].title +
-      "”" +
-      (die ? " and uses the " + die.face + " die" : "") +
-      ".",
+      "” and uses " +
+      (paying.die ? "the " + paying.die.face + " die" : "an Action die") +
+      ". Discard “" +
+      fpCard.title +
+      "” from the table.",
   );
-  return { army, character, die };
+  return true;
 }

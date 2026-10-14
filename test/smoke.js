@@ -193,9 +193,9 @@ async function exerciseTableCardsDiceUndoAndModals(page) {
   await page.click(SEL.JUMP_GO);
   await answerAll(page);
 }
-// Force discard of "A Power too Great" from an open Phase 5 action: Queller pays two cards and the action's die and the
-// walk ends; both the force and its set-up are then undone, so the later checks see the game as it was.
-async function exerciseForceDiscard(page) {
+// Not possible on a Phase 5 action, then "Yes: A Power too Great": Queller pays two cards and the action's die and the
+// walk ends; the answers and the set-up are then undone, so the later checks see the game as it was.
+async function exerciseBlockedByCard(page) {
   await page.evaluate(() => {
     window.QBUI.act(() => {
       const { QB } = window,
@@ -216,29 +216,29 @@ async function exerciseForceDiscard(page) {
       }
     });
   });
-  await page.click(SEL.FORCE_DISCARD);
-  await axeCheck(page, "force discard dialog");
-  await page.click(SEL.ASK_OK);
-  await page.click(SEL.ASK_OK);
+  await page.click(SEL.NOT_POSSIBLE);
+  await axeCheck(page, "blocked-by-card question");
+  await page.click(SEL.BLOCKED_BY_POWER_TOO_GREAT);
   const after = await page.evaluate(() => ({
     hand: window.QBUI.state.cards.hand,
     done: window.QBUI.state.walk?.done,
     focusOnBody: window.document.activeElement === window.document.body,
   }));
   if (after.focusOnBody)
-    debugFailures.push("focus fell to the page after a force discard");
+    debugFailures.push(
+      "focus fell to the page after removing the blocking card",
+    );
   console.log(
-    "force discard left in hand:",
+    "blocking card removed; left in hand:",
     after.hand.join(", "),
     "walk ended:",
     after.done,
   );
   if (after.hand.length !== 1 || after.hand[0] !== "sa002" || !after.done)
     debugFailures.push(
-      "force discard did not discard the Army and Character cards as the action",
+      "removing the blocking card did not discard the Army and Character cards as the action",
     );
-  await page.click(SEL.UNDO);
-  await page.click(SEL.UNDO);
+  for (let i = 0; i < 3; i++) await page.click(SEL.UNDO);
 }
 // Tracker off + dice on → the minimal tracker shows Companions and Rings.
 async function checkMinimalTracker(page) {
@@ -497,7 +497,7 @@ async function main() {
   await playBattle(page);
   await exerciseTrackerTriggers(page);
   await exerciseTableCardsDiceUndoAndModals(page);
-  await exerciseForceDiscard(page);
+  await exerciseBlockedByCard(page);
   await checkMinimalTracker(page);
   await checkDebugLogExport(page);
   const actionsBefore = await checkFailedActionAndUncaughtError(page);

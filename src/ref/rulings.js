@@ -28,6 +28,6 @@ export const RULINGS = [
   ],
   [
     "“A Power too Great” or “The Power of Tom Bombadil” blocks a Queller army. What does Queller do?",
-    "The move or attack is not possible (rule 29). Queller can force the card off the table by using one Action die and discarding one Army Event card and one Character card from its hand. Queller does this as the blocked action, with that action’s die when it is an Action die. With the app holding Queller’s cards, press the card’s “Force discard” answer on the action in place of Not possible: the app selects the cards by the strategy’s Phases 1–4 discard priority; when the action holds no unused Action die, it uses another, one that does not show a *preferred* result if there is one.",
+    "Queller must remove the card when it tries the blocked action (rule 15), if it can pay: one Action die (the action’s own when that is an Action die, else one matching the action, else one that does not show a *preferred* result) and one Army Event card and one Character card, chosen by the Event page discard priority (rule 12). That is Queller’s action. If it cannot pay, the action is not possible (rule 29). With the app holding Queller’s cards, Not possible on a Phase 5 action asks whether one of these cards blocked it; with the cards in your hands, apply rule 15 yourself.",
   ],
 ];

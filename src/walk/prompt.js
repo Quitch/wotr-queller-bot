@@ -16,6 +16,7 @@ export const PROMPT = {
   CHOICE: "choice",
   PRIORITY: "priority",
   BATTLE_FORM: "battleForm",
+  BLOCKED: "blocked",
 };
 // The prompts answered with yes or no.
 export const YES_NO_PROMPTS = [
@@ -29,8 +30,6 @@ export const YES_NO_PROMPTS = [
 export const offersNotPossible = (prompt) =>
   (prompt.type === PROMPT.ACTION && !prompt.auto) ||
   (prompt.type === PROMPT.STEP && !!prompt.move);
-// The answer that forces a Free Peoples card off the table in place of Not possible: this prefix and the card's key.
-export const FORCE_ANSWER_PREFIX = "force:";
 // How a walk ended (walk.result); a walk that reached another start point ends with phaseResult(name).
 export const WALK_RESULT = {
   ACTION: "action",

@@ -3,12 +3,12 @@ import * as engine from "../engine/index.js";
 import { CARD, TRAIL, cardById } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
 import { exitAction, spendCurrentDie } from "./actions.js";
-import { cur, endWalk, follow, trail } from "./core.js";
+import { cur, endWalk, follow, setPrompt, trail } from "./core.js";
 import { recordDecision } from "./decisions/common.js";
 import { dieWithArticle } from "./jumps-table.js";
 import { SHADOW_NATION_NAME } from "./nations.js";
-import { payForcedDiscard } from "./forced.js";
-import { FORCE_ANSWER_PREFIX, PROMPT, WALK_RESULT } from "./prompt.js";
+import { asksIfBlocked, fpCardByKey, payForcedDiscard } from "./forced.js";
+import { PROMPT, WALK_RESULT } from "./prompt.js";
 import { run } from "./run.js";
 
 // A yes/no answer to a board question asked once per node.
@@ -145,16 +145,41 @@ function applyActionToBoard(state, prompt) {
   if (prompt.nation) advanceNationOnBoard(state, prompt.nation);
   if (prompt.faction) bringFactionOnBoard(state, prompt.faction);
 }
+// Not possible on an action or a move step. When a Free Peoples card on the table may be what blocks it, ask first
+// (rule 15: Queller removes such a card when it tries the blocked action).
+function notPossible(state, prompt) {
+  if (asksIfBlocked(state, prompt))
+    setPrompt(state, {
+      type: PROMPT.BLOCKED,
+      text: prompt.text,
+      original: prompt,
+    });
+  else skipNotPossible(state, prompt, "not possible");
+}
+function skipNotPossible(state, prompt, answer) {
+  trail(state, {
+    kind: prompt.type === PROMPT.STEP ? TRAIL.STEP : TRAIL.ACTION,
+    text: prompt.text,
+    answer,
+  });
+  if (prompt.type === PROMPT.STEP) follow(state, null);
+  else exitAction(state);
+}
+// The answer to "blocked by a Free Peoples card?": a card's key (Queller pays to remove it when it can), or no.
+function answerBlocked(state, prompt, value) {
+  const fpCard = fpCardByKey(value);
+  if (fpCard && payForcedDiscard(state, value, prompt.original)) return;
+  skipNotPossible(
+    state,
+    prompt.original,
+    fpCard
+      ? "not possible: Queller cannot pay to remove “" + fpCard.title + "”"
+      : "not possible",
+  );
+}
 function answerAction(state, prompt, value) {
   const walk = state.walk;
-  if (value !== "done") {
-    trail(state, {
-      kind: TRAIL.ACTION,
-      text: prompt.text,
-      answer: "not possible",
-    });
-    return exitAction(state);
-  }
+  if (value !== "done") return notPossible(state, prompt);
   trail(state, { kind: TRAIL.ACTION, text: prompt.text, answer: "done" });
   if (prompt.pass) {
     endWalk(state, WALK_RESULT.PASS, "Queller passes.");
@@ -189,6 +214,7 @@ function answerPlayCard(state, prompt) {
   endWalk(state, WALK_RESULT.ACTION, "Queller plays “" + card.title + "”.");
 }
 function answerStep(state, prompt, value) {
+  if (prompt.move && value === "no") return notPossible(state, prompt);
   trail(state, {
     kind: TRAIL.STEP,
     text: prompt.text,
@@ -237,16 +263,12 @@ const ANSWER_HANDLERS = {
   [PROMPT.ROLL]: answerRoll,
   [PROMPT.PRIORITY]: answerPriority,
   [PROMPT.BATTLE_FORM]: answerBattleForm,
+  [PROMPT.BLOCKED]: answerBlocked,
 };
 // The player's answer to the open prompt: apply it, then walk on until the next prompt.
 export function answer(state, value) {
   const walk = state.walk;
   if (!walk?.prompt) return;
-  // Force discard replaces the open action, which it reads, so it runs before the prompt is cleared.
-  if (typeof value === "string" && value.startsWith(FORCE_ANSWER_PREFIX)) {
-    payForcedDiscard(state, value.slice(FORCE_ANSWER_PREFIX.length));
-    return;
-  }
   const prompt = walk.prompt;
   walk.prompt = null;
   const handler = ANSWER_HANDLERS[prompt.type];

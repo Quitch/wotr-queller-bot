@@ -3,7 +3,6 @@ export {
   PROMPT,
   YES_NO_PROMPTS,
   offersNotPossible,
-  FORCE_ANSWER_PREFIX,
   WALK_RESULT,
   phaseResult,
   phaseFromResult,
@@ -24,11 +23,4 @@ export {
   phasePage,
 } from "./phases.js";
 export { normalizeText, findStart } from "./graph.js";
-export {
-  FP_PROTECTION_CARDS,
-  fpCardByKey,
-  FORCED_DISCARD_BLOCK,
-  forcedDiscardCost,
-  forceDiscardOpen,
-  payForcedDiscard,
-} from "./forced.js";
+export { FP_PROTECTION_CARDS } from "./forced.js";

@@ -4,7 +4,6 @@ import * as engine from "../qb.js";
 import {
   DIE_KIND,
   DIE_STATE,
-  FORCE_ANSWER_PREFIX,
   PHASE,
   WALK_RESULT,
   YES_NO_PROMPTS,
@@ -20,25 +19,15 @@ import { setShownCard, shownCard, state } from "./session.js";
 import { PHASE_ACTION } from "./walkthrough.js";
 
 export function onAnswer(answer) {
-  if (!state.walk?.prompt) return;
-  if (answer.startsWith(FORCE_ANSWER_PREFIX)) {
-    onForceDiscard(answer.slice(FORCE_ANSWER_PREFIX.length));
-    return;
-  }
-  answerInAct(answer);
-}
-// Give the walk an answer inside act(); returns whether it ran (false: act() rolled back and showed the error bar).
-function answerInAct(answer) {
   const walk = state.walk,
-    prompt = walk.prompt;
-  let ran = false;
+    prompt = walk?.prompt;
+  if (!prompt) return;
   act(
     () => {
       let value = answer;
       if (YES_NO_PROMPTS.includes(prompt.type)) value = answer === "yes";
       engine.answer(state, value);
       afterWalk();
-      ran = true;
     },
     {
       action: "answer",
@@ -50,7 +39,6 @@ function answerInAct(answer) {
       value: answer,
     },
   );
-  return ran;
 }
 // A tracker field's value: checkboxes give a boolean, numeric fields a number, the rest their text.
 export function trackerValue(el) {
@@ -177,67 +165,4 @@ export function onCard(action, id) {
     state,
   );
   render();
-}
-// Force a Free Peoples protection card off the table (A Power too Great, The Power of Tom Bombadil) as the open Phase 5
-// action. The button looks the same whatever Queller holds; whether the cost can be paid is told only after the player
-// confirms.
-const FORCE_BLOCKED_TEXT = {
-  [engine.FORCED_DISCARD_BLOCK.NO_ACTION]:
-    "Queller has no open Phase 5 action that the card could block.",
-  [engine.FORCED_DISCARD_BLOCK.DIE]: "Queller has no unused Action die.",
-  [engine.FORCED_DISCARD_BLOCK.CARDS]: "Queller cannot pay the cost now.",
-};
-function told(title, text) {
-  ask({
-    title,
-    text,
-    buttons: [{ v: "ok", label: "OK", primary: true }],
-    onPick: () => {},
-  });
-}
-function forceDiscardConfirmed(fpCard) {
-  // Checked before act() so that a refusal leaves no empty step on the undo stack.
-  const cost = engine.forcedDiscardCost(state);
-  if (cost.blocked) {
-    debug.action(
-      { action: "forceDiscard", card: fpCard.key, blocked: cost.blocked },
-      state,
-    );
-    told(
-      "Queller cannot pay",
-      FORCE_BLOCKED_TEXT[cost.blocked] +
-        " “" +
-        fpCard.title +
-        "” stays on the table.",
-    );
-    return;
-  }
-  if (!answerInAct(FORCE_ANSWER_PREFIX + fpCard.key)) return;
-  told(
-    "“" + fpCard.title + "” discarded",
-    "Queller paid the cost as its action. Discard “" +
-      fpCard.title +
-      "” from the table on the board.",
-  );
-}
-function onForceDiscard(key) {
-  const fpCard = engine.fpCardByKey(key);
-  if (!fpCard) return;
-  ask({
-    title: "Force “" + fpCard.title + "” off the table?",
-    text:
-      "Queller can discard this Free Peoples card by using one Action die and discarding one Army Event card and one Character card from its hand. Do this in place of Not possible when the card blocks Queller’s current Phase 5 action against " +
-      fpCard.regions +
-      ". It becomes Queller’s action, paid with that action’s die when it is an Action die." +
-      (state.settings.dice
-        ? ""
-        : " The app does not roll Queller’s dice: set aside that Action die (or another, if the action used a Faction die) yourself."),
-    buttons: [
-      { v: "ok", label: "Force the discard", primary: true },
-      { v: "no", label: "Cancel" },
-    ],
-    onPick: (choice) => {
-      if (choice === "ok") forceDiscardConfirmed(fpCard);
-    },
-  });
 }
