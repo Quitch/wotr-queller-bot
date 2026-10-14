@@ -138,9 +138,9 @@ function renderActionPrompt(prompt, walk) {
       (prompt.pass ? "" : '<div class="help">' + dieHelpText(walk) + "</div>"),
     answers:
       DONE_BUTTON +
-      (prompt.auto
-        ? ""
-        : '<button class="btn no" data-ans="no">Not possible (rule 29)</button>'),
+      (engine.offersNotPossible(prompt)
+        ? '<button class="btn no" data-ans="no">Not possible (rule 29)</button>'
+        : ""),
   };
 }
 function renderPlayCardPrompt(prompt, walk) {
@@ -162,7 +162,7 @@ function renderPlayCardPrompt(prompt, walk) {
 function renderStepPrompt(prompt) {
   return {
     body: questionHTML(prompt.text) + orderedListHTML(prompt.items),
-    answers: prompt.move
+    answers: engine.offersNotPossible(prompt)
       ? DONE_BUTTON +
         '<button class="btn no" data-ans="no">Not possible</button>'
       : '<button class="btn yes" data-ans="done">Continue</button>',

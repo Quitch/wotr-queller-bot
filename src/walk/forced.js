@@ -16,7 +16,7 @@ import { NODE } from "../flow/index.js";
 import { spendCurrentDie } from "./actions.js";
 import { endWalk, trail } from "./core.js";
 import { nodeByKey } from "./priority.js";
-import { PROMPT, WALK_RESULT } from "./prompt.js";
+import { WALK_RESULT, offersNotPossible } from "./prompt.js";
 
 export const FP_PROTECTION_CARDS = [
   {
@@ -40,13 +40,21 @@ export const FORCED_DISCARD_BLOCK = {
   CARDS: "cards",
 };
 
-// The open prompt the forced discard can replace: a Phase 5 action or movement step the player could call not possible.
+// The open prompt the forced discard can replace: a Phase 5 action, outside a battle, that the player could call not
+// possible, whose die is still unspent (no earlier move paid with it) and is not the Muster die set aside for a minion.
 function blockableAction(state) {
   const walk = state.walk,
     prompt = walk && !walk.done ? walk.prompt : null;
-  if (!prompt || state.phase !== PHASE.P5) return false;
-  if (prompt.type === PROMPT.ACTION) return !prompt.auto && !prompt.pass;
-  return prompt.type === PROMPT.STEP && !!prompt.move;
+  return (
+    !!prompt &&
+    state.phase === PHASE.P5 &&
+    walk.entry.page !== "BA" &&
+    !!walk.die &&
+    !walk.dieUsed &&
+    !walk.fromReserve &&
+    offersNotPossible(prompt) &&
+    !prompt.pass
+  );
 }
 // The action's own die when it is an Action die (a Faction die cannot pay).
 function walkActionDie(state) {
@@ -97,13 +105,9 @@ export function payForcedDiscard(state, key) {
   engine.discardCard(state, character, why);
   let die = null;
   if (state.settings.dice) {
+    // When the action holds a Faction die, another Action die pays and the Faction die stays free.
     die = engine.nonPreferredFirst(state, cost.dice, 1)[0];
-    if (die !== walkActionDie(state)) {
-      // The action held a Faction die or none: that die stays free, and another Action die pays.
-      state.walk.die = null;
-      state.walk.dieIndex = null;
-      engine.spendDie(state, die, why);
-    } else spendCurrentDie(state, why);
+    spendCurrentDie(state, why, die === walkActionDie(state) ? null : die);
   } else if (state.walk.die && !engine.isFactionRequirement(state.walk.die))
     spendCurrentDie(state, why);
   else state.walk.die = null; // the player sets aside an Action die (the dialog says so)

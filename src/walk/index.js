@@ -2,6 +2,7 @@
 export {
   PROMPT,
   YES_NO_PROMPTS,
+  offersNotPossible,
   WALK_RESULT,
   phaseResult,
   phaseFromResult,

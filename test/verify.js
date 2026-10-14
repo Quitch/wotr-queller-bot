@@ -1024,6 +1024,25 @@ function forcedDiscardPaysArmyCharacterAndActionDie() {
       noAction.dice.pool[0].status === DIE_STATE.AVAIL,
     "refused with no Phase 5 action open, and nothing changes",
   );
+  for (const [why, spoil] of [
+    ["its die already paid for a move", (walk) => (walk.dieUsed = true)],
+    ["it is a battle walk", (walk) => (walk.entry.page = "BA")],
+    [
+      "it holds the Muster die set aside for a minion",
+      (walk) => (walk.fromReserve = true),
+    ],
+    ["it holds no die", (walk) => (walk.die = null)],
+  ]) {
+    const refused = atBlockedAttack(["sa013", "sa001b2"]);
+    spoil(refused.walk);
+    ok(
+      engine.payForcedDiscard(refused, "powerTooGreat").blocked ===
+        engine.FORCED_DISCARD_BLOCK.NO_ACTION &&
+        refused.cards.hand.length === 2 &&
+        !refused.walk.done,
+      "refused when " + why,
+    );
+  }
   const noCharacter = atBlockedAttack(["sa013"]);
   noCharacter.cards.factionHand = ["sa_Faction04"];
   ok(

@@ -330,10 +330,12 @@ export function handleAction(state, node) {
   if (isEndBox(label)) return endAction(state, walk);
   promptAction(state, node, label, { help: NODE.extra(node).help });
 }
-export function spendCurrentDie(state, why) {
+// Spend the die the walk holds and release it. `payWith`: another die pays instead, and the walk's own die stays free.
+export function spendCurrentDie(state, why, payWith) {
   const walk = state.walk;
-  if (!walk?.die) return;
-  if (state.settings.dice && walk.dieIndex != null) {
+  if (!walk?.die && !payWith) return;
+  if (payWith) engine.spendDie(state, payWith, why);
+  else if (state.settings.dice && walk.dieIndex != null) {
     engine.spendDie(state, state.dice.pool[walk.dieIndex], why);
   } else
     engine.log(
