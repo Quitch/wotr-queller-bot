@@ -26,7 +26,7 @@ const DONE_BUTTON = '<button class="btn yes" data-ans="done">Done</button>';
 // "Force discard" answers for the Free Peoples cards Queller may pay to remove, in place of Not possible. Whether they
 // show never depends on Queller's hand, so they give nothing away.
 const forceDiscardButtons = () =>
-  state.settings.cards && engine.forceDiscardOpen(state)
+  state?.settings.cards && engine.forceDiscardOpen(state)
     ? engine.FP_PROTECTION_CARDS.map(
         (fpCard) =>
           '<button class="btn" data-ans="' +

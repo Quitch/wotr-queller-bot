@@ -66,11 +66,16 @@ function walkActionDie(state) {
     ? die
     : null;
 }
-// The strategy's Phases 1–4 discard priority: the order Queller gives up cards in.
+// The strategy's Phases 1–4 discard priority: the order Queller gives up cards in. Under corruption the flowchart picks
+// the list by "Holding more than 1 strategy card" (C14.strat1: Yes → disc14, No → disc18).
 function discardPriority(state) {
-  return NODE.extra(
-    nodeByKey(state.strategy === STRATEGY.MILITARY ? "M14.disc" : "C14.disc18"),
-  ).items;
+  let key = "M14.disc";
+  if (state.strategy !== STRATEGY.MILITARY)
+    key =
+      handCardsOfDeck(state, DECK.STRATEGY).length > 1
+        ? "C14.disc14"
+        : "C14.disc18";
+  return NODE.extra(nodeByKey(key)).items;
 }
 // Faction cards never count (WoME rules: a discard condition naming a deck does not apply to Faction cards).
 const armyEventCards = (state) =>
