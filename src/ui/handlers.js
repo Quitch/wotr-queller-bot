@@ -203,8 +203,9 @@ function forceDiscardConfirmed(fpCard) {
   let paid = false;
   act(
     () => {
-      paid = !engine.payForcedDiscard(state, fpCard.key).blocked;
+      engine.payForcedDiscard(state, fpCard.key, cost);
       afterWalk();
+      paid = true;
     },
     { action: "forceDiscard", card: fpCard.key },
   );

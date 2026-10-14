@@ -990,6 +990,11 @@ function forcedDiscardPaysArmyCharacterAndActionDie() {
     state.walk.prompt.type === PROMPT.ACTION && actionDie.face === "Character",
     "set-up: a Phase 5 attack prompt holding the Character die",
   );
+  ok(
+    engine.forceDiscardOpen(state) &&
+      engine.forceDiscardOpen(atBlockedAttack([])),
+    "Force discard is open at the action whatever the hand holds",
+  );
   const paid = engine.payForcedDiscard(state, "powerTooGreat");
   ok(
     ["sa013", "sa014"].includes(paid.army) &&

@@ -319,6 +319,10 @@ function checkForceDiscardHidesHand() {
     canPay === cannotPay,
     "Force discard buttons are identical whatever Queller holds",
   );
+  ok(
+    (canPay.match(/data-force="[^"]+" disabled/g) || []).length === 2,
+    "Force discard buttons are disabled while no Phase 5 action is open",
+  );
   ui.setState(engine.newState({ ...settings, cards: false }));
   ok(
     !fakeWindow.gameHTML().includes("data-force"),

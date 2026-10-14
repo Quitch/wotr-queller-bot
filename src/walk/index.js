@@ -28,5 +28,6 @@ export {
   fpCardByKey,
   FORCED_DISCARD_BLOCK,
   forcedDiscardCost,
+  forceDiscardOpen,
   payForcedDiscard,
 } from "./forced.js";

@@ -42,7 +42,8 @@ export const FORCED_DISCARD_BLOCK = {
 
 // The open prompt the forced discard can replace: a Phase 5 action, outside a battle, that the player could call not
 // possible, whose die is still unspent (no earlier move paid with it) and is not the Muster die set aside for a minion.
-function blockableAction(state) {
+// It never depends on the hand, so the UI may show it.
+export function forceDiscardOpen(state) {
   const walk = state.walk,
     prompt = walk && !walk.done ? walk.prompt : null;
   return (
@@ -74,28 +75,29 @@ const armyEventCards = (state) =>
     (id) => cardById[id].type === "Army",
   );
 
-// What Queller would pay now: {army, character, dice} (the dice it may use; none with dice off), or {blocked}.
+// What Queller would pay now: {army, character, dice, ownDie} (the dice it may use, none with dice off; ownDie: the
+// action's own Action die, if any), or {blocked}.
 export function forcedDiscardCost(state) {
-  if (!blockableAction(state))
+  if (!forceDiscardOpen(state))
     return { blocked: FORCED_DISCARD_BLOCK.NO_ACTION };
-  let dice = [];
+  let dice = [],
+    ownDie = null;
   if (state.settings.dice) {
-    const own = walkActionDie(state);
-    dice = own ? [own] : engine.availableActionDice(state);
+    ownDie = walkActionDie(state);
+    dice = ownDie ? [ownDie] : engine.availableActionDice(state);
     if (!dice.length) return { blocked: FORCED_DISCARD_BLOCK.DIE };
   }
   const army = armyEventCards(state),
     character = handCardsOfDeck(state, DECK.CHARACTER);
   if (!army.length || !character.length)
     return { blocked: FORCED_DISCARD_BLOCK.CARDS };
-  return { army, character, dice };
+  return { army, character, dice, ownDie };
 }
-// Pay the cost to discard the Free Peoples card `key` as the open action, and end the walk. Returns {army, character,
-// die}, or {blocked} and changes nothing.
-export function payForcedDiscard(state, key) {
+// Pay the cost to discard the Free Peoples card `key` as the open action, and end the walk. `cost`: forcedDiscardCost
+// of this state, when the caller has already checked it. Returns {army, character, die}, or {blocked} and changes nothing.
+export function payForcedDiscard(state, key, cost = forcedDiscardCost(state)) {
   const fpCard = fpCardByKey(key);
   if (!fpCard) throw new Error("Unknown Free Peoples card " + key);
-  const cost = forcedDiscardCost(state);
   if (cost.blocked) return cost;
   const criteria = discardPriority(state);
   const army = engine.applyPriority(state, cost.army, criteria).chosen,
@@ -107,7 +109,7 @@ export function payForcedDiscard(state, key) {
   if (state.settings.dice) {
     // When the action holds a Faction die, another Action die pays and the Faction die stays free.
     die = engine.nonPreferredFirst(state, cost.dice, 1)[0];
-    spendCurrentDie(state, why, die === walkActionDie(state) ? null : die);
+    spendCurrentDie(state, why, die === cost.ownDie ? null : die);
   } else if (state.walk.die && !engine.isFactionRequirement(state.walk.die))
     spendCurrentDie(state, why);
   else state.walk.die = null; // the player sets aside an Action die (the dialog says so)
