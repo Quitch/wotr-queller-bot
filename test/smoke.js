@@ -193,6 +193,53 @@ async function exerciseTableCardsDiceUndoAndModals(page) {
   await page.click(SEL.JUMP_GO);
   await answerAll(page);
 }
+// Not possible on a Phase 5 action, then "Yes: A Power too Great": Queller pays two cards and the action's die and the
+// walk ends; the answers and the set-up are then undone, so the later checks see the game as it was.
+async function exerciseBlockedByCard(page) {
+  await page.evaluate(() => {
+    window.QBUI.act(() => {
+      const { QB } = window,
+        state = window.QBUI.state;
+      state.strategy = QB.STRATEGY.MILITARY;
+      state.phase = QB.PHASE.P5;
+      state.cards.hand = ["sa013", "sa001b2", "sa002"];
+      state.dice.pool = ["Army", "Army", "Character", "Muster"].map((face) => ({
+        kind: QB.DIE_KIND.ACTION,
+        face,
+        status: QB.DIE_STATE.AVAIL,
+      }));
+      QB.startPhase(state, QB.PHASE.P5);
+      for (let guard = 0; guard < 60; guard++) {
+        const prompt = state.walk.prompt;
+        if (state.walk.done || prompt.type === QB.PROMPT.ACTION) break;
+        QB.answer(state, QB.YES_NO_PROMPTS.includes(prompt.type) || "done");
+      }
+    });
+  });
+  await page.click(SEL.NOT_POSSIBLE);
+  await axeCheck(page, "blocked-by-card question");
+  await page.click(SEL.BLOCKED_BY_POWER_TOO_GREAT);
+  const after = await page.evaluate(() => ({
+    hand: window.QBUI.state.cards.hand,
+    done: window.QBUI.state.walk?.done,
+    focusOnBody: window.document.activeElement === window.document.body,
+  }));
+  if (after.focusOnBody)
+    debugFailures.push(
+      "focus fell to the page after removing the blocking card",
+    );
+  console.log(
+    "blocking card removed; left in hand:",
+    after.hand.join(", "),
+    "walk ended:",
+    after.done,
+  );
+  if (after.hand.length !== 1 || after.hand[0] !== "sa002" || !after.done)
+    debugFailures.push(
+      "removing the blocking card did not discard the Army and Character cards as the action",
+    );
+  for (let i = 0; i < 3; i++) await page.click(SEL.UNDO);
+}
 // Tracker off + dice on → the minimal tracker shows Companions and Rings.
 async function checkMinimalTracker(page) {
   await page.evaluate(() => {
@@ -450,6 +497,7 @@ async function main() {
   await playBattle(page);
   await exerciseTrackerTriggers(page);
   await exerciseTableCardsDiceUndoAndModals(page);
+  await exerciseBlockedByCard(page);
   await checkMinimalTracker(page);
   await checkDebugLogExport(page);
   const actionsBefore = await checkFailedActionAndUncaughtError(page);

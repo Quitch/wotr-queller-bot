@@ -26,6 +26,7 @@ const CHANCE = {
   YES: 0.5,
   ACTION_DONE: 0.8,
   STEP_DONE: 0.85,
+  BLOCKED_BY_CARD: 0.3,
   RANDOM_BOARD_AT_TURN_START: 0.7,
   BATTLE_AFTER_WALK: 0.25,
   RANDOM_BOARD_AFTER_WALK: 0.3,
@@ -93,6 +94,8 @@ export function randomAnswer(state) {
       return "ok";
     case PROMPT.BATTLE_FORM:
       return randomBattleForm();
+    case PROMPT.BLOCKED:
+      return rnd() < CHANCE.BLOCKED_BY_CARD ? "powerTooGreat" : "no";
   }
   throw new Error("unknown prompt " + prompt.type);
 }

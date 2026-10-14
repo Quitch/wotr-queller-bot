@@ -330,6 +330,11 @@ export function handleAction(state, node) {
   if (isEndBox(label)) return endAction(state, walk);
   promptAction(state, node, label, { help: NODE.extra(node).help });
 }
+// The walk no longer holds a die (spent, or given up unspent).
+export function releaseCurrentDie(state) {
+  state.walk.die = null;
+  state.walk.dieIndex = null;
+}
 export function spendCurrentDie(state, why) {
   const walk = state.walk;
   if (!walk?.die) return;
@@ -344,8 +349,7 @@ export function spendCurrentDie(state, why) {
         (why ? " — " + why : "") +
         ".",
     );
-  walk.die = null;
-  walk.dieIndex = null;
+  releaseCurrentDie(state);
 }
 // Rule 29: an action Queller cannot take is skipped — follow the arrow out of the box, or return to the page that sent us here.
 export function exitAction(state) {

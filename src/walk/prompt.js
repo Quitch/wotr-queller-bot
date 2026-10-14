@@ -16,6 +16,7 @@ export const PROMPT = {
   CHOICE: "choice",
   PRIORITY: "priority",
   BATTLE_FORM: "battleForm",
+  BLOCKED: "blocked",
 };
 // The prompts answered with yes or no.
 export const YES_NO_PROMPTS = [
@@ -25,6 +26,10 @@ export const YES_NO_PROMPTS = [
   PROMPT.DIE_CHECK,
   PROMPT.RING,
 ];
+// The prompts the player can answer with Not possible (rule 29): an action the app does not perform itself, or a move.
+export const offersNotPossible = (prompt) =>
+  (prompt.type === PROMPT.ACTION && !prompt.auto) ||
+  (prompt.type === PROMPT.STEP && !!prompt.move);
 // How a walk ended (walk.result); a walk that reached another start point ends with phaseResult(name).
 export const WALK_RESULT = {
   ACTION: "action",

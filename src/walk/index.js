@@ -2,6 +2,7 @@
 export {
   PROMPT,
   YES_NO_PROMPTS,
+  offersNotPossible,
   WALK_RESULT,
   phaseResult,
   phaseFromResult,
@@ -22,3 +23,4 @@ export {
   phasePage,
 } from "./phases.js";
 export { normalizeText, findStart } from "./graph.js";
+export { FP_PROTECTION_CARDS } from "./forced.js";

@@ -947,6 +947,177 @@ function eliminatedMinionIsNeverMusteredAgain() {
     "setting Saruman to eliminated discards Wormtongue and the Palantír",
   );
 }
+// "A Power too Great" / "The Power of Tom Bombadil" (rule 15): Not possible on a Phase 5 action asks whether such a
+// card blocked it; if so, Queller pays one Action die (the action's own when it can), one Army Event card and one
+// Character card (chosen by the Event page discard priority, rule 12), and that is its action. A Faction Army card
+// does not count; when Queller cannot pay, the action is not possible and nothing is spent.
+const FORCE_SETTINGS = { dice: true, cards: true, tracker: true, wome: true };
+// A military Phase 5 walk stopped at "Attack using character die", holding the Character die (index 2).
+function atBlockedAttack(hand, settings = FORCE_SETTINGS) {
+  const state = phase5State(settings, STRATEGY.MILITARY);
+  state.cards.hand = hand;
+  state.dice.pool = [
+    die("Army"),
+    die("Army"),
+    die("Character"),
+    die("Muster"),
+    { kind: engine.DIE_KIND.FACTION, face: "Faction", status: DIE_STATE.AVAIL },
+  ];
+  engine.startPhase(state, PHASE.P5);
+  let guard = 0;
+  while (
+    !state.walk.done &&
+    state.walk.prompt.type !== PROMPT.ACTION &&
+    guard++ < 60
+  ) {
+    const prompt = state.walk.prompt;
+    engine.answer(
+      state,
+      engine.YES_NO_PROMPTS.includes(prompt.type) ? true : "done",
+    );
+  }
+  return state;
+}
+// Press Not possible; when the follow-up question comes, answer it. Returns whether it came.
+function notPossibleThen(state, blockedAnswer) {
+  engine.answer(state, "no");
+  const asked = state.walk.prompt?.type === PROMPT.BLOCKED;
+  if (asked) engine.answer(state, blockedAnswer);
+  return asked;
+}
+const usedDice = (state) =>
+  state.dice.pool.filter((pooled) => pooled.status === DIE_STATE.USED);
+function forcedDiscardPaysArmyCharacterAndActionDie() {
+  const state = atBlockedAttack(["sa013", "sa014", "sa010", "sa008", "sa002"]);
+  const actionDie = state.dice.pool[state.walk.dieIndex];
+  ok(
+    state.walk.prompt.type === PROMPT.ACTION && actionDie.face === "Character",
+    "set-up: a Phase 5 attack prompt holding the Character die",
+  );
+  ok(
+    notPossibleThen(state, "powerTooGreat"),
+    "Not possible asks whether a Free Peoples card blocked the action",
+  );
+  ok(
+    state.cards.hand.length === 3 &&
+      state.cards.hand.includes("sa002") &&
+      state.cards.hand.includes("sa010") &&
+      ["sa013", "sa014"].filter((id) => state.cards.hand.includes(id))
+        .length === 1,
+    "one Army Event card and one Character card are discarded, by the Event page priority (the tile card stays)",
+  );
+  ok(
+    actionDie.status === DIE_STATE.USED && usedDice(state).length === 1,
+    "the blocked action's own die pays, and no other die is used",
+  );
+  ok(
+    state.walk.done &&
+      state.walk.result === WALK_RESULT.ACTION &&
+      state.log.some((entry) =>
+        entry.text.includes("Queller removes “A Power too Great”"),
+      ),
+    "removing the card is Queller's action: the walk ends and the log names the card",
+  );
+
+  const answeredNo = atBlockedAttack(["sa013", "sa008"]);
+  notPossibleThen(answeredNo, "no");
+  ok(
+    answeredNo.cards.hand.length === 2 && !usedDice(answeredNo).length,
+    "answering No is the usual Not possible: nothing is paid",
+  );
+  const noCharacter = atBlockedAttack(["sa013"]);
+  noCharacter.cards.factionHand = ["sa_Faction04"];
+  notPossibleThen(noCharacter, "bombadil");
+  ok(
+    noCharacter.cards.hand.length === 1 &&
+      !usedDice(noCharacter).length &&
+      noCharacter.walk.trail.some((entry) =>
+        String(entry.answer).includes("cannot pay"),
+      ),
+    "Queller cannot pay (no Character card; a Faction Army card does not count): not possible, nothing spent",
+  );
+  for (const [why, spoil] of [
+    [
+      "the app does not hold Queller's cards",
+      (s) => (s.settings.cards = false),
+    ],
+    ["its die already paid for a move", (s) => (s.walk.dieUsed = true)],
+    ["it is a battle walk", (s) => (s.walk.entry.page = "BA")],
+    [
+      "it holds the Muster die set aside for a minion",
+      (s) => (s.walk.fromReserve = true),
+    ],
+    ["it holds no die", (s) => (s.walk.die = null)],
+  ]) {
+    const notAsked = atBlockedAttack(["sa013", "sa008"]);
+    spoil(notAsked);
+    ok(
+      !notPossibleThen(notAsked, "powerTooGreat") &&
+        notAsked.cards.hand.length === 2,
+      "no question when " + why,
+    );
+  }
+  const factionDieAction = atBlockedAttack(["sa013", "sa008"]);
+  factionDieAction.walk.dieIndex = 4;
+  notPossibleThen(factionDieAction, "bombadil");
+  ok(
+    usedDice(factionDieAction).length === 1 &&
+      usedDice(factionDieAction)[0].kind === engine.DIE_KIND.ACTION &&
+      factionDieAction.dice.pool[4].status === DIE_STATE.AVAIL,
+    "an action holding the Faction die is paid with an Action die; the Faction die stays free",
+  );
+  const ownDieMarkedUsed = atBlockedAttack(["sa013", "sa008"]);
+  ownDieMarkedUsed.dice.pool[2].status = DIE_STATE.USED;
+  notPossibleThen(ownDieMarkedUsed, "bombadil");
+  ok(
+    usedDice(ownDieMarkedUsed).length === 2 && ownDieMarkedUsed.walk.done,
+    "an action die the player already marked used never pays; another Action die does",
+  );
+  const unclaimed = atBlockedAttack(["sa013", "sa008"]);
+  unclaimed.walk.dieIndex = null;
+  unclaimed.dice.pool.push(die("Character"));
+  notPossibleThen(unclaimed, "bombadil");
+  ok(
+    usedDice(unclaimed).length === 1 &&
+      usedDice(unclaimed)[0].face === "Character",
+    "an action holding a requirement but no claimed die pays with a die matching it",
+  );
+  const factionWild = atBlockedAttack(["sa013", "sa008"]);
+  factionWild.dice.pool = [
+    { kind: engine.DIE_KIND.FACTION, face: "Wild", status: DIE_STATE.AVAIL },
+    die("Muster"),
+    die("Wild"),
+  ];
+  factionWild.walk.dieIndex = null;
+  notPossibleThen(factionWild, "powerTooGreat");
+  ok(
+    factionWild.dice.pool[2].status === DIE_STATE.USED &&
+      factionWild.dice.pool[0].status === DIE_STATE.AVAIL &&
+      factionWild.dice.pool[1].status === DIE_STATE.AVAIL,
+    "a matching Action die (Wild) pays before a non-matching one, never the Faction Wild",
+  );
+  const noDie = atBlockedAttack(["sa013", "sa008"]);
+  noDie.dice.pool.forEach((pooled) => {
+    if (pooled.kind === engine.DIE_KIND.ACTION) pooled.status = DIE_STATE.USED;
+  });
+  noDie.walk.dieIndex = null;
+  notPossibleThen(noDie, "powerTooGreat");
+  ok(
+    noDie.cards.hand.length === 2,
+    "no unused Action die: Queller cannot pay and keeps its cards",
+  );
+  const diceOff = atBlockedAttack(["sa013", "sa008"], {
+    ...FORCE_SETTINGS,
+    dice: false,
+  });
+  ok(
+    diceOff.walk.prompt?.type === PROMPT.ACTION &&
+      notPossibleThen(diceOff, "powerTooGreat") &&
+      diceOff.cards.hand.length === 0 &&
+      diceOff.walk.done,
+    "with dice off the cards are discarded and the walk ends; the player sets aside the die",
+  );
+}
 // The scenarios, with the section of the change log each one guards.
 const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
@@ -968,6 +1139,7 @@ const SCENARIOS = [
   ["muster", musterChoiceCardAutoAnswered],
   ["muster", mouthOfSauronNeedsFreePeoplesAtWarOrMordor],
   ["muster", eliminatedMinionIsNeverMusteredAgain],
+  ["fp", forcedDiscardPaysArmyCharacterAndActionDie],
 ];
 function main() {
   for (const [number, scenario] of SCENARIOS) {

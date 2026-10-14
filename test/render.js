@@ -296,8 +296,51 @@ function playGames() {
   );
   if (!reportProblems()) fail("the games hit problems (above)");
 }
+// After Not possible on a Phase 5 action with the app holding Queller's cards, the walk asks whether a Free Peoples
+// card blocked it. The question is the same whatever Queller holds, so it never gives away the hand.
+function afterNotPossible(hand, settings) {
+  const state = engine.newState(settings);
+  state.strategy = engine.STRATEGY.MILITARY;
+  state.phase = engine.PHASE.P5;
+  state.cards.hand = hand;
+  state.cards.factionHand = [];
+  state.dice.pool = ["Army", "Army", "Character", "Muster"].map((face) => ({
+    kind: engine.DIE_KIND.ACTION,
+    face,
+    status: engine.DIE_STATE.AVAIL,
+  }));
+  engine.startPhase(state, engine.PHASE.P5);
+  for (let guard = 0; guard < 60; guard++) {
+    const prompt = state.walk.prompt;
+    if (state.walk.done || prompt.type === PROMPT.ACTION) break;
+    engine.answer(state, engine.YES_NO_PROMPTS.includes(prompt.type) || "done");
+  }
+  engine.answer(state, "no");
+  ui.setState(state);
+  return state.walk.prompt ? fakeWindow.promptHTML(state.walk) : "";
+}
+function checkBlockedQuestionHidesHand() {
+  const settings = { dice: true, cards: true, tracker: true, wome: false };
+  const canPay = afterNotPossible(["sa013", "sa008"], settings),
+    cannotPay = afterNotPossible(["sa002"], settings);
+  ok(
+    canPay.includes('data-ans="powerTooGreat"') &&
+      canPay.includes('data-ans="bombadil"') &&
+      canPay.includes('data-ans="no"'),
+    "Not possible asks whether A Power too Great or Tom Bombadil blocked the action",
+  );
+  ok(canPay === cannotPay, "the question is identical whatever Queller holds");
+  ok(
+    !afterNotPossible(["sa013", "sa008"], {
+      ...settings,
+      cards: false,
+    }).includes('data-ans="powerTooGreat"'),
+    "no question when the player holds Queller's cards",
+  );
+}
 function main() {
   playGames();
+  checkBlockedQuestionHidesHand();
   checkPromptTypesRendered();
   renderStatelessModals();
   renderEveryCard();

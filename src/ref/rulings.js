@@ -26,4 +26,8 @@ export const RULINGS = [
     "A Muster die is set aside for a minion. When is it used?",
     "When Queller reaches “Use Muster die set aside for minion” at the end of Phase 5, or when it is the only Queller die left. Recruit the minion through Muster 2. Queller cannot use the die for anything else.",
   ],
+  [
+    "“A Power too Great” or “The Power of Tom Bombadil” blocks a Queller army. What does Queller do?",
+    "Queller must remove the card when it tries the blocked action (rule 15), if it can pay: one Action die (the action’s own when that is an Action die, else one matching the action, else one that does not show a *preferred* result) and one Army Event card and one Character card, chosen by the Event page discard priority (rule 12). That is Queller’s action. If it cannot pay, the action is not possible (rule 29). With the app holding Queller’s cards, Not possible on a Phase 5 action asks whether one of these cards blocked it; with the cards in your hands, apply rule 15 yourself.",
+  ],
 ];

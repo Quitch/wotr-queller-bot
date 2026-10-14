@@ -1,6 +1,6 @@
 // The grey boxes: enter another page with the die it needs, return from it, set a die aside, switch strategy, look for a ring use.
 import * as engine from "../engine/index.js";
-import { DIE_KIND, DIE_REQUIREMENT, TRAIL } from "../engine/index.js";
+import { DIE_REQUIREMENT, TRAIL } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
 import { cur, endWalk, follow, goto, setPrompt, trail } from "./core.js";
 import { findStart, normalizeText } from "./graph.js";
@@ -80,8 +80,7 @@ function ringAnyJump(state, walk, spec, label) {
   const canUseRing =
     walk.mode !== "ringAny" &&
     engine.ringAvailable(state) &&
-    (!state.settings.dice ||
-      engine.availableDice(state).some((die) => die.kind === DIE_KIND.ACTION));
+    (!state.settings.dice || engine.availableActionDice(state).length > 0);
   if (canUseRing) {
     trail(state, { kind: TRAIL.JUMP, text: label });
     const entry = walk.entry;

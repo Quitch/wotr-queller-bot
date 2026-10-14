@@ -3,7 +3,6 @@ import { cardById } from "./cards.js";
 import {
   CARD_EFFECT,
   DECK,
-  DIE_KIND,
   DIE_REQUIREMENT,
   DIE_STATE,
   FACE,
@@ -12,7 +11,7 @@ import {
   STRATEGY,
   TRAIL,
 } from "./constants.js";
-import { availableDice, nonPreferredFirst } from "./dice.js";
+import { availableActionDice, nonPreferredFirst } from "./dice.js";
 import { deckName, drawCard } from "./hand.js";
 import { log } from "./log.js";
 import { applyPriority } from "./priority.js";
@@ -91,7 +90,7 @@ function resolveTheLidlessEye(state) {
   if (!state.settings.dice) return [];
   const chosen = nonPreferredFirst(
     state,
-    availableDice(state).filter((die) => die.kind === DIE_KIND.ACTION),
+    availableActionDice(state),
     LIDLESS_EYE_DICE,
   );
   const from = chosen.map((die) => die.face);

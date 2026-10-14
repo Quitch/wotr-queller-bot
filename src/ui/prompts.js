@@ -138,9 +138,9 @@ function renderActionPrompt(prompt, walk) {
       (prompt.pass ? "" : '<div class="help">' + dieHelpText(walk) + "</div>"),
     answers:
       DONE_BUTTON +
-      (prompt.auto
-        ? ""
-        : '<button class="btn no" data-ans="no">Not possible (rule 29)</button>'),
+      (engine.offersNotPossible(prompt)
+        ? '<button class="btn no" data-ans="no">Not possible (rule 29)</button>'
+        : ""),
   };
 }
 function renderPlayCardPrompt(prompt, walk) {
@@ -162,10 +162,38 @@ function renderPlayCardPrompt(prompt, walk) {
 function renderStepPrompt(prompt) {
   return {
     body: questionHTML(prompt.text) + orderedListHTML(prompt.items),
-    answers: prompt.move
+    answers: engine.offersNotPossible(prompt)
       ? DONE_BUTTON +
         '<button class="btn no" data-ans="no">Not possible</button>'
       : '<button class="btn yes" data-ans="done">Continue</button>',
+  };
+}
+// After Not possible: was it a Free Peoples card on the table that blocked it? (Rule 15.) Asked whatever Queller holds.
+function renderBlockedPrompt(prompt) {
+  const original = prompt.original;
+  return {
+    body:
+      questionHTML(
+        "Was “" +
+          original.text +
+          "” not possible because a Free Peoples card on the table blocked it?",
+      ) +
+      orderedListHTML(original.items) +
+      (original.help
+        ? '<div class="help">' + formatText(original.help) + "</div>"
+        : "") +
+      '<div class="help">If so, Queller must remove the card (rule 15): it uses one Action die and discards one Army Event card and one Character card, chosen by the Event page discard priority, and that is its action. If Queller cannot pay, the action is not possible.</div>',
+    answers:
+      engine.FP_PROTECTION_CARDS.map(
+        (fpCard) =>
+          '<button class="btn" data-ans="' +
+          fpCard.key +
+          '">Yes: ' +
+          escapeHTML(fpCard.title) +
+          " (" +
+          escapeHTML(fpCard.regions) +
+          ")</button>",
+      ).join("") + '<button class="btn no" data-ans="no">No</button>',
   };
 }
 function renderRollPrompt(prompt) {
@@ -221,6 +249,7 @@ export const PROMPT_RENDERERS = {
   [PROMPT.ACTION]: renderActionPrompt,
   [PROMPT.PLAY_CARD]: renderPlayCardPrompt,
   [PROMPT.STEP]: renderStepPrompt,
+  [PROMPT.BLOCKED]: renderBlockedPrompt,
   [PROMPT.ROLL]: renderRollPrompt,
   [PROMPT.PRIORITY]: renderPriorityPrompt,
   [PROMPT.BATTLE_FORM]: renderBattleFormPrompt,

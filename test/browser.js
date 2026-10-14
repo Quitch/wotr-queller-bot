@@ -50,6 +50,8 @@ const SEL = {
   TABLE_CARD_SHOWN: ".tablecards .card",
   TABLE_CARD_REMINDER: ".tablecards .rem",
   DIE_SPEND: "[data-spend]",
+  NOT_POSSIBLE: '.prompt [data-ans="no"]',
+  BLOCKED_BY_POWER_TOO_GREAT: '.prompt [data-ans="powerTooGreat"]',
   RINGS_STEPPER: '[data-step="rings"]',
   RINGS_INCREASE: '[data-step="rings"][data-d="1"]',
   COMPANIONS_STEPPER: '[data-step="fs.companions"]',

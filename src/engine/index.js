@@ -67,8 +67,10 @@ export {
   DIE_REQUIREMENT_FACES,
   dieSatisfies,
   availableDice,
+  availableActionDice,
   findDie,
   spendDie,
+  nonPreferredFirst,
   ringChange,
 } from "./dice.js";
 export {
