@@ -170,11 +170,18 @@ function renderStepPrompt(prompt) {
 }
 // After Not possible: was it a Free Peoples card on the table that blocked it? (Rule 15.) Asked whatever Queller holds.
 function renderBlockedPrompt(prompt) {
+  const original = prompt.original;
   return {
     body:
-      '<p class="q">Was “' +
-      formatText(prompt.text) +
-      "” blocked by a Free Peoples card on the table?</p>" +
+      questionHTML(
+        "Was “" +
+          original.text +
+          "” not possible because a Free Peoples card on the table blocked it?",
+      ) +
+      orderedListHTML(original.items) +
+      (original.help
+        ? '<div class="help">' + formatText(original.help) + "</div>"
+        : "") +
       '<div class="help">If so, Queller must remove the card (rule 15): it uses one Action die and discards one Army Event card and one Character card, chosen by the Event page discard priority, and that is its action. If Queller cannot pay, the action is not possible.</div>',
     answers:
       engine.FP_PROTECTION_CARDS.map(
@@ -183,7 +190,9 @@ function renderBlockedPrompt(prompt) {
           fpCard.key +
           '">Yes: ' +
           escapeHTML(fpCard.title) +
-          "</button>",
+          " (" +
+          escapeHTML(fpCard.regions) +
+          ")</button>",
       ).join("") + '<button class="btn no" data-ans="no">No</button>',
   };
 }

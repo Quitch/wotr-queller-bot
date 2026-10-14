@@ -1082,6 +1082,20 @@ function forcedDiscardPaysArmyCharacterAndActionDie() {
       usedDice(unclaimed)[0].face === "Character",
     "an action holding a requirement but no claimed die pays with a die matching it",
   );
+  const factionWild = atBlockedAttack(["sa013", "sa008"]);
+  factionWild.dice.pool = [
+    { kind: engine.DIE_KIND.FACTION, face: "Wild", status: DIE_STATE.AVAIL },
+    die("Muster"),
+    die("Wild"),
+  ];
+  factionWild.walk.dieIndex = null;
+  notPossibleThen(factionWild, "powerTooGreat");
+  ok(
+    factionWild.dice.pool[2].status === DIE_STATE.USED &&
+      factionWild.dice.pool[0].status === DIE_STATE.AVAIL &&
+      factionWild.dice.pool[1].status === DIE_STATE.AVAIL,
+    "a matching Action die (Wild) pays before a non-matching one, never the Faction Wild",
+  );
   const noDie = atBlockedAttack(["sa013", "sa008"]);
   noDie.dice.pool.forEach((pooled) => {
     if (pooled.kind === engine.DIE_KIND.ACTION) pooled.status = DIE_STATE.USED;

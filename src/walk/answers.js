@@ -7,7 +7,12 @@ import { cur, endWalk, follow, setPrompt, trail } from "./core.js";
 import { recordDecision } from "./decisions/common.js";
 import { dieWithArticle } from "./jumps-table.js";
 import { SHADOW_NATION_NAME } from "./nations.js";
-import { asksIfBlocked, fpCardByKey, payForcedDiscard } from "./forced.js";
+import {
+  asksIfBlocked,
+  blockedTrailKind,
+  fpCardByKey,
+  payForcedDiscard,
+} from "./forced.js";
 import { PROMPT, WALK_RESULT } from "./prompt.js";
 import { run } from "./run.js";
 
@@ -158,7 +163,7 @@ function notPossible(state, prompt) {
 }
 function skipNotPossible(state, prompt, answer) {
   trail(state, {
-    kind: prompt.type === PROMPT.STEP ? TRAIL.STEP : TRAIL.ACTION,
+    kind: blockedTrailKind(prompt),
     text: prompt.text,
     answer,
   });

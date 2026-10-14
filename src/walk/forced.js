@@ -18,7 +18,7 @@ import { NODE } from "../flow/index.js";
 import { releaseCurrentDie, spendCurrentDie } from "./actions.js";
 import { endWalk, trail } from "./core.js";
 import { nodeByKey } from "./priority.js";
-import { PROMPT, WALK_RESULT, offersNotPossible } from "./prompt.js";
+import { PROMPT, WALK_RESULT } from "./prompt.js";
 
 export const FP_PROTECTION_CARDS = [
   {
@@ -47,23 +47,35 @@ export function asksIfBlocked(state, prompt) {
     !!walk.die &&
     !walk.dieUsed &&
     !walk.fromReserve &&
-    offersNotPossible(prompt) &&
     !prompt.pass
   );
 }
 const usableActionDie = (die) =>
   die?.kind === DIE_KIND.ACTION && die.status === DIE_STATE.AVAIL;
-// The die that pays, as {die, claimed}: the action's own die, else a die matching its requirement, else any Action
-// die not showing a preferred result (rule 23); null when Queller has none. With dice off: {die: null} (the player's).
+// The trail kind for the action or move step a protection card blocked.
+export const blockedTrailKind = (prompt) =>
+  prompt.type === PROMPT.STEP ? TRAIL.STEP : TRAIL.ACTION;
+// An unused Action die matching the requirement `req`, in the order of its faces (a Faction die never matches).
+function matchingActionDie(state, req) {
+  const dice = engine.availableActionDice(state);
+  for (const face of engine.DIE_REQUIREMENT_FACES[req] || [req]) {
+    const die = dice.find((candidate) => candidate.face === face);
+    if (die) return die;
+  }
+  return null;
+}
+// The die that pays, as {die, claimed}: the action's own die, else an Action die matching its requirement, else any
+// Action die not showing a preferred result (rule 23); null when Queller has none. claimed: the walk's own die pays,
+// so spending it releases the walk's die. With dice off the player's die pays: {die: null}, claimed unless the action
+// held a Faction die.
 function payingDie(state) {
-  if (!state.settings.dice) return { die: null, claimed: false };
-  const walk = state.walk;
+  const walk = state.walk,
+    factionAction = engine.isFactionRequirement(walk.die);
+  if (!state.settings.dice) return { die: null, claimed: !factionAction };
   const claimed = walk.dieIndex == null ? null : state.dice.pool[walk.dieIndex];
   if (usableActionDie(claimed)) return { die: claimed, claimed: true };
-  if (!engine.isFactionRequirement(walk.die)) {
-    const matching = engine.findDie(state, walk.die);
-    if (usableActionDie(matching)) return { die: matching, claimed: false };
-  }
+  const matching = factionAction ? null : matchingActionDie(state, walk.die);
+  if (matching) return { die: matching, claimed: false };
   const other = engine.nonPreferredFirst(
     state,
     engine.availableActionDice(state),
@@ -91,16 +103,14 @@ export function payForcedDiscard(state, key, prompt) {
   const why = "to remove “" + fpCard.title + "” from the table";
   engine.discardCard(state, army, why);
   engine.discardCard(state, character, why);
-  const walk = state.walk;
-  const ownDie = !state.settings.dice && !engine.isFactionRequirement(walk.die);
-  if (paying.claimed || ownDie) spendCurrentDie(state, why);
+  if (paying.claimed) spendCurrentDie(state, why);
   else {
     if (paying.die) engine.spendDie(state, paying.die, why);
     else engine.log(state, "Queller used an Action die — " + why + ".");
     releaseCurrentDie(state);
   }
   trail(state, {
-    kind: prompt.type === PROMPT.STEP ? TRAIL.STEP : TRAIL.ACTION,
+    kind: blockedTrailKind(prompt),
     text: prompt.text,
     answer: "blocked by “" + fpCard.title + "”: Queller removes it",
   });
