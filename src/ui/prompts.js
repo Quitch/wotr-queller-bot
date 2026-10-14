@@ -5,7 +5,9 @@ import { PROMPT, cardById } from "../qb.js";
 import { battleFormHTML, dieHelpText } from "./battle-form.js";
 import { CARD_HALF, cardHTML } from "./card.js";
 import { ringIcon } from "./dice.js";
+import { FORCE_ANSWER_PREFIX } from "./constants.js";
 import { escapeHTML, formatText } from "./dom.js";
+import { state } from "./session.js";
 
 export const NODE_KIND_NAME = {
   [NODE_KIND.START]: "Start point",
@@ -21,6 +23,20 @@ export const NODE_KIND_NAME = {
 const YES_NO_BUTTONS =
   '<button class="btn yes" data-ans="yes">Yes</button><button class="btn no" data-ans="no">No</button>';
 const DONE_BUTTON = '<button class="btn yes" data-ans="done">Done</button>';
+// "Force discard" answers for the Free Peoples cards Queller may pay to remove, in place of Not possible. Whether they
+// show never depends on Queller's hand, so they give nothing away.
+const forceDiscardButtons = () =>
+  state.settings.cards && engine.forceDiscardOpen(state)
+    ? engine.FP_PROTECTION_CARDS.map(
+        (fpCard) =>
+          '<button class="btn" data-ans="' +
+          FORCE_ANSWER_PREFIX +
+          fpCard.key +
+          '">Force discard: ' +
+          escapeHTML(fpCard.title) +
+          "</button>",
+      ).join("")
+    : "";
 const orderedListHTML = (items) =>
   items
     ? "<ol>" +
@@ -139,7 +155,8 @@ function renderActionPrompt(prompt, walk) {
     answers:
       DONE_BUTTON +
       (engine.offersNotPossible(prompt)
-        ? '<button class="btn no" data-ans="no">Not possible (rule 29)</button>'
+        ? '<button class="btn no" data-ans="no">Not possible (rule 29)</button>' +
+          forceDiscardButtons()
         : ""),
   };
 }
@@ -164,7 +181,8 @@ function renderStepPrompt(prompt) {
     body: questionHTML(prompt.text) + orderedListHTML(prompt.items),
     answers: engine.offersNotPossible(prompt)
       ? DONE_BUTTON +
-        '<button class="btn no" data-ans="no">Not possible</button>'
+        '<button class="btn no" data-ans="no">Not possible</button>' +
+        forceDiscardButtons()
       : '<button class="btn yes" data-ans="done">Continue</button>',
   };
 }

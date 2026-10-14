@@ -6,6 +6,7 @@ import * as engine from "../engine/index.js";
 import {
   DECK,
   DIE_KIND,
+  DIE_STATE,
   PHASE,
   STRATEGY,
   TRAIL,
@@ -16,7 +17,7 @@ import { NODE } from "../flow/index.js";
 import { spendCurrentDie } from "./actions.js";
 import { endWalk, trail } from "./core.js";
 import { nodeByKey } from "./priority.js";
-import { WALK_RESULT, offersNotPossible } from "./prompt.js";
+import { PROMPT, WALK_RESULT, offersNotPossible } from "./prompt.js";
 
 export const FP_PROTECTION_CARDS = [
   {
@@ -57,11 +58,13 @@ export function forceDiscardOpen(state) {
     !prompt.pass
   );
 }
-// The action's own die when it is an Action die (a Faction die cannot pay).
+// The action's own die when it is an unused Action die (a Faction die cannot pay; the player may have marked it used).
 function walkActionDie(state) {
   const index = state.walk.dieIndex;
   const die = index == null ? null : state.dice.pool[index];
-  return die?.kind === DIE_KIND.ACTION ? die : null;
+  return die?.kind === DIE_KIND.ACTION && die.status === DIE_STATE.AVAIL
+    ? die
+    : null;
 }
 // The strategy's Phases 1–4 discard priority: the order Queller gives up cards in.
 function discardPriority(state) {
@@ -107,14 +110,17 @@ export function payForcedDiscard(state, key, cost = forcedDiscardCost(state)) {
   engine.discardCard(state, character, why);
   let die = null;
   if (state.settings.dice) {
-    // When the action holds a Faction die, another Action die pays and the Faction die stays free.
+    // When the action holds a Faction die (or one already marked used), another Action die pays.
     die = engine.nonPreferredFirst(state, cost.dice, 1)[0];
     spendCurrentDie(state, why, die === cost.ownDie ? null : die);
-  } else if (state.walk.die && !engine.isFactionRequirement(state.walk.die))
+  } else if (!engine.isFactionRequirement(state.walk.die))
     spendCurrentDie(state, why);
-  else state.walk.die = null; // the player sets aside an Action die (the dialog says so)
+  else {
+    state.walk.die = null;
+    engine.log(state, "Queller used an Action die — " + why + ".");
+  }
   trail(state, {
-    kind: TRAIL.ACTION,
+    kind: state.walk.prompt.type === PROMPT.STEP ? TRAIL.STEP : TRAIL.ACTION,
     text: state.walk.prompt.text,
     answer: "force “" + fpCard.title + "” off the table",
   });

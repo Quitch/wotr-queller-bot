@@ -223,7 +223,10 @@ async function exerciseForceDiscard(page) {
   const after = await page.evaluate(() => ({
     hand: window.QBUI.state.cards.hand,
     done: window.QBUI.state.walk?.done,
+    focusOnBody: window.document.activeElement === window.document.body,
   }));
+  if (after.focusOnBody)
+    debugFailures.push("focus fell to the page after a force discard");
   console.log(
     "force discard left in hand:",
     after.hand.join(", "),

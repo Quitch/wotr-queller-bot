@@ -1071,6 +1071,16 @@ function forcedDiscardPaysArmyCharacterAndActionDie() {
       factionDieAction.dice.pool[4].status === DIE_STATE.AVAIL,
     "an action holding the Faction die is paid with another Action die; the Faction die stays free",
   );
+  const ownDieMarkedUsed = atBlockedAttack(["sa013", "sa001b2"]);
+  ownDieMarkedUsed.dice.pool[ownDieMarkedUsed.walk.dieIndex].status =
+    DIE_STATE.USED;
+  const paidAfterMark = engine.payForcedDiscard(ownDieMarkedUsed, "bombadil");
+  ok(
+    paidAfterMark.die &&
+      paidAfterMark.die !== ownDieMarkedUsed.dice.pool[2] &&
+      paidAfterMark.die.status === DIE_STATE.USED,
+    "an action die the player already marked used never pays; another Action die does",
+  );
   const noDie = atBlockedAttack([]);
   noDie.dice.pool.forEach((pooled) => {
     if (pooled.kind === engine.DIE_KIND.ACTION) pooled.status = DIE_STATE.USED;

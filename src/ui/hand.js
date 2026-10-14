@@ -92,28 +92,6 @@ function tableCardsHTML(cards) {
     "</div>"
   );
 }
-// Free Peoples cards Queller may pay to discard. The buttons never depend on the hand, so they give nothing away: they
-// are enabled while a Phase 5 action the card could block is open.
-function forceDiscardHTML() {
-  const open = engine.forceDiscardOpen(state);
-  return (
-    '<div class="more tablecards"><div class="mlbl">Free Peoples cards</div>' +
-    engine.FP_PROTECTION_CARDS.map(
-      (fpCard) =>
-        '<div class="tc"><button class="btn small" data-force="' +
-        fpCard.key +
-        '"' +
-        (open ? "" : " disabled") +
-        ">Force discard: " +
-        escapeHTML(fpCard.title) +
-        "</button></div>",
-    ).join("") +
-    (open
-      ? ""
-      : '<div class="notice">Available during Queller’s Phase 5 action, in place of Not possible.</div>') +
-    "</div>"
-  );
-}
 export function cardsHTML() {
   const cards = state.cards,
     handCount = engine.handCounts(state);
@@ -126,7 +104,6 @@ export function cardsHTML() {
     handHTML(cards, handCount) +
     deckCountsHTML(cards) +
     tableCardsHTML(cards) +
-    forceDiscardHTML() +
     "</section>"
   );
 }

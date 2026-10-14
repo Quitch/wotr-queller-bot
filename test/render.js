@@ -296,37 +296,46 @@ function playGames() {
   );
   if (!reportProblems()) fail("the games hit problems (above)");
 }
-// The Force discard buttons show only with the app holding Queller's cards, and look the same whether or not Queller
-// could pay, so they never give away what the hand holds.
+// The Force discard answers show on an open Phase 5 action with the app holding Queller's cards, and look the same
+// whatever Queller holds, so they never give away what the hand holds.
+function atAction(hand, settings) {
+  const state = engine.newState(settings);
+  state.strategy = engine.STRATEGY.MILITARY;
+  state.phase = engine.PHASE.P5;
+  state.cards.hand = hand;
+  state.cards.factionHand = [];
+  state.dice.pool = ["Army", "Army", "Character", "Muster"].map((face) => ({
+    kind: engine.DIE_KIND.ACTION,
+    face,
+    status: engine.DIE_STATE.AVAIL,
+  }));
+  engine.startPhase(state, engine.PHASE.P5);
+  for (let guard = 0; guard < 60; guard++) {
+    const prompt = state.walk.prompt;
+    if (state.walk.done || prompt.type === PROMPT.ACTION) break;
+    engine.answer(state, engine.YES_NO_PROMPTS.includes(prompt.type) || "done");
+  }
+  ui.setState(state);
+  return fakeWindow.promptHTML(state.walk);
+}
 function checkForceDiscardHidesHand() {
   const settings = { dice: true, cards: true, tracker: true, wome: false };
-  const forceBlock = (hand) => {
-    const state = engine.newState(settings);
-    state.cards.hand = hand;
-    ui.setState(state);
-    const html = fakeWindow.gameHTML();
-    const at = html.indexOf("Free Peoples cards");
-    return at < 0 ? "" : html.slice(at, html.indexOf("</section>", at));
-  };
-  const canPay = forceBlock(["sa013", "sa001b2"]),
-    cannotPay = forceBlock(["sa002"]);
+  const canPay = atAction(["sa013", "sa001b2"], settings),
+    cannotPay = atAction(["sa002"], settings);
   ok(
-    canPay.includes('data-force="powerTooGreat"') &&
-      canPay.includes('data-force="bombadil"'),
-    "Force discard buttons render with the app holding Queller's cards",
+    canPay.includes('data-ans="force:powerTooGreat"') &&
+      canPay.includes('data-ans="force:bombadil"'),
+    "Force discard answers render on an open Phase 5 action",
   );
   ok(
     canPay === cannotPay,
-    "Force discard buttons are identical whatever Queller holds",
+    "the action prompt is identical whatever Queller holds",
   );
   ok(
-    (canPay.match(/data-force="[^"]+" disabled/g) || []).length === 2,
-    "Force discard buttons are disabled while no Phase 5 action is open",
-  );
-  ui.setState(engine.newState({ ...settings, cards: false }));
-  ok(
-    !fakeWindow.gameHTML().includes("data-force"),
-    "no Force discard buttons when the player holds Queller's cards",
+    !atAction(["sa013", "sa001b2"], { ...settings, cards: false }).includes(
+      "force:",
+    ),
+    "no Force discard answers when the player holds Queller's cards",
   );
 }
 function main() {

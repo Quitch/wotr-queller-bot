@@ -12,7 +12,7 @@ import {
 } from "../qb.js";
 import { act } from "./actions.js";
 import { ask, openModal } from "./ask.js";
-import { MODAL } from "./constants.js";
+import { FORCE_ANSWER_PREFIX, MODAL } from "./constants.js";
 import { PHASE_BY_LABEL } from "./header.js";
 import { render } from "./render.js";
 import { setShownCard, shownCard, state } from "./session.js";
@@ -22,6 +22,10 @@ export function onAnswer(answer) {
   const walk = state.walk,
     prompt = walk?.prompt;
   if (!prompt) return;
+  if (answer.startsWith(FORCE_ANSWER_PREFIX)) {
+    onForceDiscard(answer.slice(FORCE_ANSWER_PREFIX.length));
+    return;
+  }
   act(
     () => {
       let value = answer;
@@ -171,7 +175,7 @@ export function onCard(action, id) {
 // confirms.
 const FORCE_BLOCKED_TEXT = {
   [engine.FORCED_DISCARD_BLOCK.NO_ACTION]:
-    "Use Force discard while Queller’s Phase 5 action that the card blocks is on screen, in place of Not possible.",
+    "Queller has no open Phase 5 action that the card could block.",
   [engine.FORCED_DISCARD_BLOCK.DIE]: "Queller has no unused Action die.",
   [engine.FORCED_DISCARD_BLOCK.CARDS]: "Queller cannot pay the cost now.",
 };
@@ -217,7 +221,7 @@ function forceDiscardConfirmed(fpCard) {
       "” from the table on the board.",
   );
 }
-export function onForceDiscard(key) {
+function onForceDiscard(key) {
   const fpCard = engine.fpCardByKey(key);
   if (!fpCard) return;
   ask({
