@@ -193,6 +193,30 @@ async function exerciseTableCardsDiceUndoAndModals(page) {
   await page.click(SEL.JUMP_GO);
   await answerAll(page);
 }
+// Force discard of "A Power too Great": Queller pays two cards and an Action die, then Undo restores them.
+async function exerciseForceDiscard(page) {
+  await page.evaluate(() => {
+    window.QBUI.act(() => {
+      const state = window.QBUI.state;
+      state.cards.hand = ["sa013", "sa001b2", "sa002"];
+      state.dice.pool.forEach((die) => {
+        if (die.kind === window.QB.DIE_KIND.ACTION)
+          die.status = window.QB.DIE_STATE.AVAIL;
+      });
+    });
+  });
+  await page.click(SEL.FORCE_DISCARD);
+  await axeCheck(page, "force discard dialog");
+  await page.click(SEL.ASK_OK);
+  await page.click(SEL.ASK_OK);
+  const hand = await page.evaluate(() => window.QBUI.state.cards.hand);
+  console.log("force discard left in hand:", hand.join(", "));
+  if (hand.length !== 1 || hand[0] !== "sa002")
+    debugFailures.push(
+      "force discard did not discard the Army and Character cards",
+    );
+  await page.click(SEL.UNDO);
+}
 // Tracker off + dice on → the minimal tracker shows Companions and Rings.
 async function checkMinimalTracker(page) {
   await page.evaluate(() => {
@@ -450,6 +474,7 @@ async function main() {
   await playBattle(page);
   await exerciseTrackerTriggers(page);
   await exerciseTableCardsDiceUndoAndModals(page);
+  await exerciseForceDiscard(page);
   await checkMinimalTracker(page);
   await checkDebugLogExport(page);
   const actionsBefore = await checkFailedActionAndUncaughtError(page);

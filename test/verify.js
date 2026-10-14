@@ -947,6 +947,74 @@ function eliminatedMinionIsNeverMusteredAgain() {
     "setting Saruman to eliminated discards Wormtongue and the Palantír",
   );
 }
+// "A Power too Great" / "The Power of Tom Bombadil": Queller pays one Action die, one Army Event card and one
+// Character card; a Faction Army card does not count, and nothing changes when the cost cannot be paid.
+function forcedDiscardPaysArmyCharacterAndActionDie() {
+  const settings = { dice: true, cards: true, tracker: true, wome: true };
+  const state = phase5State(settings, STRATEGY.MILITARY);
+  state.cards.hand = ["sa013", "sa014", "sa001b2", "sa003", "sa002"];
+  state.dice.pool = [
+    { kind: engine.DIE_KIND.FACTION, face: "Faction", status: DIE_STATE.AVAIL },
+    die("Event"),
+  ];
+  const paid = engine.payForcedDiscard(state, "powerTooGreat");
+  ok(
+    ["sa013", "sa014"].includes(paid.army) &&
+      ["sa001b2", "sa003"].includes(paid.character),
+    "one Army Event card and one Character card are discarded",
+  );
+  ok(
+    state.cards.hand.length === 3 && state.cards.hand.includes("sa002"),
+    "the other cards, the Muster card among them, stay in the hand",
+  );
+  ok(
+    state.dice.pool[1].status === DIE_STATE.USED &&
+      state.dice.pool[0].status === DIE_STATE.AVAIL,
+    "an Action die is used, never the Faction die",
+  );
+  ok(
+    state.log.some((entry) =>
+      entry.text.includes("Forced “A Power too Great”"),
+    ),
+    "the log names the Free Peoples card",
+  );
+
+  const noCharacter = phase5State(settings, STRATEGY.CORRUPTION);
+  noCharacter.cards.hand = ["sa013"];
+  noCharacter.cards.factionHand = ["sa_Faction04"];
+  noCharacter.dice.pool = [die("Army")];
+  ok(
+    engine.payForcedDiscard(noCharacter, "bombadil").blocked ===
+      engine.FORCED_DISCARD_BLOCK.CARDS &&
+      noCharacter.cards.hand.length === 1 &&
+      noCharacter.dice.pool[0].status === DIE_STATE.AVAIL,
+    "no Character card: the cost is not paid and nothing changes",
+  );
+  const factionArmyOnly = phase5State(settings);
+  factionArmyOnly.cards.hand = ["sa001b2"];
+  factionArmyOnly.cards.factionHand = ["sa_Faction04"];
+  factionArmyOnly.dice.pool = [die("Army")];
+  ok(
+    engine.forcedDiscardCost(factionArmyOnly).blocked ===
+      engine.FORCED_DISCARD_BLOCK.CARDS,
+    "a Faction Army card does not count as an Army Event card",
+  );
+  const noDie = phase5State(settings);
+  noDie.cards.hand = ["sa013", "sa001b2"];
+  noDie.dice.pool = [die("Army", DIE_STATE.USED)];
+  ok(
+    engine.forcedDiscardCost(noDie).blocked === engine.FORCED_DISCARD_BLOCK.DIE,
+    "no unused Action die: the cost cannot be paid",
+  );
+  const diceOff = phase5State({ ...settings, dice: false });
+  diceOff.cards.hand = ["sa013", "sa001b2"];
+  diceOff.dice.pool = [];
+  ok(
+    engine.payForcedDiscard(diceOff, "powerTooGreat").die === null &&
+      diceOff.cards.hand.length === 0,
+    "with dice off the cards are discarded and the player sets aside the die",
+  );
+}
 // The scenarios, with the section of the change log each one guards.
 const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
@@ -968,6 +1036,7 @@ const SCENARIOS = [
   ["muster", musterChoiceCardAutoAnswered],
   ["muster", mouthOfSauronNeedsFreePeoplesAtWarOrMordor],
   ["muster", eliminatedMinionIsNeverMusteredAgain],
+  ["fp", forcedDiscardPaysArmyCharacterAndActionDie],
 ];
 function main() {
   for (const [number, scenario] of SCENARIOS) {

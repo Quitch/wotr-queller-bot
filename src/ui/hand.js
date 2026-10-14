@@ -92,6 +92,21 @@ function tableCardsHTML(cards) {
     "</div>"
   );
 }
+// Free Peoples cards Queller may pay to discard. The buttons never depend on the hand, so they give nothing away.
+function forceDiscardHTML() {
+  return (
+    '<div class="more tablecards"><div class="mlbl">Free Peoples cards</div>' +
+    engine.FP_PROTECTION_CARDS.map(
+      (fpCard) =>
+        '<div class="tc"><button class="btn small" data-force="' +
+        fpCard.key +
+        '">Force discard: ' +
+        escapeHTML(fpCard.title) +
+        "</button></div>",
+    ).join("") +
+    "</div>"
+  );
+}
 export function cardsHTML() {
   const cards = state.cards,
     handCount = engine.handCounts(state);
@@ -104,6 +119,7 @@ export function cardsHTML() {
     handHTML(cards, handCount) +
     deckCountsHTML(cards) +
     tableCardsHTML(cards) +
+    forceDiscardHTML() +
     "</section>"
   );
 }

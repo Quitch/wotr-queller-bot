@@ -296,8 +296,38 @@ function playGames() {
   );
   if (!reportProblems()) fail("the games hit problems (above)");
 }
+// The Force discard buttons show only with the app holding Queller's cards, and look the same whether or not Queller
+// could pay, so they never give away what the hand holds.
+function checkForceDiscardHidesHand() {
+  const settings = { dice: true, cards: true, tracker: true, wome: false };
+  const forceBlock = (hand) => {
+    const state = engine.newState(settings);
+    state.cards.hand = hand;
+    ui.setState(state);
+    const html = fakeWindow.gameHTML();
+    const at = html.indexOf("Free Peoples cards");
+    return at < 0 ? "" : html.slice(at, html.indexOf("</section>", at));
+  };
+  const canPay = forceBlock(["sa013", "sa001b2"]),
+    cannotPay = forceBlock(["sa002"]);
+  ok(
+    canPay.includes('data-force="powerTooGreat"') &&
+      canPay.includes('data-force="bombadil"'),
+    "Force discard buttons render with the app holding Queller's cards",
+  );
+  ok(
+    canPay === cannotPay,
+    "Force discard buttons are identical whatever Queller holds",
+  );
+  ui.setState(engine.newState({ ...settings, cards: false }));
+  ok(
+    !fakeWindow.gameHTML().includes("data-force"),
+    "no Force discard buttons when the player holds Queller's cards",
+  );
+}
 function main() {
   playGames();
+  checkForceDiscardHidesHand();
   checkPromptTypesRendered();
   renderStatelessModals();
   renderEveryCard();

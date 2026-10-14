@@ -69,6 +69,7 @@ export {
   availableDice,
   findDie,
   spendDie,
+  nonPreferredFirst,
   ringChange,
 } from "./dice.js";
 export {

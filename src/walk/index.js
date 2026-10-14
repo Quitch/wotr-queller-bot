@@ -22,3 +22,9 @@ export {
   phasePage,
 } from "./phases.js";
 export { normalizeText, findStart } from "./graph.js";
+export {
+  FP_PROTECTION_CARDS,
+  FORCED_DISCARD_BLOCK,
+  forcedDiscardCost,
+  payForcedDiscard,
+} from "./forced.js";

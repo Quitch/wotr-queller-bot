@@ -166,3 +166,60 @@ export function onCard(action, id) {
   );
   render();
 }
+// Force a Free Peoples protection card off the table (A Power too Great, The Power of Tom Bombadil). The button looks the
+// same whatever Queller holds; whether the cost can be paid is told only after the player confirms.
+export function onForceDiscard(key) {
+  const fpCard = engine.FP_PROTECTION_CARDS.find((c) => c.key === key);
+  const told = (title, text) =>
+    ask({
+      title,
+      text,
+      buttons: [{ v: "ok", label: "OK", primary: true }],
+      onPick: () => {},
+    });
+  ask({
+    title: "Force “" + fpCard.title + "” off the table?",
+    text:
+      "Queller can discard this Free Peoples card by using one Action die and discarding one Army Event card and one Character card from its hand. Do this when a Queller army is blocked from " +
+      fpCard.regions +
+      " by the card and you would otherwise press Not possible." +
+      (state.settings.dice
+        ? ""
+        : " The app does not roll Queller’s dice: set aside one Queller Action die yourself."),
+    buttons: [
+      { v: "ok", label: "Force the discard", primary: true },
+      { v: "no", label: "Cancel" },
+    ],
+    onPick: (choice) => {
+      if (choice !== "ok") return;
+      const cost = engine.forcedDiscardCost(state);
+      if (cost.blocked) {
+        debug.action(
+          { action: "forceDiscard", card: key, blocked: cost.blocked },
+          state,
+        );
+        told(
+          "Queller cannot pay",
+          cost.blocked === engine.FORCED_DISCARD_BLOCK.DIE
+            ? "Queller has no unused Action die. “" +
+                fpCard.title +
+                "” stays on the table."
+            : "Queller cannot pay the cost now. “" +
+                fpCard.title +
+                "” stays on the table.",
+        );
+        return;
+      }
+      act(() => engine.payForcedDiscard(state, key), {
+        action: "forceDiscard",
+        card: key,
+      });
+      told(
+        "“" + fpCard.title + "” discarded",
+        "Queller paid the cost. Discard “" +
+          fpCard.title +
+          "” from the table on the board.",
+      );
+    },
+  });
+}

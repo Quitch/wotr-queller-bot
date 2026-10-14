@@ -9,6 +9,7 @@ import { find, onClickEach } from "./dom.js";
 import {
   onAnswer,
   onCard,
+  onForceDiscard,
   onPhase,
   spendDieClick,
   trackerValue,
@@ -71,6 +72,7 @@ function wireTableCards() {
   onClickEach("[data-card]", (button) =>
     onCard(button.dataset.card, button.dataset.id),
   );
+  onClickEach("[data-force]", (button) => onForceDiscard(button.dataset.force));
 }
 function wireTracker() {
   document.querySelectorAll(".tracker [data-t]").forEach((el) => {
