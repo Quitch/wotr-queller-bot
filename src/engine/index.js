@@ -1,6 +1,7 @@
 // The engine's public surface: game state, dice, cards, playability and priorities (window.QB together with the walker).
 export {
   VERSION,
+  FLOW_REV,
   STRATEGY,
   PHASE,
   DECK,

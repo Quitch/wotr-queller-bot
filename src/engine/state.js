@@ -11,6 +11,7 @@ import {
   SHADOW_NATIONS,
   STARTING_COMPANIONS,
   VERSION,
+  FLOW_REV,
 } from "./constants.js";
 import { shuffle } from "./random.js";
 
@@ -150,6 +151,11 @@ export function migrate(save) {
   if (save.board?.nations) migrateNations(save.board.nations);
   if (save.board?.chars) migrateMinions(save.board.chars);
   if (save.board && save.board.rings === undefined) save.board.rings = 0;
+  // a walk on an older flowchart cannot go on: drop it, and the battle it was in, so the phase buttons start afresh
+  if (save.walk && save.walk.flowRev !== FLOW_REV) {
+    save.walk = null;
+    save.battleOpen = false;
+  }
   delete save.shownCard;
   delete save.lastAction;
   return save;

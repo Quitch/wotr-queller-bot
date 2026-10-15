@@ -7,6 +7,7 @@ import { edgeFor, findStart, normalizeText } from "./graph.js";
 // The parts of a walk (state.walk is the flat union of them).
 // Where the walk is: its page and node, the start point it began at, the pages it will return to, its record and its prompt.
 const walkPosition = (page, nodeId, startName, options) => ({
+  flowRev: engine.FLOW_REV,
   page,
   node: nodeId,
   entry: { page, start: startName },

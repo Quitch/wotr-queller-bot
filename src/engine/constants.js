@@ -1,6 +1,9 @@
 // The app version, the enums and the limits the engine and the rest of the app share.
 
 export const VERSION = 61; // app version (shown in the debug log and stamped on saves)
+// The flowchart revision a walk was made on; a saved walk from another revision is dropped (migrate), because node ids
+// can keep their name and change meaning. 1 was the released flowchart, 2 the Draft of 2026-10-15.
+export const FLOW_REV = 2;
 
 // The values are what saved games and the card data (cards/) hold, so they must not change without a migrate() step.
 export const STRATEGY = { CORRUPTION: "corruption", MILITARY: "military" };
