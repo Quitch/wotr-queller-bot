@@ -2,10 +2,10 @@
 import * as engine from "../engine/index.js";
 import { DECK, DIE_REQUIREMENT, STRATEGY, TRAIL } from "../engine/index.js";
 import { NODE, NODE_KIND } from "../flow/index.js";
-import { endWalk, follow, goto, setPrompt, trail } from "./core.js";
+import { doReturn, endWalk, follow, goto, setPrompt, trail } from "./core.js";
 import { findStart, normalizeText } from "./graph.js";
 import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
-import { doReturn, ensureDie, letGoOtherRingDie } from "./jumps.js";
+import { ensureDie, letGoOtherRingDie } from "./jumps.js";
 import { SHADOW_NATION_KEY } from "./nations.js";
 import { ringDieSpent } from "./rings.js";
 import {

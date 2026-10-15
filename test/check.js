@@ -1,7 +1,9 @@
 // Static consistency checks between the walker / the engine, the UI and the flowchart, card, reference and arrow data.
 // Exit 1 on any failure.
 import fs from "node:fs";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import anchors from "../src/flow/anchors.json" with { type: "json" };
 import * as fakeWindow from "./load.js";
 const FLOW = fakeWindow.QB_FLOW,
@@ -303,6 +305,34 @@ function checkPromptTables() {
   for (const type of rendered)
     if (!types.includes(type)) fail("renderer for unknown prompt " + type);
 }
+// The walker's import cycles stay safe: each module under src/walk/ loads first, in a fresh process, without reading a
+// binding that a cycle has not yet initialised.
+function checkWalkLoadsInAnyOrder() {
+  const walkDir = path.join(SRC_DIR, "walk");
+  const modules = fs
+    .readdirSync(walkDir, { recursive: true })
+    .filter((file) => file.endsWith(".js"));
+  for (const file of modules) {
+    const url = pathToFileURL(path.join(walkDir, file)).href;
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        "await import(" + JSON.stringify(url) + ")",
+      ],
+      { encoding: "utf8" },
+    );
+    if (result.status !== 0)
+      fail(
+        "src/walk/" +
+          file.replaceAll(path.sep, "/") +
+          " cannot load first: " +
+          (result.stderr.match(/\w*Error: .*/) || [result.stderr])[0],
+      );
+  }
+  return modules.length;
+}
 function main() {
   const state = engine.newState({
     dice: true,
@@ -318,6 +348,7 @@ function main() {
   const { terms, citations } = checkReferenceText();
   checkAnchors();
   checkPromptTables();
+  const walkModules = checkWalkLoadsInAnyOrder();
   console.log(
     fails
       ? fails + " failure(s)"
@@ -329,7 +360,9 @@ function main() {
           citations +
           " rule citations, " +
           anchors.length +
-          " anchor records)",
+          " anchor records, " +
+          walkModules +
+          " walker modules loaded first)",
   );
   process.exit(fails ? 1 : 0);
 }

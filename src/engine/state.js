@@ -159,6 +159,7 @@ function migrateWalkFromRev2(walk) {
   walk.ringNeeds = null;
   walk.ringAsk = null;
   walk.ringAnswer = null;
+  walk.ringDeclined = null;
   walk.ringPending = null;
 }
 function migrateWalkFromRev1(walk) {
