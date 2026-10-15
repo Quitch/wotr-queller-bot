@@ -38,16 +38,21 @@ const RING_RESULTS = {
   },
 };
 const PHASE_5_PAGES = ["C5", "M5"];
+// What a bold box arms; a main Phase 5 decision resets it. ringDeclined: the dice the player turned the ring down for.
+export const ringBoxState = () => ({
+  ringDice: null,
+  ringNeeds: null,
+  ringAsk: null,
+  ringAnswer: null,
+  ringDeclined: null,
+});
 // A decision was recorded: a main decision on a Phase 5 page ends what the last bold box armed (a ring die the walk no
 // longer holds turns back), and a Yes to a bold box arms the dice rule 46 gives it.
 export function armRing(state, key, isMainDecision, answer, ringCondition) {
   const walk = state.walk;
   if (isMainDecision && PHASE_5_PAGES.includes(walk.page)) {
     settleRing(state, true);
-    walk.ringDice = null;
-    walk.ringNeeds = null;
-    walk.ringAsk = null;
-    walk.ringAnswer = null;
+    Object.assign(walk, ringBoxState());
   }
   if (!answer || !ringCondition || state.ringUsedThisTurn) return;
   const result = RING_RESULTS[key] || { dice: ANY_DIE };
@@ -59,6 +64,7 @@ export function armRing(state, key, isMainDecision, answer, ringCondition) {
 export function ringMayCreate(state, req) {
   const walk = state.walk;
   if (!engine.ringAvailable(state)) return false;
+  if (walk.ringDeclined?.includes(req)) return false;
   if (walk.mode === "ringAny" || walk.ringDice === ANY_DIE) return true;
   return !!walk.ringDice?.includes(req);
 }
@@ -96,7 +102,7 @@ export function ringAllowed(state, req) {
 export function ringDeclined(state, req) {
   const walk = state.walk;
   if (!ringQuestion(state, req)) return;
-  walk.ringDice = walk.ringDice.filter((die) => die !== req);
+  walk.ringDeclined = [...(walk.ringDeclined || []), req];
   walk.ringAsked = false;
 }
 // A ring was used for a die of type `req` (the ring count already taken down): ringsBefore is the count before it, and

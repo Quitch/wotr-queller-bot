@@ -1786,10 +1786,34 @@ function ringSettledAtTheNextBoldBox() {
     .filter((prompt) => prompt?.type === PROMPT.RING)
     .map((prompt) => prompt.req);
   ok(
-    offers.includes(DIE_REQUIREMENT.CHARACTER) &&
+    declined.walk.done &&
+      offers.includes(DIE_REQUIREMENT.CHARACTER) &&
       offers.includes(DIE_REQUIREMENT.ARMY),
     "dice off: after a No to the ring for a Character die, the attack box offers it for an Army die (" +
       offers.join() +
+      ")",
+  );
+  // the rule 44 walk lets a ring make any die, but not one the player already turned the ring down for
+  const search = phase5State(
+    { dice: false, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  search.board.rings = 1;
+  engine.startWalk(search, "M5", "Phase 5", { mode: "ringAny" });
+  const searchOffers = driveWalk(search, [
+    [/^\*Mobile\* Army \*adjacent\* to \*target\* or an Army/, true],
+    [/^ANY condition true:/, true],
+    [/^Does Queller have/, false],
+    byType(PROMPT.RING, false),
+  ])
+    .filter((prompt) => prompt?.type === PROMPT.RING)
+    .map((prompt) => prompt.req);
+  ok(
+    search.walk.done &&
+      searchOffers.filter((req) => req === DIE_REQUIREMENT.CHARACTER).length ===
+        1,
+    "dice off, rule 44 walk: a No to the ring for a Character die is not asked again (" +
+      searchOffers.join() +
       ")",
   );
 }

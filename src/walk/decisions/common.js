@@ -2,8 +2,7 @@
 import * as engine from "../../engine/index.js";
 import { DECK, MINION_STATUS, TRAIL } from "../../engine/index.js";
 import { FLOW, NODE, NODE_KIND } from "../../flow/index.js";
-import { endWalk, follow, setPrompt, trail } from "../core.js";
-import { doReturn } from "../jumps.js";
+import { doReturn, endWalk, follow, setPrompt, trail } from "../core.js";
 import { dieWithArticle } from "../jumps-table.js";
 import { evalPlayable } from "../playable.js";
 import { armRing, ringNeedAnswered } from "../rings.js";
