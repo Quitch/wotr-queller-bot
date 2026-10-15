@@ -152,9 +152,10 @@ function jumpWithDie(state, spec, label) {
     enterPage(state, spec, label);
     return;
   }
+  const before = { die: walk.die, dieIndex: walk.dieIndex };
   const dieResult = ensureDie(state, spec.die, label);
   if (dieResult === PENDING) return;
-  if (dieResult) enterPage(state, spec, label);
+  if (dieResult) enterPage(state, spec, label, before);
   else exitJump(state);
 }
 // Make sure Queller has a die of type `req` for the step `label`. Returns true (use it), false (skipped, trail written), or PENDING (prompt open).
@@ -264,8 +265,10 @@ function askForDie(state, walk, req, label) {
         dieWithArticle(req) +
         " result. Choose the die at random. If the step then turns out not to be possible, the app tells you to turn the die back (rule 43)." +
         (ringQuestion(state, req)
-          ? " Only if the answer to this is Yes: " +
-            ringQuestion(state, req) +
+          ? " Only if the answer to this is " +
+            (ringQuestion(state, req).answer ? "Yes" : "No") +
+            ": " +
+            ringQuestion(state, req).question +
             "?"
           : ""),
     });
@@ -278,13 +281,14 @@ function askForDie(state, walk, req, label) {
   });
   return false;
 }
-function enterPage(state, spec, label) {
+// before: the die the walk held before ensureDie claimed one for this page, which the return gives back.
+function enterPage(state, spec, label, before) {
   const walk = state.walk;
   walk.stack.push({
     page: walk.page,
     node: walk.node,
-    die: walk.die,
-    dieIndex: walk.dieIndex,
+    die: before ? before.die : walk.die,
+    dieIndex: before ? before.dieIndex : walk.dieIndex,
     dieUsed: walk.dieUsed,
   });
   if (spec.held) ringDieHeldAs(state, spec.die);

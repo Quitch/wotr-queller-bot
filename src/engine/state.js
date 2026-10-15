@@ -158,6 +158,8 @@ function migrateWalkFromRev2(walk) {
   walk.ringDice = walk.ringArmed ? "any" : null;
   delete walk.ringArmed;
   walk.ringNeeds = null;
+  walk.ringAsk = null;
+  walk.ringAnswer = null;
   walk.ringPending = null;
 }
 function migrateWalkFromRev1(walk) {

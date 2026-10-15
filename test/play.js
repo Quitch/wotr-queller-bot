@@ -9,7 +9,8 @@ const { PROMPT, PHASE, WALK_RESULT, DIE_STATE } = engine;
 const LCG = { MULTIPLIER: 1103515245, INCREMENT: 12345, MASK: 0x7fffffff };
 let seed = 1;
 export const rnd = () => {
-  seed = (seed * LCG.MULTIPLIER + LCG.INCREMENT) & LCG.MASK;
+  // Math.imul keeps the product exact; a plain * lost bits above 2^53 and the sequence cycled after about 10,000 draws
+  seed = (Math.imul(seed, LCG.MULTIPLIER) + LCG.INCREMENT) & LCG.MASK;
   return seed / LCG.MASK;
 };
 // Seed the generator and make it the engine's Math.random.
