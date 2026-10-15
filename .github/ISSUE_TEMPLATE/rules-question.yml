@@ -24,6 +24,6 @@ body:
     id: debug_log
     attributes:
       label: Debug log (optional)
-      description: Drag the `queller-debug-…json` file here, or a `.txt` file you saved the copied log into; if GitHub refuses the `.json` file, rename it to `.txt` or zip it. Paste the log only if you cannot attach a file; a long log is too large to paste. It shows Queller's hidden cards.
+      description: Drag the `queller-debug-…json` file here, or a `.txt` file you saved the copied log into; if GitHub refuses the `.json` file, rename it to `.txt` or zip it. If you cannot attach a file, paste a short log between two lines of three backticks (```), or put a long one in a secret gist at gist.github.com and paste its link. It shows Queller's hidden cards.
     validations:
       required: false

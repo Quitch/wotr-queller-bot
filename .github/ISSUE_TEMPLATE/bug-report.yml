@@ -7,9 +7,9 @@ body:
       value: |
         Every bug report needs a debug log. Without it the maintainer cannot see the game state and the actions that led to the fault.
 
-        **How to get one.** In the app, open **Settings** (in the **Tools** menu on a narrow screen) and press **Export debug log**. The same button is on the New game screen and on the red error bar after a crash. In the Debug log window, type what went wrong in the box (it is saved into the log), then press **Download debug log**. Attach the downloaded file below. If GitHub does not accept the `.json` file, rename it to `.txt` or zip it.
+        **How to get one.** In the app, open **Settings** (in the **Tools** menu on a narrow screen) and press **Export debug log**. The same button is on the New game screen and on the red error bar after a crash. In the Debug log window, press **Download debug log** (the "What went wrong?" box is optional; this form asks the same questions). Attach the downloaded file below. If GitHub does not accept the `.json` file, rename it to `.txt` or zip it.
 
-        **If nothing downloads.** Press **Copy debug log** (or select all in the text area and copy it), paste it into a new text file, save it as `.txt` and attach that file. If you cannot make a file, for example on a phone, paste the log into the Debug log field instead. GitHub rejects a report longer than 65,536 characters, so pasting works only for a short log.
+        **If nothing downloads.** Press **Copy debug log** (or select all in the text area and copy it), paste it into a new text file, save it as `.txt` and attach that file. If you cannot make a file, for example on a phone, paste the log into the Debug log field between two lines of three backticks (```), so GitHub shows it as it is. GitHub rejects a report longer than 65,536 characters, so this works only for a short log. If GitHub says the report is too long, paste the log into a secret gist at gist.github.com and put the gist's link in the field.
 
         **What is in it.** The app version, the game state, your last actions, any errors, and your browser's user agent, language, screen size and time zone. No personal details. It shows Queller's hidden cards, so only read it if you do not mind seeing them.
 
@@ -32,7 +32,7 @@ body:
     id: actual
     attributes:
       label: What happened instead?
-      description: Quote the step text exactly.
+      description: Quote the step text exactly, if there was one.
     validations:
       required: true
   - type: dropdown
@@ -42,7 +42,7 @@ body:
       options:
         - Every time I repeat the steps
         - Sometimes
-        - Only once
+        - It did not happen again when I repeated the steps
         - I have not tried
     validations:
       required: false
@@ -50,7 +50,7 @@ body:
     id: debug_log
     attributes:
       label: Debug log
-      description: Drag the `queller-debug-…json` file here (or the `.txt` file you saved) and wait until the upload shows as a link. If GitHub refuses the `.json` file, rename it to `.txt` or zip it. Paste the log only if you cannot attach a file; a long log is too large to paste.
+      description: Drag the `queller-debug-…json` file here (or the `.txt` file you saved) and wait until the upload shows as a link. If GitHub refuses the `.json` file, rename it to `.txt` or zip it. If you cannot attach a file, see **If nothing downloads** above.
     validations:
       required: true
   - type: textarea
