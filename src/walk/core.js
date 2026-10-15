@@ -1,9 +1,10 @@
 // The walk itself: creating it at a start point, its trail, moving along arrows, ending it and opening a prompt.
 import * as engine from "../engine/index.js";
 import { TRAIL } from "../engine/index.js";
-import { EDGE, FLOW } from "../flow/index.js";
+import { EDGE, FLOW, NODE } from "../flow/index.js";
 import { edgeFor, findStart, normalizeText } from "./graph.js";
-import { settleRing } from "./rings.js";
+import { WALK_RESULT } from "./prompt.js";
+import { ringBoxState, settleRing } from "./rings.js";
 
 // The parts of a walk (state.walk is the flat union of them).
 // Where the walk is: its page and node, the start point it began at, the pages it will return to, its record and its prompt.
@@ -37,10 +38,7 @@ const walkDieState = (options) => ({
 // the question that picks the die (and its answer), whether the ring question was put to the player, and a ring use
 // waiting for its die to be spent.
 const walkRingState = () => ({
-  ringDice: null,
-  ringNeeds: null,
-  ringAsk: null,
-  ringAnswer: null,
+  ...ringBoxState(),
   ringAsked: false,
   ringPending: null,
 });
@@ -131,4 +129,53 @@ export function endWalk(state, result, message) {
 }
 export function setPrompt(state, prompt) {
   state.walk.prompt = prompt;
+}
+export function exitJump(state) {
+  // follow the arrow out of the current grey box; if none, return further
+  if (!follow(state, null)) doReturn(state);
+}
+export function doReturn(state) {
+  const walk = state.walk;
+  if (!walk.stack.length) {
+    // A die brought back from "set aside for a minion" that found no action is spent, not set aside again (rule 34: it cannot be used for anything else).
+    if (
+      walk.fromReserve &&
+      state.settings.dice &&
+      walk.reservedDieIndex != null &&
+      state.dice.pool[walk.reservedDieIndex].status === engine.DIE_STATE.AVAIL
+    ) {
+      engine.spendDie(
+        state,
+        state.dice.pool[walk.reservedDieIndex],
+        "set aside for a minion, no action possible",
+      );
+      endWalk(
+        state,
+        WALK_RESULT.ACTION,
+        "Queller sets aside the Muster die it had kept for a minion — no action was possible with it.",
+      );
+      return;
+    }
+    endWalk(
+      state,
+      WALK_RESULT.NO_ACTION,
+      walk.page === "BA"
+        ? "Nothing further from the Battle page this round."
+        : "Queller has no action from this walk.",
+    );
+    return;
+  }
+  const frame = walk.stack.pop();
+  goto(state, frame.page, frame.node);
+  walk.die = frame.die;
+  walk.dieIndex = frame.dieIndex;
+  walk.dieUsed = frame.dieUsed;
+  settleRing(state);
+  walk.cands = null;
+  walk.chosen = null;
+  trail(state, {
+    kind: TRAIL.BACK,
+    text: normalizeText(NODE.text(cur(state))),
+  });
+  exitJump(state);
 }
