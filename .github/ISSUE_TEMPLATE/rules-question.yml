@@ -24,6 +24,6 @@ body:
     id: debug_log
     attributes:
       label: Debug log (optional)
-      description: Drag the `queller-debug-…json` file here, or paste the copied log. It shows Queller's hidden cards.
+      description: Drag the `queller-debug-…json` file here (or a `.txt` file you saved the copied log into); the log is too large to paste. It shows Queller's hidden cards.
     validations:
       required: false

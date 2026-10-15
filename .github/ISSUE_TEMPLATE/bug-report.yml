@@ -7,30 +7,64 @@ body:
       value: |
         Every bug report needs a debug log. Without it the maintainer cannot see the game state and the actions that led to the fault.
 
-        **How to get one.** In the app, open **Settings** (in the **Tools** menu on a narrow screen) and press **Export debug log**. The same button is on the New game screen and on the red error bar after a crash. In the Debug log window, type what went wrong in the box (it is saved into the log), then press **Download debug log**. If nothing downloads, press **Copy debug log** and paste the text into the field below, or select all in the text area and copy it.
+        **How to get one.** In the app, open **Settings** (in the **Tools** menu on a narrow screen) and press **Export debug log**. The same button is on the New game screen and on the red error bar after a crash. In the Debug log window, type what went wrong in the box (it is saved into the log), then press **Download debug log**.
+
+        **If nothing downloads.** Press **Copy debug log** (or select all in the text area and copy it), paste it into a new text file, save it as `.txt` and attach that file. The log is too large to paste into this form. If GitHub does not accept the `.json` file, rename it to `.txt` or zip it.
 
         **What is in it.** The app version, the game state, your last actions, any errors, and your browser's user agent, language, screen size and time zone. No personal details. It shows Queller's hidden cards, so only read it if you do not mind seeing them.
 
         Export the log as soon as the fault happens. Undo, starting a new game or loading a save changes what the log records.
   - type: textarea
-    id: description
+    id: steps
     attributes:
-      label: What happened?
-      description: What you did, what you expected the app to do, and what it did instead. Quote the step text if there was one.
+      label: What were you doing?
+      description: The phase, and the last few things you pressed or answered.
     validations:
       required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      description: The rule or the flowchart step, if you know it.
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: What happened instead?
+      description: Quote the step text exactly.
+    validations:
+      required: true
+  - type: dropdown
+    id: frequency
+    attributes:
+      label: Does it happen again?
+      options:
+        - Every time I repeat the steps
+        - Sometimes
+        - Only once
+        - I have not tried
+    validations:
+      required: false
   - type: textarea
     id: debug_log
     attributes:
       label: Debug log
-      description: Drag the `queller-debug-…json` file here, or paste the copied log. The upload shows as a link when it has finished.
+      description: Drag the `queller-debug-…json` file here (or the `.txt` file you saved). Wait until the upload shows as a link.
     validations:
       required: true
+  - type: textarea
+    id: screenshot
+    attributes:
+      label: Screenshot (needed for layout or display problems)
+      description: The log records the step text but not how the page looks.
+    validations:
+      required: false
   - type: input
     id: version
     attributes:
       label: App version
-      description: On the README header line, on the New game screen, and in the log under `app.version`.
+      description: In **Settings › About**, on the README header line, or in the log under `app.version`.
     validations:
       required: false
   - type: checkboxes
@@ -38,7 +72,7 @@ body:
     attributes:
       label: Before sending
       options:
-        - label: The debug log is attached or pasted above.
+        - label: The debug log file is attached above.
           required: true
         - label: I know the log shows Queller's hidden cards.
           required: false
