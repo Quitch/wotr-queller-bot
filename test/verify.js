@@ -1817,6 +1817,38 @@ function ringSettledAtTheNextBoldBox() {
       ")",
   );
 }
+// Round 6: a ring that changes the very die the walk still held (its step was not possible) does not hand that die back
+// as its old type when the page it was changed for returns.
+function ringChangedHeldDieIsNotRestored() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.board.rings = 1;
+  state.dice.pool = [die("Character")];
+  engine.startPhase(state, PHASE.P5);
+  driveWalk(state, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, false],
+    [/^Move can create \*mobile\* Army/, true],
+    [/^Move using Character die$/, "no"],
+    [/^\*Threat\* is sieging/, true],
+    byType(PROMPT.ACTION, "done"),
+  ]);
+  const pooled = state.dice.pool[0];
+  ok(
+    state.board.rings === 1 &&
+      !state.ringUsedThisTurn &&
+      pooled.face === "Character",
+    "the ring's Army die turns back to Character, and the ring is not used (rings " +
+      state.board.rings +
+      ", die " +
+      pooled.face +
+      "/" +
+      pooled.status +
+      ")",
+  );
+}
 // A walk saved with revision 2's ring state takes revision 3's.
 function ringStateFromRevision2Migrates() {
   const state = phase5State({ dice: true });
@@ -1895,6 +1927,7 @@ const SCENARIOS = [
   ["rings", diceOffRingOfferedAndTurnedBack],
   ["rings", ringSettledWhereTheDieGoes],
   ["rings", ringSettledAtTheNextBoldBox],
+  ["rings", ringChangedHeldDieIsNotRestored],
   ["migrate", ringStateFromRevision2Migrates],
 ];
 function main() {
