@@ -90,13 +90,14 @@ export function ringAllowed(state, req) {
   });
   return PENDING;
 }
-// A ring was used for a die of type `req`: ringsBefore is the ring count before it, and with dice on dieIndex and
-// from are the pool die it changed and the face it showed.
+// A ring was used for a die of type `req` (the ring count already taken down): ringsBefore is the count before it, and
+// with dice on dieIndex and from are the pool die it changed and the face it showed.
 export function ringUsed(state, req, ringsBefore, dieIndex, from) {
   const walk = state.walk;
   walk.ringPending = {
     reqs: [req],
-    ringsBefore,
+    // 1, or 0 when the ring count was not known (it stays at 0)
+    ringsTaken: ringsBefore - state.board.rings,
     dieIndex: dieIndex ?? null,
     from: from ?? null,
     needs: walk.ringNeeds?.[req] || null,
@@ -139,7 +140,7 @@ export function returnRing(state, why) {
     walk.dieIndex = null;
   }
   walk.ringAsked = false;
-  state.board.rings = pending.ringsBefore;
+  state.board.rings += pending.ringsTaken;
   state.ringUsedThisTurn = false;
   const req = pending.reqs[0];
   if (state.settings.dice) {
