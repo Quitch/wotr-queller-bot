@@ -1624,8 +1624,9 @@ function ringSettledWhereTheDieGoes() {
   };
   const witchKing = ringState(STRATEGY.CORRUPTION, ["Event", "Event"]);
   driveWalk(witchKing, [
-    [/^Shadow under \*threat\*/, true],
-    [/^\*Threat\* is sieging/, true],
+    [/^Witch-king is in play/, true],
+    [/^Nazgûl or Witch-king in play$/, true],
+    [/^Witch-king not in a/, true],
     [/^Mustered Witch-king$/, true],
   ]);
   ok(
@@ -1633,7 +1634,7 @@ function ringSettledWhereTheDieGoes() {
       witchKing.board.rings === 0 &&
       witchKing.ringUsedThisTurn &&
       !witchKing.walk.trail.some((entry) => /not used/.test(entry.text)),
-    "the ring that made the die for “Character 3 / Muster Witch-king” stands after “End action”",
+    "the ring that made the Witch-king's Character die stands after “End action”",
   );
   const nothing = ringState(STRATEGY.CORRUPTION, ["Muster", "Muster"]);
   driveWalk(nothing, [
@@ -1676,6 +1677,35 @@ function ringSettledWhereTheDieGoes() {
       facesUsed(withNazgul.state).join() === "Character" &&
       facesUsed(withoutNazgul.state).join() === "Army",
     "the attack box's ring makes a Character die only for an Army with a Nazgûl or a minion, otherwise an Army die",
+  );
+  // after Yes, the Character page finds nothing: rule 46 gives this Army a Character die, never an Army die
+  const yesThenNothing = ringState(STRATEGY.MILITARY, ["Event", "Event"]);
+  driveWalk(yesThenNothing, [
+    [/^\*Mobile\* Army \*adjacent\* to \*target\* or an Army/, true],
+    [/^ANY condition true:/, true],
+    [/contain a Nazgûl or a minion/, true],
+    [/^Pass/, "no"],
+    byType(PROMPT.ACTION, "no"),
+  ]);
+  ok(
+    !yesThenNothing.walk.trail.some((entry) =>
+      /die changed to Army/.test(entry.text),
+    ),
+    "after Yes, no ring makes an Army die for the Army 4 step",
+  );
+  const threatOnly = ringState(STRATEGY.CORRUPTION, ["Event", "Event"]);
+  driveWalk(threatOnly, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Threat\* is sieging/, true],
+    [/^Pass/, "no"],
+    byType(PROMPT.ACTION, "no"),
+  ]);
+  ok(
+    !threatOnly.walk.trail.some(
+      (entry) =>
+        entry.kind === TRAIL.JUMP && /Character 3/.test(entry.text || ""),
+    ),
+    "the threat box's ring makes no die for “Character 3 / Muster Witch-king”, a step rule 46 does not list",
   );
   const marked = ringState(STRATEGY.CORRUPTION, ["Event", "Event"]);
   for (
