@@ -1,10 +1,10 @@
 // The walk itself: creating it at a start point, its trail, moving along arrows, ending it and opening a prompt.
 import * as engine from "../engine/index.js";
 import { TRAIL } from "../engine/index.js";
-import { EDGE, FLOW, NODE } from "../flow/index.js";
+import { EDGE, FLOW, NODE, NODE_KIND } from "../flow/index.js";
 import { edgeFor, findStart, normalizeText } from "./graph.js";
 import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
-import { WALK_RESULT } from "./prompt.js";
+import { PENDING, PROMPT, WALK_RESULT } from "./prompt.js";
 import { ringBoxState, ringDieSpent, settleRing } from "./rings.js";
 
 // The parts of a walk (state.walk is the flat union of them).
@@ -108,6 +108,21 @@ export function trail(state, entry) {
   entry.page = entry.page || state.walk.page;
   entry.node = entry.node || state.walk.node;
   state.walk.trail.push(entry);
+}
+// A board question asked once per node: the answer recorded under `part`, or PENDING while it is open.
+export function askBoardQuestion(state, part, question) {
+  const walk = state.walk;
+  if (part in walk.parts) return walk.parts[part];
+  setPrompt(state, {
+    type: PROMPT.YES_NO,
+    text: question,
+    part,
+    node: walk.node,
+    page: walk.page,
+    kind: NODE_KIND.FOLLOW_UP,
+    board: true,
+  });
+  return PENDING;
 }
 export function cur(state) {
   return FLOW[state.walk.page].nodes[state.walk.node];
