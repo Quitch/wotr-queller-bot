@@ -1755,6 +1755,44 @@ function armyDieMovesTwoArmies() {
     "a Character die makes one move",
   );
 }
+// Rule 11: with no Army or Army/Muster die, the move towards an exposed target uses a Character die when the Army
+// that moves contains a Nazgûl or a minion.
+function exposedMoveFallsBackToCharacterDie() {
+  const exposedWalk = (hasNazgul) => {
+    const state = phase5State(
+      { dice: true, cards: false, tracker: false, wome: false },
+      STRATEGY.MILITARY,
+    );
+    state.dice.pool = [die("Character")];
+    engine.startPhase(state, PHASE.P5);
+    const seen = driveWalk(state, [
+      [/under \*threat\*/, true],
+      [/^Can move towards \*exposed\*$/, true],
+      [/contain a Nazgûl or a minion/, hasNazgul],
+      [/^\*Exposed\* \*target\* exists$/, true],
+      [/^Move nearest Army towards/, "done"],
+      [/^Pass/, "no"],
+      byType(PROMPT.ACTION, "no"),
+    ]);
+    return { state, seen };
+  };
+  const yes = exposedWalk(true);
+  ok(
+    yes.seen.some((prompt) =>
+      /^Move nearest Army towards/.test(prompt?.text || ""),
+    ) &&
+      yes.state.dice.pool[0].status === DIE_STATE.USED &&
+      yes.state.walk.result === WALK_RESULT.ACTION,
+    "with a Nazgûl or minion in the Army, the Character die makes the move",
+  );
+  const no = exposedWalk(false);
+  ok(
+    !no.seen.some((prompt) =>
+      /^Move nearest Army towards/.test(prompt?.text || ""),
+    ),
+    "without one, there is no die for the move",
+  );
+}
 // The scenarios, with the section of the change log each one guards.
 const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
@@ -1774,6 +1812,7 @@ const SCENARIOS = [
   ["dice", wildResultOnlyForFactionEvents],
   ["dice", messengerMusterDieActsAsArmyOncePerTurn],
   ["army", armyDieMovesTwoArmies],
+  ["army", exposedMoveFallsBackToCharacterDie],
   ["6.6", wornWithSorrowAsksAndWormtongueOnSaruman],
   ["7.1", reservedDieCannotBeReservedAgain],
   ["muster", musterChoiceCardAutoAnswered],
