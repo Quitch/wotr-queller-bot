@@ -2,12 +2,18 @@
 import * as engine from "../engine/index.js";
 import { DECK, DIE_REQUIREMENT, STRATEGY, TRAIL } from "../engine/index.js";
 import { NODE, NODE_KIND } from "../flow/index.js";
-import { endWalk, follow, goto, setPrompt, trail } from "./core.js";
+import {
+  doReturn,
+  endWalk,
+  follow,
+  goto,
+  setPrompt,
+  spendCurrentDie,
+  trail,
+} from "./core.js";
 import { findStart, normalizeText } from "./graph.js";
-import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
-import { doReturn, ensureDie, letGoOtherRingDie } from "./jumps.js";
+import { ensureDie, letGoOtherRingDie } from "./jumps.js";
 import { SHADOW_NATION_KEY } from "./nations.js";
-import { ringDieSpent } from "./rings.js";
 import {
   FALL_THROUGH,
   PENDING,
@@ -346,38 +352,6 @@ function armyMoveFlags(walk, label) {
   if (walk.page !== "AR" || walk.die !== DIE_REQUIREMENT.ARMY) return {};
   if (label === "Move/Attack") return { armyMove: true, moveOrAttack: true };
   return label.startsWith("Move") ? { armyMove: true } : {};
-}
-// The walk no longer holds a die (spent, or given up unspent).
-export function releaseCurrentDie(state) {
-  state.walk.die = null;
-  state.walk.dieIndex = null;
-}
-export function spendCurrentDie(state, why) {
-  const walk = state.walk;
-  if (!walk?.die) return;
-  ringDieSpent(state);
-  if (
-    walk.messengerDieIndex != null &&
-    walk.messengerDieIndex === walk.dieIndex
-  ) {
-    state.messengerUsedThisTurn = true;
-    engine.log(
-      state,
-      "Messenger of the Dark Tower used: a Muster die acted as an Army die (rule 30).",
-    );
-  }
-  if (state.settings.dice && walk.dieIndex != null) {
-    engine.spendDie(state, state.dice.pool[walk.dieIndex], why);
-  } else
-    engine.log(
-      state,
-      "Queller used a " +
-        DIE_REQUIREMENT_NAME[walk.die] +
-        " die" +
-        (why ? " — " + why : "") +
-        ".",
-    );
-  releaseCurrentDie(state);
 }
 // Rule 36: an action Queller cannot take is skipped — follow the arrow out of the box, or return to the page that sent us here.
 export function exitAction(state) {
