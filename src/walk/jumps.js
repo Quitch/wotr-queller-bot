@@ -25,6 +25,7 @@ import {
   strategyName,
 } from "./prompt.js";
 import {
+  letGoOtherRingDie,
   returnRing,
   ringAllowed,
   ringDieHeldAs,
@@ -173,8 +174,18 @@ function jumpWithDie(state, spec, label) {
   }
   const dieResult = ensureDie(state, spec.die, label);
   if (dieResult === PENDING) return;
-  if (dieResult) enterPage(state, spec, label, before);
-  else exitJump(state);
+  if (!dieResult) {
+    exitJump(state);
+    return;
+  }
+  // a ring may have changed the very die the walk held: the return must not bring it back as its old type
+  const sameDie = before.dieIndex != null && walk.dieIndex === before.dieIndex;
+  enterPage(
+    state,
+    spec,
+    label,
+    sameDie ? { die: null, dieIndex: null } : before,
+  );
 }
 // Rule 11: the move towards an exposed target uses an Army die, else an Army/Muster die, else a Character die with an
 // Army that contains a Nazgûl or a minion. With dice rolled by the app and no Army die to use, the threat column's
@@ -205,26 +216,13 @@ function exposedCharacterDie(state, walk) {
   }
   return walk.parts[part] ? state.dice.pool.indexOf(characterDie) : null;
 }
-// Claiming a die for another step gives up a die a ring made for the last one: call it before ensureDie.
-export function letGoOtherRingDie(state, req) {
-  const pending = state.walk.ringPending;
-  if (pending && !pending.reqs.includes(req)) settleRing(state, true);
-}
 // Make sure Queller has a die of type `req` for the step `label`. Returns true (use it), false (skipped, trail written), or PENDING (prompt open).
 export function ensureDie(state, req, label) {
   const walk = state.walk;
   if (walk.pendingDie === label) {
+    // the die question was answered (dice off): use the die, offer a ring, or skip
     walk.pendingDie = null;
-    if (walk.dieAns[req]) return true;
-    // no such die: an Elven Ring may still make one (asked once per walk)
-    if (ringMayCreate(state, req) && !walk.ringAsked)
-      return askForDie(state, walk, req, label);
-    trail(state, {
-      kind: TRAIL.SKIP,
-      text: label,
-      why: "no " + DIE_REQUIREMENT_NAME[req] + " die",
-    });
-    return false;
+    return askForDie(state, walk, req, label);
   }
   if (state.settings.dice) return ensureDieFromPool(state, walk, req, label);
   return askForDie(state, walk, req, label);

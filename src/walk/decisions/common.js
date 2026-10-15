@@ -1,8 +1,16 @@
 // What every decision handler builds on: recording an answer, asking the player, board facts and playable-card counts.
 import * as engine from "../../engine/index.js";
 import { DECK, MINION_STATUS, TRAIL } from "../../engine/index.js";
-import { FLOW, NODE, NODE_KIND } from "../../flow/index.js";
-import { doReturn, endWalk, follow, setPrompt, trail } from "../core.js";
+import { NODE, NODE_KIND } from "../../flow/index.js";
+import {
+  askBoardQuestion,
+  cur,
+  doReturn,
+  endWalk,
+  follow,
+  setPrompt,
+  trail,
+} from "../core.js";
 import { dieWithArticle } from "../jumps-table.js";
 import { evalPlayable } from "../playable.js";
 import { armRing, ringNeedAnswered } from "../rings.js";
@@ -42,7 +50,7 @@ export function recordDecision(
   armRing(
     state,
     key,
-    NODE.kind(FLOW[walk.page].nodes[walk.node]) === NODE_KIND.DECISION,
+    NODE.kind(cur(state)) === NODE_KIND.DECISION,
     answer,
     ringCondition,
   );
@@ -72,19 +80,12 @@ export function ask(state, node, question, promptExtra) {
 // A yes/no board fact: from the tracker when it is on, otherwise asked of the player once per node (answers live in walk.parts). Returns PENDING while the question is open.
 export function boardFactYesNo(state, factKey, question, trackerValue) {
   if (state.settings.tracker) return trackerValue;
-  const walk = state.walk,
-    partKey = walk.page + "." + walk.node + "." + factKey;
-  if (partKey in walk.parts) return walk.parts[partKey];
-  setPrompt(state, {
-    type: PROMPT.YES_NO,
-    text: question,
-    part: partKey,
-    node: walk.node,
-    page: walk.page,
-    kind: NODE_KIND.FOLLOW_UP,
-    board: true,
-  });
-  return PENDING;
+  const walk = state.walk;
+  return askBoardQuestion(
+    state,
+    walk.page + "." + walk.node + "." + factKey,
+    question,
+  );
 }
 // A decision as the trail records it: a condition list adds the items that apply to this game.
 export function decisionText(state, node) {
