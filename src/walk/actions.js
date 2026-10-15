@@ -302,12 +302,13 @@ const ACTION_HANDLERS = {
 const isEndBox = (label) => /^End( action)?$/.test(label);
 // An End box: the walk is over; a die held for the action is spent.
 function endAction(state, walk) {
+  const acted = !!walk.die;
+  if (acted) spendCurrentDie(state, "end of action");
   endWalk(
     state,
-    walk.die ? WALK_RESULT.ACTION : WALK_RESULT.END,
-    "End of " + (walk.die ? "action" : "walk") + ".",
+    acted ? WALK_RESULT.ACTION : WALK_RESULT.END,
+    "End of " + (acted ? "action" : "walk") + ".",
   );
-  if (walk.die) spendCurrentDie(state, "end of action");
 }
 export function handleAction(state, node) {
   const walk = state.walk,
