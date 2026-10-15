@@ -2,15 +2,7 @@
 import * as engine from "../engine/index.js";
 import { DIE_REQUIREMENT, TRAIL } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
-import {
-  abandonWalk,
-  cur,
-  endWalk,
-  follow,
-  goto,
-  setPrompt,
-  trail,
-} from "./core.js";
+import { cur, endWalk, follow, goto, setPrompt, trail } from "./core.js";
 import { findStart, normalizeText } from "./graph.js";
 import {
   DIE_REQUIREMENT_NAME,
@@ -25,9 +17,11 @@ import {
   strategyName,
 } from "./prompt.js";
 import {
-  giveUpRingDie,
   returnRing,
+  ringAllowed,
+  ringDieHeldAs,
   ringMayCreate,
+  ringQuestion,
   ringUsed,
   settleRing,
 } from "./rings.js";
@@ -118,7 +112,6 @@ function ringAnyJump(state, walk, spec, label) {
   if (canUseRing) {
     trail(state, { kind: TRAIL.JUMP, text: label });
     const entry = walk.entry;
-    abandonWalk(state);
     startWalk(state, entry.page, entry.start, { mode: "ringAny" });
     return;
   }
@@ -181,7 +174,8 @@ export function ensureDie(state, req, label) {
     return false;
   }
   // claiming a die for another step gives up a die a ring made for the last one
-  if (walk.ringPending && walk.ringPending.req !== req) giveUpRingDie(state);
+  if (walk.ringPending && !walk.ringPending.reqs.includes(req))
+    settleRing(state, true);
   if (state.settings.dice) return ensureDieFromPool(state, walk, req, label);
   return askForDie(state, walk, req, label);
 }
@@ -208,7 +202,9 @@ function ensureDieFromPool(state, walk, req, label) {
       });
     }
   }
-  if (!die && ringMayCreate(state, req)) {
+  const allowed = !die && ringMayCreate(state, req) && ringAllowed(state, req);
+  if (allowed === PENDING) return PENDING;
+  if (allowed) {
     const ringsBefore = state.board.rings;
     const changed = engine.ringChange(state, req);
     if (changed) {
@@ -266,7 +262,12 @@ function askForDie(state, walk, req, label) {
           : "If the Shadow holds an Elven Ring: ") +
         "Use an Elven Ring (rule 43): change one Queller die that does not show a *preferred* result into " +
         dieWithArticle(req) +
-        " result. Choose the die at random. If the step then turns out not to be possible, the app tells you to turn the die back (rule 43).",
+        " result. Choose the die at random. If the step then turns out not to be possible, the app tells you to turn the die back (rule 43)." +
+        (ringQuestion(state, req)
+          ? " Only if the answer to this is Yes: " +
+            ringQuestion(state, req) +
+            "?"
+          : ""),
     });
     return PENDING;
   }
@@ -286,6 +287,7 @@ function enterPage(state, spec, label) {
     dieIndex: walk.dieIndex,
     dieUsed: walk.dieUsed,
   });
+  if (spec.held) ringDieHeldAs(state, spec.die);
   if (!engine.dieSatisfies(walk.die, spec.die)) walk.die = spec.die;
   trail(state, {
     kind: TRAIL.JUMP,

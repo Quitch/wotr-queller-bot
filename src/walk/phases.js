@@ -14,7 +14,6 @@ export function phase5Page(state) {
 export function startPhase(state, phase) {
   const page = phasePage(state);
   if (phase === PHASE.SETUP) {
-    abandonWalk(state);
     startWalk(state, "C14", "Start of game");
     return;
   }
@@ -45,7 +44,6 @@ export function startPhase(state, phase) {
   }
 }
 export function startBattle(state, round) {
-  abandonWalk(state);
   beginWalk(state, "BA", round === 1 ? "Battle" : "Battle (next round)", {
     battleRound: round,
   });
