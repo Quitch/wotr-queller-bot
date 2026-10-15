@@ -1808,6 +1808,35 @@ function ringChangedHeldDieIsNotRestored() {
       pooled.status +
       ")",
   );
+  // without a ring, a page that claims the same pool die for another requirement hands it back on return
+  const kept = phase5State({
+    dice: true,
+    cards: false,
+    tracker: false,
+    wome: false,
+  });
+  kept.dice.pool = [die("Army/Muster")];
+  let heldAtSiege = null;
+  engine.startPhase(kept, PHASE.P5);
+  driveWalk(kept, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+    [/^Attack using Army die$/, "no"],
+    [/is valid for muster$/, true],
+    [
+      /^\*Threat\* is sieging/,
+      () => {
+        heldAtSiege = { die: kept.walk.die, dieIndex: kept.walk.dieIndex };
+        return false;
+      },
+    ],
+  ]);
+  ok(
+    heldAtSiege?.die === DIE_REQUIREMENT.ARMY && heldAtSiege.dieIndex === 0,
+    "the Army die the walk held is held again after the Muster page returns (" +
+      JSON.stringify(heldAtSiege) +
+      ")",
+  );
 }
 // A walk saved with revision 2's ring state takes revision 3's.
 function ringStateFromRevision2Migrates() {

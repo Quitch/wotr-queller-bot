@@ -65,7 +65,6 @@ export function abandonWalk(state) {
 }
 // Create the walk at a start point without stepping it; returns false when the start point does not exist.
 export function beginWalk(state, page, startName, options = {}) {
-  abandonWalk(state);
   const id = findStart(page, startName);
   if (!id) {
     engine.log(
@@ -74,6 +73,7 @@ export function beginWalk(state, page, startName, options = {}) {
     );
     return false;
   }
+  abandonWalk(state);
   state.walk = {
     ...walkPosition(page, id, startName, options),
     ...walkDieState(options),
