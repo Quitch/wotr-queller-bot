@@ -179,7 +179,10 @@ function jumpWithDie(state, spec, label) {
     return;
   }
   // a ring may have changed the very die the walk held: the return must not bring it back as its old type
-  const sameDie = before.dieIndex != null && walk.dieIndex === before.dieIndex;
+  const sameDie =
+    before.dieIndex != null &&
+    walk.dieIndex === before.dieIndex &&
+    walk.ringPending?.dieIndex === before.dieIndex;
   enterPage(
     state,
     spec,
