@@ -1746,7 +1746,7 @@ function messengerMusterDieActsAsArmyOncePerTurn() {
   state.dice.pool = [die("Muster"), die("Muster")];
   const attackThreat = (attack) =>
     driveWalk(state, [
-      [/under \*threat\*/, true],
+      [/^Shadow under \*threat\*/, true],
       [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
       [/Attack using Army/, attack],
       [/^Pass/, "no"],
