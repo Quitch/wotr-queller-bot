@@ -64,7 +64,7 @@ body:
     id: version
     attributes:
       label: App version
-      description: In **Settings › About**, on the README header line, or in the log under `app.version`.
+      description: In **Settings › About** (Settings is in the **Tools** menu on a narrow screen), on the README header line, or in the log under `app.version`.
     validations:
       required: false
   - type: checkboxes
@@ -72,7 +72,7 @@ body:
     attributes:
       label: Before sending
       options:
-        - label: The debug log is attached or pasted above.
+        - label: The debug log is attached, pasted or linked above.
           required: true
         - label: I know the log shows Queller's hidden cards.
           required: false
