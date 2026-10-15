@@ -12,9 +12,8 @@ import {
   STARTING_COMPANIONS,
   VERSION,
   FLOW_REV,
-  FLOW_REV_1_REDRAWN_NODES,
+  FLOW_REV_1_MOVED_STEPS,
 } from "./constants.js";
-import { log } from "./log.js";
 import { shuffle } from "./random.js";
 
 // Every part of a new game, before the decks are built.
@@ -145,26 +144,24 @@ function migrateMinions(chars) {
     else if (!statuses.has(chars[key])) chars[key] = MINION_STATUS.AVAILABLE;
   }
 }
-// An unfinished walk from the released flowchart: resume it on the new graph (so nothing it already did is done twice),
-// or drop it when it stands on, or is due to return to, a redrawn node; the phase or battle button then starts it again.
-function migrateWalk(save) {
-  const walk = save.walk;
-  const positions = [walk, ...(walk.stack || [])];
-  if (
-    positions.some((at) =>
-      FLOW_REV_1_REDRAWN_NODES.includes(at.page + "." + at.node),
-    )
-  ) {
-    save.walk = null;
-    if (Array.isArray(save.log))
-      log(
-        save,
-        "The walk in progress stood on a part of the flowchart that has been redrawn and was dropped: start it again from its button.",
-      );
-    return;
-  }
+// An unfinished walk from the released flowchart resumes on the new graph, so nothing it already did is done twice.
+function migrateWalk(walk) {
   walk.flowRev = FLOW_REV;
   walk.attacking ??= null;
+  const moved = FLOW_REV_1_MOVED_STEPS[walk.page + "." + walk.node];
+  if (moved) {
+    walk.node = moved;
+    if (walk.prompt) walk.prompt.node = moved;
+  }
+  // the released flowchart returned to "Use Muster die set aside for minion" and stopped there; the new graph goes on
+  // to "Discard unplayable die", so without that frame doReturn spends the die instead (rule 34)
+  walk.stack = (walk.stack || []).filter((frame) => frame.node !== "minionDie");
+  if (walk.minionPick === "Witch King") walk.minionPick = "Witch-king";
+  const prompt = walk.prompt;
+  if (!prompt) return;
+  if (prompt.any) prompt.conditions = true;
+  for (const option of prompt.options || [])
+    if (option.value === "Witch King") option.value = "Witch-king";
 }
 export function migrate(save) {
   if (save.settings && save.settings.tracker === undefined) {
@@ -175,7 +172,7 @@ export function migrate(save) {
   if (save.board?.chars) migrateMinions(save.board.chars);
   if (save.board && save.board.rings === undefined) save.board.rings = 0;
   if (save.walk && !save.walk.done && save.walk.flowRev !== FLOW_REV)
-    migrateWalk(save);
+    migrateWalk(save.walk);
   delete save.shownCard;
   delete save.lastAction;
   return save;

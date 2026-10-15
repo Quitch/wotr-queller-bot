@@ -77,9 +77,23 @@ function decideFewerThanSixNazgul(state, node, { board }) {
   );
 }
 
+// "Holding a *playable* Muster card": entered from the Army page's "Muster 3", Queller holds an Army/Muster die,
+// which cannot play an Event card (rule 1).
+function decideMusterCardToPlay(state, node, facts) {
+  const frame = facts.walk.stack.at(-1);
+  if (frame && frame.page + "." + frame.node === "AR.jMuster3")
+    return answerAuto(
+      state,
+      node,
+      false,
+      "an Army/Muster die cannot play an Event card",
+    );
+  decidePlayableMusterCard(state, node, facts);
+}
+
 // The decision boxes of the Muster page, keyed by page and node id.
 export const MUSTER_DECISIONS = {
-  "MU.musterCard": decidePlayableMusterCard,
+  "MU.musterCard": decideMusterCardToPlay,
   "MU.minion": decideMinionAvailable,
   "MU.wotw": decideWillOfTheWest,
   "MU.notWar": decideNationNotAtWar,

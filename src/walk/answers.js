@@ -52,7 +52,8 @@ function answerYesNo(state, prompt, value) {
   if (prompt.sub === 2) return answerPlainPart(state, prompt, value);
   const node = cur(state);
   recordDecision(state, {
-    text: decisionText(state, node),
+    text:
+      prompt.text === NODE.text(node) ? decisionText(state, node) : prompt.text,
     ringCondition: NODE.extra(node).bold,
     answer: value,
     auto: false,

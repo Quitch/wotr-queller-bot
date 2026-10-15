@@ -1177,6 +1177,27 @@ function armyMusterDieTriesMuster3First() {
       trailQuestion({ walk: armyMuster }, /^An Army can move/),
     "an Army/Muster die walks Muster 3, then comes back to the last-resort move",
   );
+  const withCard = phase5State(
+    { dice: true, cards: true, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  const musterCard = withCard.cards.decks[engine.DECK.STRATEGY].find(
+    (id) => engine.cardById[id].type === "Muster",
+  );
+  withCard.cards.hand = [musterCard];
+  withCard.dice.pool = [die("Army/Muster")];
+  engine.startWalk(withCard, "AR", "Army 4", {
+    die: DIE_REQUIREMENT.ARMY,
+    dieIndex: 0,
+  });
+  const cardPrompts = driveWalk(withCard, [byType(PROMPT.CONFIRM, true)]);
+  ok(
+    !cardPrompts.some((prompt) => prompt?.type === PROMPT.PLAY_CARD) &&
+      /cannot play an Event card/.test(
+        trailQuestion(withCard, /Muster card/)?.why || "",
+      ),
+    "Muster 3 with an Army/Muster die plays no Muster card",
+  );
   const army = walkArmy4("Army");
   ok(
     trailQuestion({ walk: army }, /Using an Army\/Muster die/)?.answer ===
@@ -1303,9 +1324,8 @@ function eventPageChecksTheDie() {
     "holding no die, the Character-card box is asked, not answered from the hand",
   );
 }
-// A walk saved on the released flowchart resumes on load, unless it stands on a redrawn node; a finished one and a
-// current one are kept.
-function staleSavedWalkIsDropped() {
+// A walk saved on the released flowchart resumes on load on the new graph; a finished one and a current one are kept.
+function savedWalkFromReleasedFlowchartResumes() {
   const state = phase5State(
     { dice: true, cards: false, tracker: true, wome: false },
     STRATEGY.MILITARY,
@@ -1332,13 +1352,42 @@ function staleSavedWalkIsDropped() {
   delete redrawn.walk.flowRev;
   redrawn.walk.page = "C14";
   redrawn.walk.node = "disc14";
-  const logLength = redrawn.log.length;
-  const dropped = engine.migrate(redrawn);
+  redrawn.walk.prompt = {
+    type: PROMPT.STEP,
+    text: "Discard priority:",
+    node: "disc14",
+  };
+  const moved = engine.migrate(redrawn).walk;
   ok(
-    dropped.walk === null &&
-      dropped.battleOpen &&
-      dropped.log.length === logLength + 1,
-    "a walk standing on a step that became a priority list is dropped, with a log line",
+    moved.node === "discOne14" && moved.prompt.node === "discOne14",
+    "a walk paused at a step that became a priority list moves, with its open prompt, to the step drawn after it",
+  );
+  const reserved = JSON.parse(JSON.stringify(state));
+  delete reserved.walk.flowRev;
+  reserved.walk.stack = [
+    {
+      page: "M5",
+      node: "minionDie",
+      die: null,
+      dieIndex: null,
+      dieUsed: false,
+    },
+  ];
+  reserved.walk.minionPick = "Witch King";
+  reserved.walk.prompt = {
+    type: PROMPT.YES_NO,
+    text: "ANY condition true:",
+    items: ["a", "b"],
+    any: true,
+    options: [{ value: "Witch King", label: "Witch King" }],
+  };
+  const fixed = engine.migrate(reserved).walk;
+  ok(
+    fixed.stack.length === 0 &&
+      fixed.minionPick === "Witch-king" &&
+      fixed.prompt.conditions &&
+      fixed.prompt.options[0].value === "Witch-king",
+    "a resumed walk loses the set-aside die's return frame, and takes the new Witch-king spelling and list markup",
   );
   const finished = JSON.parse(JSON.stringify(state));
   delete finished.walk.flowRev;
@@ -1426,7 +1475,7 @@ const SCENARIOS = [
   ["draft", secondAttackingQuestionReusesTheRound],
   ["draft", noSetAsideDieFallsThroughToDiscard],
   ["draft", eventPageChecksTheDie],
-  ["migrate", staleSavedWalkIsDropped],
+  ["migrate", savedWalkFromReleasedFlowchartResumes],
   ["draft", reservedDieSpentBeforeDiscardingAnother],
   ["calc", captainOfTheWestCountsOnce],
 ];

@@ -2,17 +2,18 @@
 
 export const VERSION = 61; // app version (shown in the debug log and stamped on saves)
 // The flowchart revision a walk was made on: 1 was the released flowchart, 2 the Draft of 2026-10-15. Every node id of
-// revision 1 is still there, so an unfinished walk from it resumes on the new graph (migrate), unless it stands on, or
-// is due to return to, a node whose kind changed: those steps became priority lists, and that walk is dropped.
+// revision 1 is still there, so an unfinished walk from it resumes on the new graph (migrate).
 export const FLOW_REV = 2;
-export const FLOW_REV_1_REDRAWN_NODES = [
-  "C14.disc14",
-  "C14.disc18",
-  "C14.discF",
-  "M14.disc",
-  "M14.discF",
-  "BA.casualties",
-];
+// Revision 1's steps that became priority lists, and the step drawn after each that now carries what they asked: a
+// walk paused at one moves there with its open prompt.
+export const FLOW_REV_1_MOVED_STEPS = {
+  "C14.disc14": "discOne14",
+  "C14.disc18": "discOne18",
+  "C14.discF": "discOneF",
+  "M14.disc": "discOne",
+  "M14.discF": "discOneF",
+  "BA.casualties": "removeCas",
+};
 
 // The values are what saved games and the card data (cards/) hold, so they must not change without a migrate() step.
 export const STRATEGY = { CORRUPTION: "corruption", MILITARY: "military" };
