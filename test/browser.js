@@ -28,7 +28,7 @@ const SEL = {
   MODAL_CLOSE: "#mclose",
   TOOLS_BUTTON: "#toolsBtn",
   TOOLS_MENU: "#modal .toolmenu",
-  SETUP_HELP: '.tools:not(.gameTools) [data-modal="help"]',
+  SETUP_HELP: '.setupTools [data-modal="help"]',
   ASK_OK: '#modal [data-ask="ok"]',
   ASK_NO: '#modal [data-ask="no"]',
   FLOW_TOGGLE: "#flowToggle",

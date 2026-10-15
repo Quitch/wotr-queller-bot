@@ -433,14 +433,17 @@ async function checkBuildEssentials(page) {
       "build essentials missing: " + JSON.stringify(essentials),
     );
 }
-// The New game screen has no Tools menu, so its Help button stays in the header on a narrow screen.
-async function checkSetupHelp(page) {
+// The New game screen has no Tools menu, so its Help button stays in the header on a narrow screen; `check` is
+// checkPhoneLayout's sideways-scroll check, run with the Help modal open.
+async function checkSetupHelp(page, check) {
   const help = page.locator(SEL.SETUP_HELP);
   const visible = await help.isVisible();
   let title = null;
   if (visible) {
     await help.click();
     title = await page.textContent(SEL.MODAL_TITLE);
+    await axeCheck(page, "setup help modal");
+    await check("setup help modal");
     await page.click(SEL.MODAL_CLOSE);
   }
   console.log("phone: setup Help visible", visible, "→", title);
@@ -449,7 +452,7 @@ async function checkSetupHelp(page) {
       "the New game screen's Help button is hidden or does not open Help",
     );
 }
-// A 360px touch screen: the Tools menu opens and reaches Settings, and nothing scrolls sideways on either screen, with
+// A 360px touch screen: the New game screen's Help button opens Help, the Tools menu opens and reaches Settings, and nothing scrolls sideways on either screen, with
 // the full or the minimal tracker, or with any modal open (the flowchart in both views). Returns the page errors.
 async function checkPhoneLayout() {
   const { page, errors, close } = await launchBuiltPage({
@@ -462,7 +465,7 @@ async function checkPhoneLayout() {
     if (await scrollsSideways(page)) wide.push(what);
   };
   await check("setup screen");
-  await checkSetupHelp(page);
+  await checkSetupHelp(page, check);
   await startGameWithEverythingOn(page);
   await page.click(SEL.phase("setup"));
   await answerAll(page);
