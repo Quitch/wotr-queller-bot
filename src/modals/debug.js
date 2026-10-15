@@ -134,7 +134,7 @@ function wireDebug(modal, el) {
       { action: "debugExport", how: "download", bytes: data.length },
       ui.state,
     );
-    downloadText({
+    void downloadText({
       fileName: debug.fileName(ui.state),
       data,
       noteEl: el.querySelector("#dbgNote"),
@@ -147,7 +147,7 @@ function wireDebug(modal, el) {
       { action: "debugExport", how: "copy", bytes: data.length },
       ui.state,
     );
-    copyText({
+    void copyText({
       data,
       noteEl: el.querySelector("#dbgNote"),
       label: "Debug log",
