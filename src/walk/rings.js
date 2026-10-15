@@ -3,10 +3,9 @@
 // (rule 46: the die of the first step that is possible).
 import * as engine from "../engine/index.js";
 import { DIE_REQUIREMENT, TRAIL } from "../engine/index.js";
-import { NODE_KIND } from "../flow/index.js";
-import { setPrompt, trail } from "./core.js";
+import { askBoardQuestion, trail } from "./core.js";
 import { dieWithArticle } from "./jumps-table.js";
-import { PENDING, PROMPT } from "./prompt.js";
+import { PENDING } from "./prompt.js";
 
 // any die: a walk saved before rule 46 was applied armed the ring this way
 const ANY_DIE = "any";
@@ -83,19 +82,16 @@ export function ringAllowed(state, req) {
   if (!limit) return true;
   // no die the ring could change: nothing to ask
   if (!engine.availableActionDice(state).length) return false;
-  const part = walk.page + "." + walk.node + ".ring46";
-  if (part in walk.parts) walk.ringAnswer = walk.parts[part];
-  if (walk.ringAnswer != null) return walk.ringAnswer === limit.answer;
-  setPrompt(state, {
-    type: PROMPT.YES_NO,
-    text: limit.question,
-    part,
-    node: walk.node,
-    page: walk.page,
-    kind: NODE_KIND.FOLLOW_UP,
-    board: true,
-  });
-  return PENDING;
+  if (walk.ringAnswer == null) {
+    const answer = askBoardQuestion(
+      state,
+      walk.page + "." + walk.node + ".ring46",
+      limit.question,
+    );
+    if (answer === PENDING) return PENDING;
+    walk.ringAnswer = answer;
+  }
+  return walk.ringAnswer === limit.answer;
 }
 // With dice off, the player declined a ring for a die of type `req`. Where rule 46 picks the die by a question, the
 // answer may have ruled out this die only: the ring may still make the other one.
@@ -194,6 +190,11 @@ export function settleRing(state, letGo) {
   }
   if (!letGo && holdsRingDie(state, pending)) return;
   returnRing(state, "the step it was for was not possible");
+}
+// Claiming a die for another step gives up a die a ring made for the last one: call it before ensureDie.
+export function letGoOtherRingDie(state, req) {
+  const pending = state.walk.ringPending;
+  if (pending && !pending.reqs.includes(req)) settleRing(state, true);
 }
 // The box a limited ring use needs (rule 46) was answered: Yes lets the use stand, No undoes it. Returns true when the
 // ring was undone, so the page gives up the step.
