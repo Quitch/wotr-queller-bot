@@ -66,6 +66,19 @@ function switchStrategy(state, walk, spec, label) {
   };
   follow(state, null);
 }
+function setDieAside(state, walk) {
+  state.minionReserved = true;
+  if (walk.dieIndex != null && state.settings.dice) {
+    state.dice.pool[walk.dieIndex].status = engine.DIE_STATE.RESERVED;
+  }
+  delete walk.dieAns[DIE_REQUIREMENT.MUSTER];
+  delete walk.dieAns[DIE_REQUIREMENT.CHAR_OR_MUSTER]; // the die the player said Queller had is no longer available
+  engine.log(state, "Muster die set aside for a minion (rule 34).");
+  trail(state, {
+    kind: TRAIL.NOTE,
+    text: "Muster die set aside for a minion",
+  });
+}
 // "Save muster die for minion": set the die aside and return to the calling page.
 function reserveDie(state, walk, spec, label) {
   // A die already set aside and brought back by "Use Muster die set aside for minion" must be used now (rule 34), not set aside again.
@@ -79,31 +92,16 @@ function reserveDie(state, walk, spec, label) {
     return;
   }
   // rule 46: an Elven Ring does not make a Muster die to be set aside, so without it there is no die to set aside
-  if (walk.ringPending) {
+  if (walk.ringPending)
     returnRing(state, "the Muster page would set the die aside");
-    walk.die = null;
-    walk.dieIndex = null;
-    doReturn(state);
-    return;
-  }
-  state.minionReserved = true;
-  if (walk.dieIndex != null && state.settings.dice) {
-    state.dice.pool[walk.dieIndex].status = engine.DIE_STATE.RESERVED;
-  }
-  delete walk.dieAns[DIE_REQUIREMENT.MUSTER];
-  delete walk.dieAns[DIE_REQUIREMENT.CHAR_OR_MUSTER]; // the die the player said Queller had is no longer available
-  engine.log(state, "Muster die set aside for a minion (rule 34).");
-  trail(state, {
-    kind: TRAIL.NOTE,
-    text: "Muster die set aside for a minion",
-  });
+  else setDieAside(state, walk);
   walk.dieIndex = null;
   walk.die = null;
   doReturn(state);
 }
 // "Phase 5 (use an Elven Ring)": restart the walk looking for an Elven Ring use (rule 44) when a ring and a die to change are available.
 function ringAnyJump(state, walk, spec, label) {
-  settleRing(state);
+  settleRing(state, true);
   const canUseRing =
     walk.mode !== "ringAny" &&
     engine.ringAvailable(state) &&
@@ -151,11 +149,17 @@ function jumpWithDie(state, spec, label) {
     enterPage(state, spec, label);
     return;
   }
+  letGoOtherRingDie(state, spec.die);
   const before = { die: walk.die, dieIndex: walk.dieIndex };
   const dieResult = ensureDie(state, spec.die, label);
   if (dieResult === PENDING) return;
   if (dieResult) enterPage(state, spec, label, before);
   else exitJump(state);
+}
+// Claiming a die for another step gives up a die a ring made for the last one.
+function letGoOtherRingDie(state, req) {
+  const pending = state.walk.ringPending;
+  if (pending && !pending.reqs.includes(req)) settleRing(state, true);
 }
 // Make sure Queller has a die of type `req` for the step `label`. Returns true (use it), false (skipped, trail written), or PENDING (prompt open).
 export function ensureDie(state, req, label) {
@@ -173,9 +177,7 @@ export function ensureDie(state, req, label) {
     });
     return false;
   }
-  // claiming a die for another step gives up a die a ring made for the last one
-  if (walk.ringPending && !walk.ringPending.reqs.includes(req))
-    settleRing(state, true);
+  letGoOtherRingDie(state, req);
   if (state.settings.dice) return ensureDieFromPool(state, walk, req, label);
   return askForDie(state, walk, req, label);
 }
@@ -234,6 +236,7 @@ function askForDie(state, walk, req, label) {
   if (walk.dieAns[req]) return true;
   if (ringMayCreate(state, req) && !walk.ringAsked) {
     walk.ringAsked = true;
+    const limit = ringQuestion(state, req);
     setPrompt(state, {
       type: PROMPT.RING,
       req,
@@ -245,11 +248,11 @@ function askForDie(state, walk, req, label) {
         "Use an Elven Ring (rule 43): change one Queller die that does not show a *preferred* result into " +
         dieWithArticle(req) +
         " result. Choose the die at random. If the step then turns out not to be possible, the app tells you to turn the die back (rule 43)." +
-        (ringQuestion(state, req)
+        (limit
           ? " Only if the answer to this is " +
-            (ringQuestion(state, req).answer ? "Yes" : "No") +
+            (limit.answer ? "Yes" : "No") +
             ": " +
-            ringQuestion(state, req).question +
+            limit.question +
             "?"
           : ""),
     });

@@ -104,9 +104,10 @@ function answerRing(state, prompt, value) {
   walk.dieAns[prompt.req] = !!value;
   walk.pendingDie = prompt.label;
   if (!value) return;
-  ringUsed(state, prompt.req, state.board.rings);
+  const ringsBefore = state.board.rings;
   state.board.rings = Math.max(0, state.board.rings - 1);
   state.ringUsedThisTurn = true;
+  ringUsed(state, prompt.req, ringsBefore);
   engine.log(
     state,
     "Elven Ring used to create " +
