@@ -58,7 +58,7 @@ const TRAIL_LABEL = {
   [TRAIL.PRIORITY]: "Priority",
   [TRAIL.NOTE]: "Note",
   [TRAIL.REVEAL]: "Card",
-  [TRAIL.RING]: "Ring",
+  [TRAIL.RING]: "Elven Ring",
   [TRAIL.END]: "End",
 };
 function trailEntryHTML(entry) {

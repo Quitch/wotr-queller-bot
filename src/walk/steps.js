@@ -33,7 +33,7 @@ function recoverDiceStep(state, node, { diceOn, wome, label }) {
     return promptStep(
       state,
       node,
-      "Recover Queller’s action dice" +
+      "Recover Queller’s Action dice" +
         (wome ? " (and the Faction die if a Shadow faction is in play)" : "") +
         ".",
     );
@@ -80,7 +80,7 @@ function rollHuntAllocationStep(state, node, { diceOn, label }) {
   continueStep(
     state,
     label,
-    "rolled " + roll + " → " + placed + " in the Hunt box",
+    "rolled " + roll + " → " + placed + " in the Hunt Box",
   );
 }
 function huntMaxStep(state, node, { diceOn, label }) {
@@ -116,7 +116,7 @@ const huntFixedStep = (count) =>
   };
 function huntNoneStep(state, node, { diceOn, label }) {
   if (!diceOn) return FALL_THROUGH;
-  engine.log(state, "No dice placed in the Hunt box before rolling.");
+  engine.log(state, "No dice placed in the Hunt Box before rolling.");
   continueStep(state, label);
 }
 function rollRemainingStep(state, node, { diceOn, label }) {
@@ -124,7 +124,7 @@ function rollRemainingStep(state, node, { diceOn, label }) {
     return promptStep(
       state,
       node,
-      "Roll Queller’s remaining action dice. Put every Eye in the Hunt box.",
+      "Roll Queller’s remaining Action dice. Put every Eye in the Hunt Box.",
     );
   const faces = engine.rollRemaining(state);
   continueStep(state, label, faces.join(", "));
@@ -134,7 +134,7 @@ function strategyRollStep(state, node, { diceOn }) {
   if (!diceOn)
     return setPrompt(state, {
       type: PROMPT.ROLL,
-      text: "Roll a die: 1-3 corruption strategy, 4-6 military strategy.",
+      text: "Roll a die: 1-3 Corruption strategy, 4-6 Military strategy.",
       node: state.walk.node,
       options: [STRATEGY_ROLL.LOW, STRATEGY_ROLL.HIGH],
     });

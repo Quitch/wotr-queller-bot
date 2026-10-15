@@ -243,7 +243,7 @@ function chooseNationToAdvance(state, node, facts) {
       "Political Track — " + trackPositions,
       eligible.length
         ? "Eligible: " + eligible.join(", ")
-        : "Every Shadow nation is at war",
+        : "Every Shadow Nation is At War",
     ],
     choice: walk.nationChoice || "none",
   });
@@ -260,14 +260,14 @@ function askMinionChoice(state, node) {
     options.push({ value: "Saruman", label: "Saruman (Isengard At War)" });
   if (offered("witchKing"))
     options.push({
-      value: "Witch King",
-      label: "Witch King (Sauron At War and a Free Peoples nation At War)",
+      value: "Witch-king",
+      label: "Witch-king (Sauron At War and a Free Peoples Nation At War)",
     });
   if (offered("mouth"))
     options.push({
       value: "Mouth of Sauron",
       label:
-        "Mouth of Sauron (all Free Peoples nations At War, or the Fellowship on the Mordor track)",
+        "Mouth of Sauron (all Free Peoples Nations At War, or the Fellowship on the Mordor Track)",
     });
   options.push({ value: "", label: "None can be mustered" });
   promptChoice(

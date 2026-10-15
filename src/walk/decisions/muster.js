@@ -45,8 +45,8 @@ function decideNationNotAtWar(state, node, { trackerOn, wome }) {
   if (!trackerOn) return askDecision(state, node);
   const nationNotAtWar = !engine.allShadowNationsAtWar(state);
   const noFactionInPlay = wome && !engine.shadowFactionInPlay(state);
-  let why = "all at war" + (wome ? ", faction in play" : "");
-  if (nationNotAtWar) why = "a Shadow nation is not at war";
+  let why = "all At War" + (wome ? ", faction in play" : "");
+  if (nationNotAtWar) why = "a Shadow Nation is not At War";
   else if (noFactionInPlay) why = "no faction in play";
   answerAuto(state, node, nationNotAtWar || noFactionInPlay, why);
 }

@@ -38,7 +38,7 @@ function decideDieUsed(state, node, { walk }) {
 // ---- Army
 function decideHuntDiceForArmy(state, node, { diceOn, trackerOn, board }) {
   if (diceOn && state.dice.hunt === 0)
-    return answerAuto(state, node, false, "no dice in the Hunt box");
+    return answerAuto(state, node, false, "no dice in the Hunt Box");
   if (trackerOn && board.fs.mordor)
     return answerAuto(state, node, false, "Fellowship in Mordor");
   ask(state, node);

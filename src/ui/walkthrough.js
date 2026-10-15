@@ -60,9 +60,9 @@ function idleText() {
         ? "Phase 2: declare your Fellowship or change the Guide, then check whether Queller changes strategy."
         : "Phase 2: declare your Fellowship or change the Guide. The Military strategy has nothing to do here.";
     case PHASE.P3:
-      return "Phase 3: Queller allocates dice to the Hunt box.";
+      return "Phase 3: Queller allocates dice to the Hunt Box.";
     case PHASE.P4:
-      return "Phase 4: roll Queller’s remaining dice (Eyes go to the Hunt box). Roll your own dice too.";
+      return "Phase 4: roll Queller’s remaining dice (Eyes go to the Hunt Box). Roll your own dice too.";
     case PHASE.P5:
       return "Phase 5: you act first. Each time Queller is eligible to act, walk from “Phase 5”. Walk the Battle page for each combat round.";
     case PHASE.P6:

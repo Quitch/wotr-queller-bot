@@ -220,7 +220,7 @@ function politicalTrackPreview(state, nationKey) {
 }
 function advancePoliticalTrack(state, node, { walk, trackerOn, label }) {
   if (!walk.nationChoice || walk.nationChoice === "Faction")
-    return skipAction(state, label, "no nation to advance");
+    return skipAction(state, label, "no Nation to advance");
   const nationKey = SHADOW_NATION_KEY[walk.nationChoice];
   if (!trackerOn)
     return promptAction(
@@ -242,6 +242,8 @@ function advancePoliticalTrack(state, node, { walk, trackerOn, label }) {
 // The tracker field of each minion the Muster page can muster.
 const MINION_KEY = {
   Saruman: "saruman",
+  "Witch-king": "witchKing",
+  // saved walks before the Draft text spelt it this way
   "Witch King": "witchKing",
   "Mouth of Sauron": "mouth",
 };

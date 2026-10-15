@@ -20,7 +20,7 @@ const DECIDE_HOOKS = {
       state.playable = {};
       engine.log(
         state,
-        "Witch King is now in play (tracker updated; his die joins the pool next turn).",
+        "Witch-king is now in play (tracker updated; his die joins the pool next turn).",
       );
     }
   },

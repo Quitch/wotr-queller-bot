@@ -73,7 +73,9 @@ export function beginWalk(state, page, startName, options = {}) {
       " from “" +
       normalizeText(startName) +
       "”" +
-      (options.mode === "ringAny" ? " (looking for a ring use, rule 44)" : "") +
+      (options.mode === "ringAny"
+        ? " (looking for an Elven Ring use, rule 44)"
+        : "") +
       ".",
   );
   return true;

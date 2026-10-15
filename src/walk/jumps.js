@@ -75,7 +75,7 @@ function reserveDie(state, walk, spec, label) {
   walk.die = null;
   doReturn(state);
 }
-// "Phase 5 (use a ring)": restart the walk looking for a ring use (rule 44) when a ring and a die to change are available.
+// "Phase 5 (use an Elven Ring)": restart the walk looking for an Elven Ring use (rule 44) when a ring and a die to change are available.
 function ringAnyJump(state, walk, spec, label) {
   const canUseRing =
     walk.mode !== "ringAny" &&
@@ -90,7 +90,7 @@ function ringAnyJump(state, walk, spec, label) {
     return;
   }
   let why = "no die to change";
-  if (state.ringUsedThisTurn) why = "a ring was already used this turn";
+  if (state.ringUsedThisTurn) why = "an Elven Ring was already used this turn";
   else if (engine.ringsKnown(state) && !state.board.rings)
     why = "no Elven Ring";
   trail(state, { kind: TRAIL.SKIP, text: label, why });

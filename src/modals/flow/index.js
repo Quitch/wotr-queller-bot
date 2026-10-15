@@ -60,7 +60,7 @@ function currentPage() {
     ? engine.phase5Page(state)
     : engine.phasePage(state);
 }
-const RING_MARK = () => " " + ui.ringIcon() + " (ring condition)";
+const RING_MARK = () => " " + ui.ringIcon() + " (Elven Ring condition)";
 // A box in the text view: its kind and text, its ring and WoME marks, and its list.
 function boxTextHTML(kind, node) {
   const nodeExtra = NODE.extra(node);

@@ -28,8 +28,8 @@ function decideWitchKingFirstRound(state, node, { trackerOn, walk }) {
   if (walk.battleRound !== 1)
     return answerAuto(state, node, false, "not the first round");
   if (trackerOn && !engine.minionInPlay(state, "witchKing"))
-    return answerAuto(state, node, false, "Witch King not in play");
-  ask(state, node, "Army includes the Witch King (this is the first round)");
+    return answerAuto(state, node, false, "Witch-king not in play");
+  ask(state, node, "Army includes the Witch-king (this is the first round)");
 }
 function decideHandOver4(state, node, { cardsOn, handCount }) {
   if (cardsOn)
@@ -61,13 +61,13 @@ function decideFirstRound(state, node, { walk }) {
 }
 function decideFieldBattleOrMilitary(state, node, { trackerOn, board }) {
   if (state.strategy === STRATEGY.MILITARY)
-    return answerAuto(state, node, true, "military strategy");
+    return answerAuto(state, node, true, "Military strategy");
   if (trackerOn && board.fs.mordor)
-    return answerAuto(state, node, true, "Fellowship on the Mordor track");
+    return answerAuto(state, node, true, "Fellowship on the Mordor Track");
   ask(
     state,
     node,
-    "Field battle? (not military strategy; Fellowship not on the Mordor track)",
+    "Field battle? (not Military strategy; Fellowship not on the Mordor Track)",
   );
 }
 // The second "Shadow Army attacking" (after casualties): the round already established who attacks.
@@ -77,7 +77,7 @@ function decideAttackingThisRound(state, node, { walk }) {
 }
 function decideAggressiveContinue(state, node, { trackerOn, board }) {
   if (trackerOn && board.fs.mordor)
-    return answerAuto(state, node, true, "Fellowship on the Mordor track");
+    return answerAuto(state, node, true, "Fellowship on the Mordor Track");
   ask(state, node);
 }
 

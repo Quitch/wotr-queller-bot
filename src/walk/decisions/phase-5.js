@@ -53,7 +53,7 @@ function decideCharacterCardsWithFellowshipOut(
 }
 export function decideWitchKingInPlay(state, node, { trackerOn }) {
   if (trackerOn && !engine.minionInPlay(state, "witchKing"))
-    return answerAuto(state, node, false, "Witch King not in play");
+    return answerAuto(state, node, false, "Witch-king not in play");
   ask(state, node);
 }
 // Two-part decision: ring part, a minion can be mustered; plain part, Muster 2 can still advance a nation or recruit a faction.
@@ -81,8 +81,8 @@ function decideMinionOrMuster2(state, node, { trackerOn, walk, wome }) {
   }
   const seNotAtWar = !engine.shadowNationAtWar(state, "se"),
     noFactionInPlay = wome && !engine.shadowFactionInPlay(state);
-  let why = "S&E at war" + (wome ? ", a faction is in play" : "");
-  if (seNotAtWar) why = "Southrons & Easterlings not at war";
+  let why = "S&E At War" + (wome ? ", a faction is in play" : "");
+  if (seNotAtWar) why = "Southrons & Easterlings not At War";
   else if (noFactionInPlay) why = "no faction recruited";
   recordDecision(state, {
     text: partText(plain),

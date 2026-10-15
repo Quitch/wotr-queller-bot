@@ -47,7 +47,7 @@ function calcHTML() {
   return (
     '<div class="body"><p class="notice">' +
     fmt(
-      "The *value* of an army per the glossary. Hits: 1 per Regular, " +
+      "The *value* of an Army per the glossary. Hits: 1 per Regular, " +
         ARMY_VALUE.ELITE_HITS +
         " per Elite. Combat dice: one per Army unit, maximum " +
         ARMY_VALUE.MAX_COMBAT_DICE +
@@ -75,7 +75,7 @@ function calcHTML() {
     calcOut() +
     '</div><p class="notice" style="margin-top:10px">' +
     fmt(
-      "¹ When testing whether an army is *mobile*, do not count Saruman in its leadership.",
+      "¹ When testing whether an Army is *mobile*, do not count Saruman in its Leadership.",
     ) +
     "</p></div></div>"
   );

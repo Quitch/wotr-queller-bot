@@ -60,7 +60,7 @@ export function recoverDice(state) {
     state,
     "Recovered " +
       count +
-      " action dice" +
+      " Action dice" +
       (state.dice.factionDie ? " and the Faction die" : "") +
       ".",
   );
@@ -82,7 +82,7 @@ export function assignHunt(state, requested) {
       placed +
       " " +
       (placed === 1 ? "die" : "dice") +
-      " in the Hunt box before rolling" +
+      " in the Hunt Box before rolling" +
       (placed < requested && cap < requested
         ? " (rule 41: maximum " +
           cap +
@@ -110,7 +110,7 @@ export function rollRemaining(state) {
   }
   let hunt = "";
   if (eyes)
-    hunt = " — " + eyes + " Eye" + (eyes > 1 ? "s" : "") + " to the Hunt box";
+    hunt = " — " + eyes + " Eye" + (eyes > 1 ? "s" : "") + " to the Hunt Box";
   log(state, "Rolled: " + out.join(", ") + hunt + ".");
   return out;
 }
@@ -208,7 +208,7 @@ export function ringChange(state, req) {
       from +
       " die to " +
       die.face +
-      " (rule 43). Rings left: " +
+      " (rule 43). Elven Rings left: " +
       state.board.rings +
       ".",
   );

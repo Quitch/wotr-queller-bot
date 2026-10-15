@@ -108,14 +108,14 @@ function resolveTheLidlessEye(state) {
       from.join(", ") +
       " to Eye and placed " +
       (one ? "it" : "them") +
-      " in the Hunt box.";
+      " in the Hunt Box.";
     noteText =
       chosen.length +
       " " +
       (one ? "die" : "dice") +
       " (" +
       from.join(", ") +
-      ") to the Hunt box, non-preferred results first (rule 29)";
+      ") to the Hunt Box, non-preferred results first (rule 29)";
   }
   log(state, "The Lidless Eye: " + logText);
   return [{ kind: TRAIL.NOTE, text: "The Lidless Eye: " + noteText }];

@@ -46,7 +46,7 @@ function promptEyebrowHTML(walk, page, kind) {
     (walk.die
       ? " · " + escapeHTML(engine.DIE_REQUIREMENT_NAME[walk.die]) + " die"
       : "") +
-    (walk.mode === "ringAny" ? " · ring search" : "") +
+    (walk.mode === "ringAny" ? " · Elven Ring search" : "") +
     "</div>"
   );
 }
@@ -123,7 +123,7 @@ function renderRingPrompt(prompt) {
   return {
     body: questionHTML(prompt.text),
     answers:
-      '<button class="btn yes" data-ans="yes">Ring used</button><button class="btn no" data-ans="no">No ring available</button>',
+      '<button class="btn yes" data-ans="yes">Elven Ring used</button><button class="btn no" data-ans="no">No Elven Ring available</button>',
   };
 }
 function renderActionPrompt(prompt, walk) {

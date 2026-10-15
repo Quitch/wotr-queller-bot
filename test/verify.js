@@ -919,7 +919,7 @@ function eliminatedMinionIsNeverMusteredAgain() {
       /not eliminated/.test(choice.text) &&
       !labels.some((label) => /Saruman/.test(label)) &&
       labels.some((label) =>
-        /Mouth of Sauron \(all Free Peoples nations At War, or the Fellowship on the Mordor track\)/.test(
+        /Mouth of Sauron \(all Free Peoples Nations At War, or the Fellowship on the Mordor Track\)/.test(
           label,
         ),
       ),

@@ -118,7 +118,7 @@ const minionsSectionHTML = (heading) =>
   heading +
   "</h3>" +
   minionSelect("chars.saruman", "Saruman") +
-  minionSelect("chars.witchKing", "Witch King") +
+  minionSelect("chars.witchKing", "Witch-king") +
   minionSelect("chars.mouth", "Mouth of Sauron");
 const shadowFactionsHTML = () =>
   trackerCheckbox("factions.corsairs", "Corsairs") +
@@ -138,7 +138,7 @@ function minimalFactionsSectionHTML() {
   );
 }
 const huntSectionHTML = () =>
-  "<h3>Hunt box and Elven Rings</h3>" +
+  "<h3>Hunt Box and Elven Rings</h3>" +
   trackerNumber("fs.companions", "Companions in the Fellowship") +
   trackerNumber("rings", "Elven Rings held by the Shadow");
 function minimalTrackerHTML() {
@@ -173,11 +173,11 @@ const fellowshipSectionHTML = () =>
   trackerNumber("fs.progress", "Progress counter") +
   trackerNumber("fs.companions", "Companions in the Fellowship") +
   trackerCheckbox("fs.revealed", "Revealed") +
-  trackerCheckbox("fs.mordor", "On the Mordor track") +
+  trackerCheckbox("fs.mordor", "On the Mordor Track") +
   trackerCheckbox("fs.atStart", "Figure in Rivendell") +
   trackerCheckbox(
     "fs.inFPSettlement",
-    "Figure in a Free Peoples settlement region",
+    "Figure in a Free Peoples Settlement region",
   ) +
   trackerCheckbox("fs.inStrongholdOrSea", "Figure in a Stronghold or at sea") +
   trackerCheckbox("fs.guideGollum", "Gollum is the Guide");
@@ -187,12 +187,12 @@ const charactersSectionHTML = () =>
   trackerCheckbox("chars.gandalfWhite", "Gandalf the White") +
   trackerCheckbox("chars.aragorn", "Aragorn, Heir to Isildur");
 const shadowNationsSectionHTML = () =>
-  "<h3>Shadow nations (Political Track)</h3>" +
+  "<h3>Shadow Nations (Political Track)</h3>" +
   shadowNationSelect("nations.sauron", "Sauron", 3) +
   shadowNationSelect("nations.isengard", "Isengard", 3) +
   shadowNationSelect("nations.se", "Southrons & Easterlings", 3);
 const fpNationsSectionHTML = () =>
-  "<h3>Free Peoples nations</h3>" +
+  "<h3>Free Peoples Nations</h3>" +
   fpNationSelect("nations.gondor", "Gondor") +
   fpNationSelect("nations.rohan", "Rohan") +
   fpNationSelect("nations.north", "North") +
