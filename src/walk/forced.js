@@ -15,8 +15,7 @@ import {
   handCardsOfDeck,
 } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
-import { releaseCurrentDie, spendCurrentDie } from "./actions.js";
-import { endWalk, trail } from "./core.js";
+import { endWalk, releaseCurrentDie, spendCurrentDie, trail } from "./core.js";
 import { nodeByKey } from "./priority.js";
 import { PROMPT, WALK_RESULT } from "./prompt.js";
 

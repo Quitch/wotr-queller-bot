@@ -1,9 +1,11 @@
 // The walk itself: creating it at a start point, its trail, moving along arrows, ending it and opening a prompt.
 import * as engine from "../engine/index.js";
 import { TRAIL } from "../engine/index.js";
-import { EDGE, FLOW } from "../flow/index.js";
+import { EDGE, FLOW, NODE } from "../flow/index.js";
 import { edgeFor, findStart, normalizeText } from "./graph.js";
-import { settleRing } from "./rings.js";
+import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
+import { WALK_RESULT } from "./prompt.js";
+import { ringBoxState, ringDieSpent, settleRing } from "./rings.js";
 
 // The parts of a walk (state.walk is the flat union of them).
 // Where the walk is: its page and node, the start point it began at, the pages it will return to, its record and its prompt.
@@ -40,10 +42,7 @@ const walkDieState = (options) => ({
 // the question that picks the die (and its answer), whether the ring question was put to the player, and a ring use
 // waiting for its die to be spent.
 const walkRingState = () => ({
-  ringDice: null,
-  ringNeeds: null,
-  ringAsk: null,
-  ringAnswer: null,
+  ...ringBoxState(),
   ringAsked: false,
   ringPending: null,
 });
@@ -135,4 +134,94 @@ export function endWalk(state, result, message) {
 }
 export function setPrompt(state, prompt) {
   state.walk.prompt = prompt;
+}
+export function exitJump(state) {
+  // follow the arrow out of the current grey box; if none, return further
+  if (!follow(state, null)) doReturn(state);
+}
+export function doReturn(state) {
+  const walk = state.walk;
+  if (walk.page === "AR" && walk.armyMoves === 1) {
+    spendCurrentDie(state, "one Army move; no second move was possible");
+    endWalk(
+      state,
+      WALK_RESULT.ACTION,
+      "No second Army move is possible: the Army die is used (rule 9).",
+    );
+    return;
+  }
+  if (!walk.stack.length) {
+    // A die brought back from "set aside for a minion" that found no action is spent, not set aside again (rule 34: it cannot be used for anything else).
+    if (
+      walk.fromReserve &&
+      state.settings.dice &&
+      walk.reservedDieIndex != null &&
+      state.dice.pool[walk.reservedDieIndex].status === engine.DIE_STATE.AVAIL
+    ) {
+      engine.spendDie(
+        state,
+        state.dice.pool[walk.reservedDieIndex],
+        "set aside for a minion, no action possible",
+      );
+      endWalk(
+        state,
+        WALK_RESULT.ACTION,
+        "Queller sets aside the Muster die it had kept for a minion — no action was possible with it.",
+      );
+      return;
+    }
+    endWalk(
+      state,
+      WALK_RESULT.NO_ACTION,
+      walk.page === "BA"
+        ? "Nothing further from the Battle page this round."
+        : "Queller has no action from this walk.",
+    );
+    return;
+  }
+  const frame = walk.stack.pop();
+  goto(state, frame.page, frame.node);
+  walk.die = frame.die;
+  walk.dieIndex = frame.dieIndex;
+  walk.dieUsed = frame.dieUsed;
+  settleRing(state);
+  walk.cands = null;
+  walk.chosen = null;
+  trail(state, {
+    kind: TRAIL.BACK,
+    text: normalizeText(NODE.text(cur(state))),
+  });
+  exitJump(state);
+}
+export function spendCurrentDie(state, why) {
+  const walk = state.walk;
+  if (!walk?.die) return;
+  ringDieSpent(state);
+  if (
+    walk.messengerDieIndex != null &&
+    walk.messengerDieIndex === walk.dieIndex
+  ) {
+    state.messengerUsedThisTurn = true;
+    engine.log(
+      state,
+      "Messenger of the Dark Tower used: a Muster die acted as an Army die (rule 30).",
+    );
+  }
+  if (state.settings.dice && walk.dieIndex != null) {
+    engine.spendDie(state, state.dice.pool[walk.dieIndex], why);
+  } else
+    engine.log(
+      state,
+      "Queller used a " +
+        DIE_REQUIREMENT_NAME[walk.die] +
+        " die" +
+        (why ? " — " + why : "") +
+        ".",
+    );
+  releaseCurrentDie(state);
+}
+// The walk no longer holds a die (spent, or given up unspent).
+export function releaseCurrentDie(state) {
+  state.walk.die = null;
+  state.walk.dieIndex = null;
 }

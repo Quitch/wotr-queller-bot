@@ -2,8 +2,16 @@
 import * as engine from "../engine/index.js";
 import { CARD, TRAIL, cardById } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
-import { exitAction, spendCurrentDie } from "./actions.js";
-import { cur, endWalk, follow, goto, setPrompt, trail } from "./core.js";
+import { exitAction } from "./actions.js";
+import {
+  cur,
+  endWalk,
+  follow,
+  goto,
+  setPrompt,
+  spendCurrentDie,
+  trail,
+} from "./core.js";
 import { findStart } from "./graph.js";
 import { decisionText, recordDecision } from "./decisions/common.js";
 import { dieWithArticle } from "./jumps-table.js";
