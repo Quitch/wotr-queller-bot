@@ -59,13 +59,14 @@ const walkChoiceState = () => ({
 });
 // Multi-part decisions (sub: which part) and answers to board questions asked once per node.
 const walkDecisionState = () => ({ sub: 0, parts: {} });
-// Create the walk at a start point without stepping it; returns false when the start point does not exist.
 // Drop the walk in progress: a ring it used for a die it never spent comes back (rule 43).
 export function abandonWalk(state) {
   if (state.walk && !state.walk.done) settleRing(state, true);
   state.walk = null;
 }
+// Create the walk at a start point without stepping it; returns false when the start point does not exist.
 export function beginWalk(state, page, startName, options = {}) {
+  abandonWalk(state);
   const id = findStart(page, startName);
   if (!id) {
     engine.log(
@@ -74,7 +75,6 @@ export function beginWalk(state, page, startName, options = {}) {
     );
     return false;
   }
-  abandonWalk(state);
   state.walk = {
     ...walkPosition(page, id, startName, options),
     ...walkDieState(options),
