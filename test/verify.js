@@ -210,8 +210,8 @@ function ringUsedOnceOnlyWhenHeld() {
     return state;
   };
   const ringRules = [
-    [/under \*threat\*/, true],
-    [/adjacent to \*threat\*/, true],
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
   ];
   const noRingState = stateWithEventAndMusterDice();
   noRingState.board.rings = 0;
@@ -1504,7 +1504,7 @@ function ringReturnedWhenItsStepIsNotPossible() {
   };
   const attacked = ringState(["Event", "Event"]);
   driveWalk(attacked, [
-    [/under \*threat\*/, true],
+    [/^Shadow under \*threat\*/, true],
     [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
     [/Attack using Character/, "no"],
     [/Attack using Army/, "done"],
@@ -1524,7 +1524,7 @@ function ringReturnedWhenItsStepIsNotPossible() {
   );
   const nothing = ringState(["Event", "Event"]);
   driveWalk(nothing, [
-    [/under \*threat\*/, true],
+    [/^Shadow under \*threat\*/, true],
     [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
     [/^Pass/, "no"],
     byType(PROMPT.ACTION, "no"),
@@ -1593,7 +1593,7 @@ function diceOffRingOfferedAndTurnedBack() {
   state.board.rings = 1;
   engine.startPhase(state, PHASE.P5);
   const seen = driveWalk(state, [
-    [/under \*threat\*/, true],
+    [/^Shadow under \*threat\*/, true],
     [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
     [/^Does Queller have/, false],
     byType(PROMPT.RING, true),
@@ -1606,6 +1606,92 @@ function diceOffRingOfferedAndTurnedBack() {
       state.board.rings === 0 &&
       state.log.some((line) => /turn the die back/.test(line.text)),
     "the ring is offered at the first die question, and turned back when the Character attack was not possible",
+  );
+}
+// Rules 43 and 46, review cases: a ring die spent at an "End action" box keeps the ring used; a die a page found nothing
+// for is given back even with dice rolled; the attack box asks rule 46's question before a Character die; and a die
+// that has been used never turns back.
+function ringSettledWhereTheDieGoes() {
+  const ringState = (strategy, faces) => {
+    const state = phase5State(
+      { dice: true, cards: false, tracker: false, wome: false },
+      strategy,
+    );
+    state.board.rings = 1;
+    state.dice.pool = faces.map((face) => die(face));
+    engine.startPhase(state, PHASE.P5);
+    return state;
+  };
+  const witchKing = ringState(STRATEGY.CORRUPTION, ["Event", "Event"]);
+  driveWalk(witchKing, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Threat\* is sieging/, true],
+    [/^Mustered Witch-king$/, true],
+  ]);
+  ok(
+    witchKing.walk.result === WALK_RESULT.ACTION &&
+      witchKing.board.rings === 0 &&
+      witchKing.ringUsedThisTurn &&
+      !witchKing.walk.trail.some((entry) => /not used/.test(entry.text)),
+    "the ring that made the die for “Character 3 / Muster Witch-king” stands after “End action”",
+  );
+  const nothing = ringState(STRATEGY.CORRUPTION, ["Muster", "Muster"]);
+  driveWalk(nothing, [
+    [/^Character cards > 0 and ANY condition true:/, true],
+    [/^Pass/, "no"],
+    byType(PROMPT.ACTION, "no"),
+  ]);
+  // each ring die comes back before the walk leaves the bold box's steps (the walk later goes on to the rule 44 Elven
+  // Ring search, which may use the ring again)
+  const trailIndex = (pattern) =>
+    nothing.walk.trail.findIndex((entry) => pattern.test(entry.text));
+  const nextBox = trailIndex(/^Fellowship in region which Nazgûl can move to/);
+  ok(
+    trailIndex(/^Elven Ring not used for a Character die/) > -1 &&
+      trailIndex(/^Elven Ring not used for an Event die/) > -1 &&
+      trailIndex(/^Elven Ring not used for an Event die/) < nextBox,
+    "the Character die and then the Event die a page found nothing for are given back",
+  );
+  const attack = (hasNazgul) => {
+    const state = ringState(STRATEGY.MILITARY, ["Event", "Event"]);
+    const seen = driveWalk(state, [
+      [/^\*Mobile\* Army \*adjacent\* to \*target\* or an Army/, true],
+      [/^ANY condition true:/, true],
+      [/contain a Nazgûl or a minion/, hasNazgul],
+      [/can move or attack towards closest/, true],
+      [/^Move\/Attack$/, "done"],
+    ]);
+    return { state, seen };
+  };
+  const withNazgul = attack(true),
+    withoutNazgul = attack(false);
+  const facesUsed = (state) =>
+    state.dice.pool
+      .filter((pooled) => pooled.status === DIE_STATE.USED)
+      .map((pooled) => pooled.face);
+  ok(
+    withNazgul.seen.some((prompt) =>
+      /Nazgûl or a minion/.test(prompt?.text || ""),
+    ) &&
+      facesUsed(withNazgul.state).join() === "Character" &&
+      facesUsed(withoutNazgul.state).join() === "Army",
+    "the attack box's ring makes a Character die only for an Army with a Nazgûl or a minion, otherwise an Army die",
+  );
+  const marked = ringState(STRATEGY.CORRUPTION, ["Event", "Event"]);
+  for (
+    let guard = 0;
+    guard < 10 && marked.walk.prompt?.type !== PROMPT.ACTION;
+    guard++
+  )
+    engine.answer(marked, true);
+  const ringDie = marked.dice.pool.find(
+    (pooled) => pooled.face === "Character",
+  );
+  ringDie.status = DIE_STATE.USED;
+  engine.abandonWalk(marked);
+  ok(
+    ringDie.face === "Character" && marked.board.rings === 0,
+    "a ring die the player marked used does not turn back when the walk is dropped",
   );
 }
 // A walk saved with revision 2's ring state takes revision 3's.
@@ -1684,6 +1770,7 @@ const SCENARIOS = [
   ["rings", ringReturnedWhenItsStepIsNotPossible],
   ["rings", ringUsedOnlyWhereRule46Allows],
   ["rings", diceOffRingOfferedAndTurnedBack],
+  ["rings", ringSettledWhereTheDieGoes],
   ["migrate", ringStateFromRevision2Migrates],
 ];
 function main() {
