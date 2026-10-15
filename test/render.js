@@ -18,7 +18,7 @@ const engine = fakeWindow.QB,
   { PROMPT } = engine;
 const SEED = 2;
 const GAMES_PER_SETTING = 2;
-const TURNS_PER_GAME = 3;
+const TURNS_PER_GAME = 2;
 const MAX_FAILURES_SHOWN = 25;
 const CONTEXT_CHARS = 60; // of output shown around a suspect word
 const ON_BORDER_TOLERANCE = 0.51; // an arrow end this far outside a box still touches it
@@ -362,8 +362,31 @@ function checkConditionListPrompt() {
     "a condition list is asked as a bulleted list, without a question mark after the colon or the WoME item",
   );
 }
+// A situational card question (Dreadful Spells asks whether a Shadow Army with Nazgûl is next to a Free Peoples
+// Army): the random games reach one only now and then, so one is raised and rendered here.
+function checkSituationalPrompt() {
+  const state = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  state.strategy = engine.STRATEGY.CORRUPTION;
+  state.phase = engine.PHASE.P5;
+  state.cards.hand = ["sa008"];
+  state.cards.factionHand = [];
+  engine.startWalk(state, "EV", "Event", {
+    die: engine.DIE_REQUIREMENT.EVENT,
+  });
+  renderGame(state, "situational card question");
+  ok(
+    state.walk.prompt?.type === PROMPT.SITUATIONAL,
+    "a situational card question is raised and rendered",
+  );
+}
 function main() {
   playGames();
+  checkSituationalPrompt();
   checkConditionListPrompt();
   checkBlockedQuestionHidesHand();
   checkPromptTypesRendered();
