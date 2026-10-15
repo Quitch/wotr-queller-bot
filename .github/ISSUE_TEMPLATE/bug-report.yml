@@ -1,6 +1,7 @@
 name: Bug report
 description: "The app did something wrong: a step that makes no sense, a card or die handled wrongly, a button that does nothing."
 labels: [bug]
+assignees: [Quitch]
 body:
   - type: markdown
     attributes:

@@ -1,6 +1,7 @@
 name: Rules or flowchart question
 description: A step the app showed does not match the Queller flowcharts or the War of the Ring rules as you read them.
 labels: [question]
+assignees: [Quitch]
 body:
   - type: markdown
     attributes:
