@@ -1,6 +1,6 @@
 // The orange boxes: steps the app performs itself (dice, cards) or prompts the player to do.
 import * as engine from "../engine/index.js";
-import { DECK, HAND, TRAIL, cardById } from "../engine/index.js";
+import { DECK, TRAIL, cardById } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
 import { drawStep, promptPlayCard } from "./actions.js";
 import { follow, setPrompt, trail } from "./core.js";
@@ -60,19 +60,14 @@ function drawTurnCardsStep(state, node, { cardsOn, wome, label }) {
       (wome ? " + " + engine.handCounts(state).faction + " faction" : ""),
   );
 }
-// "Discard priority": discard the hand down to its limit by the box's priority list.
-const discardToLimitStep = (hand) =>
-  function discardStep(state, node, { cardsOn, label }) {
-    const items = NODE.extra(node).items;
-    if (!cardsOn) return promptStep(state, node, label, { items });
-    const discarded = engine.autoDiscard(state, items, hand);
-    continueStep(
-      state,
-      label,
-      "discarded " +
-        discarded.map((id) => "“" + cardById[id].title + "”").join(", "),
-    );
-  };
+// "Discard one card": the card the priority list before it chose.
+function discardChosenStep(state, node, { walk, cardsOn, label }) {
+  if (!cardsOn || !walk.chosen) return FALL_THROUGH;
+  const id = walk.chosen;
+  engine.discardCard(state, id, "hand above the limit");
+  walk.chosen = null;
+  continueStep(state, label, "discarded “" + cardById[id].title + "”");
+}
 function rollHuntAllocationStep(state, node, { diceOn, label }) {
   if (!diceOn) return promptStep(state, node, label);
   const roll = engine.randomBelow(6) + 1;
@@ -168,11 +163,11 @@ const STEP_HANDLERS = {
   "M14.rec": recoverDiceStep,
   "C14.draw": drawTurnCardsStep,
   "M14.draw": drawTurnCardsStep,
-  "C14.disc14": discardToLimitStep(HAND.EVENT),
-  "C14.disc18": discardToLimitStep(HAND.EVENT),
-  "M14.disc": discardToLimitStep(HAND.EVENT),
-  "C14.discF": discardToLimitStep(HAND.FACTION),
-  "M14.discF": discardToLimitStep(HAND.FACTION),
+  "C14.discOne14": discardChosenStep,
+  "C14.discOne18": discardChosenStep,
+  "M14.discOne": discardChosenStep,
+  "C14.discOneF": discardChosenStep,
+  "M14.discOneF": discardChosenStep,
   "C14.rollHunt": rollHuntAllocationStep,
   "C14.huntMax": huntMaxStep,
   "M14.huntMax": huntMaxStep,

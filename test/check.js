@@ -202,9 +202,7 @@ function markedUpTexts() {
       const node = FLOW[pageKey].nodes[id],
         where = pageKey + "." + id;
       texts.push([where, NODE.text(node)]);
-      const nodeExtra = NODE.extra(node);
-      if (nodeExtra.t2) texts.push([where, nodeExtra.t2]);
-      for (const item of nodeExtra.items || []) texts.push([where, item]);
+      for (const item of NODE.items(node)) texts.push([where, item.text]);
     }
   for (const card of fakeWindow.QB_CARDS)
     for (const field of CARD_TEXT_FIELDS)

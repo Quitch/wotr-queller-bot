@@ -46,7 +46,13 @@ const byType = (type, answer) => ({
 function ruleAnswer(prompt, rules) {
   for (const rule of rules) {
     const [test, answer] = Array.isArray(rule)
-      ? [(candidate) => rule[0].test(candidate.text || ""), rule[1]]
+      ? [
+          (candidate) =>
+            rule[0].test(
+              [candidate.text || "", ...(candidate.items || [])].join(" "),
+            ),
+          rule[1],
+        ]
       : [rule.test, rule.answer];
     if (test(prompt))
       return typeof answer === "function" ? answer(prompt) : answer;
@@ -275,9 +281,10 @@ function balrogOnTableOfferedAsDurinsBane() {
   const seen = driveWalk(balrogState, [
     byType(PROMPT.BATTLE_FORM, { nazLead: 0, figures: {}, nearMoria: true }),
     byType(PROMPT.CONFIRM, true),
-    [/Shadow army attacking/, true],
+    [/has retreated/, false],
+    [/^Shadow Army attacking$/, true],
     [/sortie/, false],
-    [/Witch King/, false],
+    [/Witch-king/, false],
     [/laying siege/, true],
   ]);
   const playCardPrompt = seen.find(
@@ -293,7 +300,7 @@ function balrogOnTableOfferedAsDurinsBane() {
     "Balrog discarded from the table after combat use",
   );
 }
-// "Bring faction into play" and "Mustered Witch King" update the tracker
+// "Bring faction into play" and "Mustered Witch-king" update the tracker
 function actionsUpdateTheTracker() {
   const corsairsState = phase5State({
     dice: true,
@@ -318,13 +325,13 @@ function actionsUpdateTheTracker() {
     wome: false,
   });
   witchKingState.walk = null;
-  engine.startWalk(witchKingState, "CH", "Character 3 / Muster Witch King", {
+  engine.startWalk(witchKingState, "CH", "Character 3 / Muster Witch-king", {
     die: DIE_REQUIREMENT.MUSTER,
   });
-  driveWalk(witchKingState, [[/Mustered Witch King/, true]]);
+  driveWalk(witchKingState, [[/Mustered Witch-king/, true]]);
   ok(
     witchKingState.board.chars.witchKing === MINION_STATUS.IN_PLAY,
-    'Witch King in play after "Mustered Witch King"',
+    'Witch-king in play after "Mustered Witch-king"',
   );
   const hillmenState = phase5State({
     dice: true,

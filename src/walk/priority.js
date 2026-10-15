@@ -119,6 +119,20 @@ const discardByPriority = (hands) =>
         : ["Nothing to discard"],
     });
   };
+// "Discard priority" on the Phases 1-4 pages: pick the one card the next step discards.
+const chooseDiscard = (hand) =>
+  function chooseDiscardCard(state, node, { walk, cardsOn }) {
+    if (!cardsOn) return FALL_THROUGH;
+    return chooseAmong(
+      state,
+      node,
+      walk,
+      (hand === HAND.FACTION
+        ? state.cards.factionHand
+        : state.cards.hand
+      ).slice(),
+    );
+  };
 const SHADOW_FACTION_NAMES = ["Corsairs", "Dunlendings", "Spiders"];
 const factionsNotInPlay = (state) =>
   SHADOW_FACTION_NAMES.filter(
@@ -285,6 +299,11 @@ const PRIORITY_HANDLERS = {
   "BA.wkPri": chooseCombatCardByPriority(false),
   "BA.atkPri": chooseCombatCardByPriority(true),
   "BA.defPri": chooseCombatCardByPriority(false),
+  "C14.disc14": chooseDiscard(HAND.EVENT),
+  "C14.disc18": chooseDiscard(HAND.EVENT),
+  "M14.disc": chooseDiscard(HAND.EVENT),
+  "C14.discF": chooseDiscard(HAND.FACTION),
+  "M14.discF": chooseDiscard(HAND.FACTION),
   "EV.discPri": discardByPriority([
     [HAND.EVENT, null],
     [HAND.FACTION, "FA.discPri"],

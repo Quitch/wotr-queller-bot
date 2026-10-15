@@ -3,8 +3,12 @@ import * as engine from "../../engine/index.js";
 import { DECK, STRATEGY, cardById } from "../../engine/index.js";
 import { evalPlayable } from "../playable.js";
 import { PENDING } from "../prompt.js";
-import { answerAuto, answerByPlayableCount, ask } from "./common.js";
-import { askAnyOf } from "./phase-5.js";
+import {
+  answerAuto,
+  answerByPlayableCount,
+  ask,
+  askDecision,
+} from "./common.js";
 
 // ---- Battle
 function decideUsableCharacterCombatCard(state, node, { cardsOn }) {
@@ -66,6 +70,11 @@ function decideFieldBattleOrMilitary(state, node, { trackerOn, board }) {
     "Field battle? (not military strategy; Fellowship not on the Mordor track)",
   );
 }
+// The second "Shadow Army attacking" (after casualties): the round already established who attacks.
+function decideAttackingThisRound(state, node, { walk }) {
+  if (walk.attacking === undefined) return ask(state, node);
+  answerAuto(state, node, walk.attacking, "answered earlier this round");
+}
 function decideAggressiveContinue(state, node, { trackerOn, board }) {
   if (trackerOn && board.fs.mordor)
     return answerAuto(state, node, true, "Fellowship on the Mordor track");
@@ -81,5 +90,6 @@ export const BATTLE_DECISIONS = {
   "BA.round1": decideFirstRound,
   "BA.fieldOrMil": decideFieldBattleOrMilitary,
   "BA.aggrCont": decideAggressiveContinue,
-  "BA.anyCond": askAnyOf,
+  "BA.anyCond": askDecision,
+  "BA.attacking2": decideAttackingThisRound,
 };

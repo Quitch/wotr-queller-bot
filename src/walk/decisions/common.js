@@ -8,6 +8,12 @@ import { PENDING, PROMPT, WALK_RESULT } from "../prompt.js";
 
 // Board consequences of a decision the player answered (the tracker keeps up with what the flowchart just established).
 const DECIDE_HOOKS = {
+  "BA.defStrong": (state, answer) => {
+    if (answer) state.walk.attacking = false;
+  },
+  "BA.attacking": (state, answer) => {
+    state.walk.attacking = answer;
+  },
   "CH.musteredWK": (state, answer) => {
     if (answer && !engine.minionInPlay(state, "witchKing")) {
       state.board.chars.witchKing = MINION_STATUS.IN_PLAY;
@@ -73,10 +79,21 @@ export function boardFactYesNo(state, factKey, question, trackerValue) {
   });
   return PENDING;
 }
+// A decision as the trail records it: a condition list adds the items that apply to this game.
+export function decisionText(state, node) {
+  if (!NODE.extra(node).items) return NODE.text(node);
+  return (
+    NODE.text(node) +
+    " " +
+    listParts(state, node)
+      .items.map((item) => item.text)
+      .join("; ")
+  );
+}
 // Record an automatic answer to the current decision box and follow its arrow.
 export function answerAuto(state, node, answer, why) {
   recordDecision(state, {
-    text: NODE.text(node),
+    text: decisionText(state, node),
     ringCondition: NODE.extra(node).bold,
     answer,
     auto: true,
@@ -119,19 +136,48 @@ export const characterHand = (state) =>
   engine.handCardsOfDeck(state, DECK.CHARACTER);
 export const strategyHand = (state) =>
   engine.handCardsOfDeck(state, DECK.STRATEGY);
-// A decision the app cannot answer: a two-part question asks the bold (ring) part first, then the plain part.
-export function askDecision(state, node) {
-  const nodeExtra = NODE.extra(node),
-    walk = state.walk;
-  if (nodeExtra.t2 && !nodeExtra.any) {
-    if (walk.sub === 0)
-      return ask(state, node, NODE.text(node), { sub: 1, bold: true });
-    return ask(state, node, nodeExtra.t2, { sub: 2 });
-  }
-  ask(
-    state,
-    node,
-    null,
-    nodeExtra.any ? { items: nodeExtra.items, any: true } : null,
+// The items of a condition list that apply to this game (a WoME item only with WoME), split into the Elven Ring
+// conditions and the rest.
+export function listParts(state, node) {
+  const items = NODE.items(node).filter(
+    (item) => !item.wome || state.settings.wome,
   );
+  return {
+    items,
+    ring: items.filter((item) => item.bold),
+    plain: items.filter((item) => !item.bold),
+  };
+}
+// One part of a condition list as a question: "A or b or c" (each item after the first starts in lower case).
+export const partText = (items) =>
+  items
+    .map((item, index) =>
+      index
+        ? item.text.replace(
+            /^(\**)([A-Z])(?=[a-z])/,
+            (match, star, letter) => star + letter.toLowerCase(),
+          )
+        : item.text,
+    )
+    .join(" or ");
+// An ANY list with both Elven Ring conditions and plain conditions is asked in two parts, the ring part first.
+export const isTwoPart = (state, node) => {
+  const { ring, plain } = listParts(state, node);
+  return !!NODE.extra(node).any && ring.length > 0 && plain.length > 0;
+};
+// A decision the app cannot answer: a two-part list asks the ring part first, then the plain part; any other list
+// shows the items that apply to this game.
+export function askDecision(state, node) {
+  const nodeExtra = NODE.extra(node);
+  if (isTwoPart(state, node)) {
+    const { ring, plain } = listParts(state, node);
+    if (state.walk.sub === 0)
+      return ask(state, node, partText(ring), { sub: 1, bold: true });
+    return ask(state, node, partText(plain), { sub: 2 });
+  }
+  if (!nodeExtra.items) return ask(state, node);
+  ask(state, node, null, {
+    items: listParts(state, node).items.map((item) => item.text),
+    any: !!nodeExtra.any,
+  });
 }

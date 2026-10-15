@@ -60,6 +60,30 @@ function currentPage() {
     ? engine.phase5Page(state)
     : engine.phasePage(state);
 }
+const RING_MARK = () => " " + ui.ringIcon() + " (ring condition)";
+// A box in the text view: its kind and text, its ring and WoME marks, and its list.
+function boxTextHTML(kind, node) {
+  const nodeExtra = NODE.extra(node);
+  let text =
+    "<b>" + esc(ui.NODE_KIND_NAME[kind]) + ":</b> " + fmt(NODE.text(node));
+  if (nodeExtra.bold) text += RING_MARK();
+  if (nodeExtra.wome) text += " (WoME only)";
+  if (nodeExtra.items)
+    text +=
+      "<ol>" +
+      NODE.items(node)
+        .map(
+          (item) =>
+            "<li>" +
+            fmt(item.text) +
+            (item.bold ? RING_MARK() : "") +
+            (item.wome ? " (WoME only)" : "") +
+            "</li>",
+        )
+        .join("") +
+      "</ol>";
+  return text;
+}
 function textPage(pageKey) {
   const page = FLOW[pageKey];
   const { curNode, visited } = walkMarks(pageKey);
@@ -76,23 +100,10 @@ function textPage(pageKey) {
   for (const id in page.nodes) {
     const node = page.nodes[id];
     const kind = NODE.kind(node);
-    if (kind === NODE_KIND.NOTE && !/grp/.test(id)) continue;
-    if (id === "grp") continue;
-    const nodeExtra = NODE.extra(node);
+    // the page title, the group frame and the ring key say nothing the boxes do not
+    if (/^(title|grp|ringNote)$/.test(id)) continue;
     const outEdges = page.edges.filter((edge) => EDGE.from(edge) === id);
-    let text =
-      "<b>" + esc(ui.NODE_KIND_NAME[kind]) + ":</b> " + fmt(NODE.text(node));
-    if (nodeExtra.t2)
-      text += " " + ui.ringIcon() + " (ring part) — or " + fmt(nodeExtra.t2);
-    if (nodeExtra.bold && !nodeExtra.t2)
-      text += " " + ui.ringIcon() + " (ring condition)";
-    if (nodeExtra.wome) text += " (WoME only)";
-    if (nodeExtra.items)
-      text +=
-        (nodeExtra.any ? " any of: " : " ") +
-        "<ol>" +
-        nodeExtra.items.map((item) => "<li>" + fmt(item) + "</li>").join("") +
-        "</ol>";
+    let text = boxTextHTML(kind, node);
     if (outEdges.length)
       text +=
         '<div class="notice">' +

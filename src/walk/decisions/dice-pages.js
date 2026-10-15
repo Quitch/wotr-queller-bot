@@ -1,5 +1,6 @@
 // Decision handlers for the Character and Army pages: (state, node, facts), each answering a box from the state or asking the player.
-import { minionInPlay } from "../../engine/index.js";
+import { DIE_REQUIREMENT, FACE, minionInPlay } from "../../engine/index.js";
+import { dieWithArticle } from "../jumps-table.js";
 import { answerAuto, answerFromTracker, ask } from "./common.js";
 import { decideWitchKingInPlay } from "./phase-5.js";
 
@@ -43,6 +44,22 @@ function decideHuntDiceForArmy(state, node, { diceOn, trackerOn, board }) {
   ask(state, node);
 }
 
+// "Using an Army/Muster die": the die the Army page was entered with.
+function decideArmyMusterDie(state, node, { walk, diceOn }) {
+  if (walk.die && walk.die !== DIE_REQUIREMENT.ARMY)
+    return answerAuto(
+      state,
+      node,
+      false,
+      "using " + dieWithArticle(walk.die) + " die",
+    );
+  if (diceOn && walk.dieIndex != null) {
+    const face = state.dice.pool[walk.dieIndex].face;
+    return answerAuto(state, node, face === FACE.ARMY_MUSTER, face + " die");
+  }
+  ask(state, node);
+}
+
 // The decision boxes of the Character and Army pages, keyed by page and node id.
 export const DICE_PAGE_DECISIONS = {
   "CH.wkJoin": decideWitchKingInPlay,
@@ -52,4 +69,5 @@ export const DICE_PAGE_DECISIONS = {
   "CH.mosMob": decideMouthInPlay,
   "CH.dieUsed": decideDieUsed,
   "AR.huntDice": decideHuntDiceForArmy,
+  "AR.amDie": decideArmyMusterDie,
 };

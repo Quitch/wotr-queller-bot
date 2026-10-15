@@ -1,7 +1,7 @@
 // Decision handlers for the Muster page: (state, node, facts), each answering a box from the state or asking the player.
 import * as engine from "../../engine/index.js";
 import { MINIONS, MINION_STATUS, cardById } from "../../engine/index.js";
-import { answerAuto, answerFromTracker, ask } from "./common.js";
+import { answerAuto, answerFromTracker, ask, askDecision } from "./common.js";
 import { decidePlayableMusterCard } from "./phase-5.js";
 
 // ---- Muster
@@ -24,8 +24,8 @@ function decideWillOfTheWest(state, node, { trackerOn, board, walk }) {
       false,
       "the die set aside for the minion must be used now (Rulings)",
     );
-  if (!trackerOn) return ask(state, node);
-  // "No minions have been recruited": one in play, or one recruited and eliminated since, both answer No.
+  if (!trackerOn) return askDecision(state, node);
+  // "No minion has been recruited": one in play, or one recruited and eliminated since, both answer No.
   if (board.chars.gandalfWhite)
     return answerAuto(state, node, false, "Gandalf the White is in play");
   const anyMinion = (status) =>
@@ -39,10 +39,10 @@ function decideWillOfTheWest(state, node, { trackerOn, board, walk }) {
       false,
       "a minion was recruited (eliminated since)",
     );
-  ask(state, node);
+  askDecision(state, node);
 }
 function decideNationNotAtWar(state, node, { trackerOn, wome }) {
-  if (!trackerOn) return ask(state, node);
+  if (!trackerOn) return askDecision(state, node);
   const nationNotAtWar = !engine.allShadowNationsAtWar(state);
   const noFactionInPlay = wome && !engine.shadowFactionInPlay(state);
   let why = "all at war" + (wome ? ", faction in play" : "");

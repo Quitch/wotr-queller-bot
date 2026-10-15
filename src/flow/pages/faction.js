@@ -16,8 +16,8 @@ export default page(
       {
         items: [
           "*Preferred* card",
-          "*Mobile* army attacks *target*",
-          "Moves *mobile* army",
+          "*Mobile* Army attacks *target*",
+          "Moves *mobile* Army",
           "Muster",
         ],
       },
@@ -47,7 +47,7 @@ export default page(
       160,
       70,
       "Priority:",
-      { items: ["Siege", "Highest *value* army"] },
+      { items: ["Siege", "Highest *value* Army"] },
     ],
     moveC: ["A", 270, 405, 120, 60, "Move"],
     playDie: ["D", 430, 100, 120, 60, "Using Play Faction Event die"],
@@ -83,7 +83,7 @@ export default page(
       160,
       70,
       "Destination priority:",
-      { items: ["Nearest *mobile* army", "Highest *value* army"] },
+      { items: ["Nearest *mobile* Army", "Highest *value* Army"] },
     ],
     fsStrong: [
       "D",
@@ -91,7 +91,7 @@ export default page(
       530,
       120,
       60,
-      "Fellowship in a stronghold or out to sea",
+      "Fellowship in a Stronghold or out to sea",
     ],
     destB: [
       "P",
@@ -102,9 +102,9 @@ export default page(
       "Destination priority:",
       {
         items: [
-          "Fellowship progress region (nearest Faction figure only)",
-          "Nearest *mobile* army",
-          "Highest *value* army",
+          "Fellowship Progress region (nearest Faction figure only)",
+          "Nearest *mobile* Army",
+          "Highest *value* Army",
         ],
       },
     ],
@@ -119,8 +119,8 @@ export default page(
       {
         items: [
           "Fellowship (nearest Faction figure only - two if one will be discarded)",
-          "Nearest *mobile* army",
-          "Highest *value* army",
+          "Nearest *mobile* Army",
+          "Highest *value* Army",
         ],
       },
     ],
@@ -147,8 +147,8 @@ export default page(
       60,
       "Faction eligible to be brought into play",
     ],
-    musterFig: ["A", 985, 452, 120, 60, "Muster faction figures"],
-    bringIn: ["A", 985, 632, 120, 60, "Bring faction into play"],
+    musterFig: ["A", 985, 430, 120, 60, "Muster faction figures"],
+    bringIn: ["A", 985, 650, 120, 60, "Bring faction into play"],
     title: ["N", 660, 10, 500, 60, "Move/Recruit/Play/Draw Faction"],
     note: ["N", 990, 60, 170, 20, "Warriors of Middle-Earth only"],
   },

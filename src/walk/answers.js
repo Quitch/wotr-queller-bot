@@ -4,7 +4,7 @@ import { CARD, TRAIL, cardById } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
 import { exitAction, spendCurrentDie } from "./actions.js";
 import { cur, endWalk, follow, setPrompt, trail } from "./core.js";
-import { recordDecision } from "./decisions/common.js";
+import { decisionText, recordDecision } from "./decisions/common.js";
 import { dieWithArticle } from "./jumps-table.js";
 import { SHADOW_NATION_NAME } from "./nations.js";
 import {
@@ -52,7 +52,7 @@ function answerYesNo(state, prompt, value) {
   if (prompt.sub === 2) return answerPlainPart(state, prompt, value);
   const node = cur(state);
   recordDecision(state, {
-    text: NODE.text(node),
+    text: decisionText(state, node),
     ringCondition: NODE.extra(node).bold,
     answer: value,
     auto: false,

@@ -30,7 +30,7 @@ export function handleJump(state, node) {
   if (handler) handler(state, walk, spec, label);
   else jumpWithDie(state, spec, label);
 }
-// "Switch to military/Corruption": change strategy and either end the walk or restart it on the other strategy's page (rule 40).
+// "Switch to Military/Corruption": change strategy and either end the walk or restart it on the other strategy's page (rule 40).
 function switchStrategy(state, walk, spec, label) {
   state.strategy = spec.strategy;
   engine.log(state, "Strategy changed to " + spec.strategy + " (rule 40).");
@@ -110,6 +110,11 @@ const JUMP_KIND = {
       WALK_RESULT.BATTLE_NEXT,
       "Another combat round: walk again from “Battle (next round)”.",
     ),
+  sameWalk: (state, walk, spec, label) => {
+    trail(state, { kind: TRAIL.JUMP, text: label });
+    goto(state, spec.page, findStart(spec.page, spec.start));
+    follow(state, null);
+  },
   switch: switchStrategy,
   reserve: reserveDie,
   ringAny: ringAnyJump,
@@ -117,7 +122,7 @@ const JUMP_KIND = {
 // Grey box naming a page: enter it with the die it needs (or the die already held), or skip it.
 function jumpWithDie(state, spec, label) {
   const walk = state.walk;
-  if (engine.dieSatisfies(walk.die, spec.die)) {
+  if (spec.held || engine.dieSatisfies(walk.die, spec.die)) {
     enterPage(state, spec, label);
     return;
   }

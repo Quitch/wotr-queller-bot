@@ -149,19 +149,8 @@ function useReservedMinionDie(state, node, { walk, diceOn, label }) {
   const reserved = diceOn
     ? state.dice.pool.find((die) => die.status === engine.DIE_STATE.RESERVED)
     : null;
-  if (diceOn ? !reserved : !state.minionReserved) {
-    trail(state, {
-      kind: TRAIL.SKIP,
-      text: label,
-      why: "no Muster die set aside",
-    });
-    endWalk(
-      state,
-      WALK_RESULT.NO_ACTION,
-      "Queller has no action — it has no die it can use.",
-    );
-    return;
-  }
+  if (diceOn ? !reserved : !state.minionReserved)
+    return skipAction(state, label, "no Muster die set aside");
   let reservedIndex = null;
   if (diceOn) {
     reserved.status = engine.DIE_STATE.AVAIL;
@@ -297,6 +286,7 @@ const ACTION_HANDLERS = {
   "EV.playB": playChosenCard,
   "EV.playC": playChosenCard,
   "EV.playD": playChosenCard,
+  "EV.playChar": playChosenCard,
   "FA.playA": playChosenCard,
   "MU.musterCardA": playChosenCard,
   "M5.playCharDie": playChosenCard,
