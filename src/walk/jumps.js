@@ -156,8 +156,8 @@ function jumpWithDie(state, spec, label) {
   if (dieResult) enterPage(state, spec, label, before);
   else exitJump(state);
 }
-// Claiming a die for another step gives up a die a ring made for the last one.
-function letGoOtherRingDie(state, req) {
+// Claiming a die for another step gives up a die a ring made for the last one: call it before ensureDie.
+export function letGoOtherRingDie(state, req) {
   const pending = state.walk.ringPending;
   if (pending && !pending.reqs.includes(req)) settleRing(state, true);
 }
@@ -177,7 +177,6 @@ export function ensureDie(state, req, label) {
     });
     return false;
   }
-  letGoOtherRingDie(state, req);
   if (state.settings.dice) return ensureDieFromPool(state, walk, req, label);
   return askForDie(state, walk, req, label);
 }
