@@ -6,9 +6,8 @@ import { doReturn, endWalk, follow, goto, setPrompt, trail } from "./core.js";
 import { findStart, normalizeText } from "./graph.js";
 import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
 import { ensureDie } from "./jumps.js";
-import { letGoOtherRingDie } from "./rings.js";
 import { SHADOW_NATION_KEY } from "./nations.js";
-import { ringDieSpent } from "./rings.js";
+import { letGoOtherRingDie, ringDieSpent } from "./rings.js";
 import {
   FALL_THROUGH,
   PENDING,
