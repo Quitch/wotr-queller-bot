@@ -39,6 +39,7 @@ body:
     id: frequency
     attributes:
       label: Does it happen again?
+      description: Export the debug log before you try the steps again; Undo or a new game changes what it records.
       options:
         - Every time I repeat the steps
         - Sometimes
@@ -64,7 +65,7 @@ body:
     id: version
     attributes:
       label: App version
-      description: In **Settings › About** (Settings is in the **Tools** menu on a narrow screen), on the README header line, or in the log under `app.version`.
+      description: In the log under `app.version`, or during a game in **Settings › About** (Settings is in the **Tools** menu on a narrow screen). The README header line gives the latest published version.
     validations:
       required: false
   - type: checkboxes
