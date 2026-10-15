@@ -45,8 +45,8 @@ export const ringBoxState = () => ({
   ringAnswer: null,
   ringDeclined: null,
 });
-// A decision was recorded: a main decision on a Phase 5 page ends what the last bold box armed (a ring die the walk no
-// longer holds turns back), and a Yes to a bold box arms the dice rule 46 gives it.
+// A decision was recorded: a main decision on a Phase 5 page ends what the last bold box armed (an unspent ring die
+// turns back, held or not), and a Yes to a bold box arms the dice rule 46 gives it.
 export function armRing(state, key, isMainDecision, answer, ringCondition) {
   const walk = state.walk;
   if (isMainDecision && PHASE_5_PAGES.includes(walk.page)) {
