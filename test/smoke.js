@@ -436,7 +436,7 @@ async function checkBuildEssentials(page) {
 // The New game screen has no Tools menu, so its Help button stays in the header on a narrow screen; `check` is
 // checkPhoneLayout's sideways-scroll check, run with the Help modal open.
 async function checkSetupHelp(page, check) {
-  const help = page.locator(SEL.SETUP_HELP);
+  const help = page.locator(SEL.SETUP_TOOLS + " " + SEL.modal("help"));
   const visible = await help.isVisible();
   let title = null;
   if (visible) {
