@@ -1667,6 +1667,24 @@ function ringSettledWhereTheDieGoes() {
     ),
     "the threat box's ring makes no die for “Character 3 / Muster Witch-king”, a step rule 46 does not list",
   );
+  // the ring's Character die for "Move using Character die" is given back before the "Army" jump records the walk's
+  // die, so the return from the Army page does not bring that die back as a Character die
+  const givenBack = ringState(STRATEGY.CORRUPTION, ["Event", "Army"]);
+  driveWalk(givenBack, [
+    [/^Shadow under \*threat\*/, true],
+    [/^Move can increase the \*value\*/, true],
+    [/^Move using Character die$/, "no"],
+    [/^\*Threat\* is sieging/, true],
+    [/^Pass/, "no"],
+    byType(PROMPT.ACTION, "no"),
+  ]);
+  ok(
+    !givenBack.walk.trail.some(
+      (entry) =>
+        entry.kind === TRAIL.JUMP && /Character 3/.test(entry.text || ""),
+    ),
+    "a ring die given back does not come back with the return from the next page",
+  );
   const marked = ringState(STRATEGY.CORRUPTION, ["Event", "Event"]);
   for (
     let guard = 0;

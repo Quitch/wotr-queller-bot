@@ -11,7 +11,7 @@ let seed = 1;
 export const rnd = () => {
   // Math.imul keeps the product exact; a plain * lost bits above 2^53 and the sequence cycled after about 10,000 draws
   seed = (Math.imul(seed, LCG.MULTIPLIER) + LCG.INCREMENT) & LCG.MASK;
-  return seed / LCG.MASK;
+  return seed / (LCG.MASK + 1);
 };
 // Seed the generator and make it the engine's Math.random.
 export function seedRandom(value) {
