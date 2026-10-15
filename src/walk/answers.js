@@ -15,7 +15,7 @@ import {
   payForcedDiscard,
 } from "./forced.js";
 import { PROMPT, WALK_RESULT } from "./prompt.js";
-import { ringUsed } from "./rings.js";
+import { ringDeclined, ringUsed } from "./rings.js";
 import { run } from "./run.js";
 
 // A yes/no answer to a board question asked once per node.
@@ -104,7 +104,10 @@ function answerRing(state, prompt, value) {
   const walk = state.walk;
   walk.dieAns[prompt.req] = !!value;
   walk.pendingDie = prompt.label;
-  if (!value) return;
+  if (!value) {
+    ringDeclined(state, prompt.req);
+    return;
+  }
   const ringsBefore = state.board.rings;
   state.board.rings = Math.max(0, state.board.rings - 1);
   state.ringUsedThisTurn = true;
