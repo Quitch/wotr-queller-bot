@@ -1133,7 +1133,7 @@ function forcedDiscardPaysArmyCharacterAndActionDie() {
   factionWild.dice.pool = [
     { kind: engine.DIE_KIND.FACTION, face: "Wild", status: DIE_STATE.AVAIL },
     die("Muster"),
-    die("Wild"),
+    die("Character"),
   ];
   factionWild.walk.dieIndex = null;
   notPossibleThen(factionWild, "powerTooGreat");
@@ -1141,7 +1141,7 @@ function forcedDiscardPaysArmyCharacterAndActionDie() {
     factionWild.dice.pool[2].status === DIE_STATE.USED &&
       factionWild.dice.pool[0].status === DIE_STATE.AVAIL &&
       factionWild.dice.pool[1].status === DIE_STATE.AVAIL,
-    "a matching Action die (Wild) pays before a non-matching one, never the Faction Wild",
+    "a matching Action die pays before a non-matching one, never the Faction Wild",
   );
   const noDie = atBlockedAttack(["sa013", "sa008"]);
   noDie.dice.pool.forEach((pooled) => {
@@ -1626,6 +1626,29 @@ function ringStateFromRevision2Migrates() {
     "ringArmed becomes ringDice, with no ring use pending",
   );
 }
+// Rule 31: a Wild result serves only to play a Faction Event card; it is no Army, Muster, Character or Event die.
+function wildResultOnlyForFactionEvents() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: true, wome: true },
+    STRATEGY.MILITARY,
+  );
+  state.dice.pool = [
+    { kind: engine.DIE_KIND.FACTION, face: "Wild", status: DIE_STATE.AVAIL },
+  ];
+  const actionSteps = [
+    DIE_REQUIREMENT.ARMY,
+    DIE_REQUIREMENT.MUSTER,
+    DIE_REQUIREMENT.CHARACTER,
+    DIE_REQUIREMENT.EVENT,
+    DIE_REQUIREMENT.CHAR_OR_MUSTER,
+  ];
+  ok(
+    actionSteps.every((req) => !engine.findDie(state, req)) &&
+      engine.findDie(state, DIE_REQUIREMENT.FACTION_PLAY) ===
+        state.dice.pool[0],
+    "the Faction die's Wild result plays a Faction Event card and nothing else",
+  );
+}
 // The scenarios, with the section of the change log each one guards.
 const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
@@ -1642,6 +1665,7 @@ const SCENARIOS = [
   ["7.3/7.4", battleOpenResetAndRunGuard],
   ["migrate", migrateUpgradesOldSaves],
   ["decks", emptyEventDecksFallBack],
+  ["dice", wildResultOnlyForFactionEvents],
   ["6.6", wornWithSorrowAsksAndWormtongueOnSaruman],
   ["7.1", reservedDieCannotBeReservedAgain],
   ["muster", musterChoiceCardAutoAnswered],
