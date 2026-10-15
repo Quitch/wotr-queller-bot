@@ -206,26 +206,34 @@ function arrowEnds(cell, nodeIds, boxes) {
   }
   return { from, to, ex, en };
 }
-// The arrow's label and whether it is drawn: {label, nolabel}. When flow.js labels the arrow but the diagram does not,
-// the label is not drawn (an arrow with an empty value attribute is a label that was cleared, and is drawn).
-function arrowLabel(cell, candidates) {
-  const drawn = plainText(cell.attrs.value || "") || null;
-  if (drawn || candidates.length !== 1 || !EDGE.label(candidates[0]))
-    return { label: drawn, nolabel: false };
+// The arrow's label and whether it is drawn: {label, nolabel}. The label is the arrow's value or, failing that, a label
+// cell attached to it. Overlapping arrows share one drawn label, so an arrow whose ends match one flow.js edge takes
+// that edge's label whatever it draws; when flow.js labels the arrow but the diagram does not, the label is not drawn
+// (an arrow with an empty value attribute is a label that was cleared, and is drawn).
+function arrowLabel(cell, candidates, childLabel) {
+  const drawn = plainText(cell.attrs.value || "") || childLabel || null;
+  if (candidates.length !== 1) return { label: drawn, nolabel: false };
+  const label = EDGE.label(candidates[0]) || null;
   return {
-    label: EDGE.label(candidates[0]),
-    nolabel: !("value" in cell.attrs),
+    label,
+    nolabel: !!label && !drawn && !("value" in cell.attrs),
   };
 }
 // One record per arrow on a page, in document order.
 function pageRecords(page, pageKey) {
   const { nodeIds, boxes } = pageBoxes(page, pageKey);
   const flowEdges = FLOW[pageKey].edges;
+  const childLabels = new Map();
+  for (const cell of page.cells)
+    if (styleOf(cell.attrs.style).edgeLabel && cell.attrs.value)
+      childLabels.set(cell.attrs.parent, plainText(cell.attrs.value));
   const records = [];
   for (const cell of page.cells) {
     if (cell.attrs.edge !== "1") continue;
     const style = styleOf(cell.attrs.style);
     const { from, to, ex, en } = arrowEnds(cell, nodeIds, boxes);
+    // an arrow from a box back to itself is a drawing slip, not a route
+    if (from && from === to) continue;
     if (!from || !to) {
       console.warn(
         `${pageKey}: arrow ${cell.attrs.id} joins boxes flow.js does not have (${cell.attrs.source || JSON.stringify(cell.ends.sourcePoint)} -> ${cell.attrs.target || JSON.stringify(cell.ends.targetPoint)})`,
@@ -235,7 +243,11 @@ function pageRecords(page, pageKey) {
     const candidates = flowEdges.filter(
       (edge) => EDGE.from(edge) === from && EDGE.to(edge) === to,
     );
-    const { label, nolabel } = arrowLabel(cell, candidates);
+    const { label, nolabel } = arrowLabel(
+      cell,
+      candidates,
+      childLabels.get(cell.attrs.id),
+    );
     if (!candidates.some((edge) => (EDGE.label(edge) || null) === label))
       console.warn(
         `${pageKey}: no flow.js edge ${from} -> ${to} labelled ${JSON.stringify(label)}`,
