@@ -52,7 +52,7 @@ export function ringAvailable(state) {
     !state.ringUsedThisTurn && (!ringsKnown(state) || state.board.rings > 0)
   );
 }
-// Hunt box maximum (rulebook: the number of Companions, but always at least one) — rule 34 caps the flowchart allocations at it.
+// Hunt box maximum (rulebook: the number of Companions, but always at least one) — rule 41 caps the flowchart allocations at it.
 export function huntCap(state) {
   return Math.max(1, state.board.fs.companions ?? 0);
 }

@@ -9,7 +9,7 @@ const FLOW = fakeWindow.QB_FLOW,
   NODE_KIND = fakeWindow.QB_NODE_KIND,
   EDGE = fakeWindow.QB_EDGE,
   engine = fakeWindow.QB,
-  { GLOSSARY, GLOSSARY_ALIASES, RULES, RULINGS, TURN } = fakeWindow;
+  { GLOSSARY, GLOSSARY_ALIASES, RULES, TURN } = fakeWindow;
 const SRC_DIR = path.join(import.meta.dirname, "..", "src");
 // The card data as it stands: a card added, dropped or moved between decks or sets changes these on purpose.
 const CARD_COUNT = 79;
@@ -211,11 +211,6 @@ function markedUpTexts() {
   for (const [section, rules] of RULES)
     for (const [number, text] of rules)
       texts.push([section + " rule " + number, text]);
-  for (const [question, answer] of RULINGS)
-    texts.push(
-      ["ruling " + question, question],
-      ["ruling " + question, answer],
-    );
   for (const [phase, text] of TURN) texts.push(["turn " + phase, text]);
   return texts;
 }

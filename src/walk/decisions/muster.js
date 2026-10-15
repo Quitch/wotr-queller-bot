@@ -22,7 +22,7 @@ function decideWillOfTheWest(state, node, { trackerOn, board, walk }) {
       state,
       node,
       false,
-      "the die set aside for the minion must be used now (Rulings)",
+      "the die set aside for the minion must be used now (rule 34)",
     );
   if (!trackerOn) return askDecision(state, node);
   // "No minion has been recruited": one in play, or one recruited and eliminated since, both answer No.

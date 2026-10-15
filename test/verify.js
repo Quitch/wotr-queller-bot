@@ -493,7 +493,7 @@ function tableTriggersDiscardOrAsk() {
     "Flocks of Crebain asked about when revealed in a Free Peoples settlement",
   );
 }
-// rule 19: Call to Battle cards ignore initiative
+// rule 24: Call to Battle cards ignore initiative
 function callToBattleCardsIgnoreInitiative() {
   const callToBattleState = phase5State({
     dice: true,
@@ -693,7 +693,7 @@ function wornWithSorrowAsksAndWormtongueOnSaruman() {
     "Wormtongue discarded when Saruman is eliminated",
   );
 }
-// A Muster die brought back from "set aside for a minion" cannot be set aside again (Rulings): the grey box is skipped
+// A Muster die brought back from "set aside for a minion" cannot be set aside again (rule 34): the grey box is skipped
 // and the die, unused, is spent. The box is reached directly, since a walk that came from the reserve answers the
 // Will of the West check No and never gets there by its arrows.
 function reservedDieCannotBeReservedAgain() {
@@ -954,9 +954,9 @@ function eliminatedMinionIsNeverMusteredAgain() {
     "setting Saruman to eliminated discards Wormtongue and the Palantír",
   );
 }
-// "A Power too Great" / "The Power of Tom Bombadil" (rule 15): Not possible on a Phase 5 action asks whether such a
+// "A Power too Great" / "The Power of Tom Bombadil" (rule 19): Not possible on a Phase 5 action asks whether such a
 // card blocked it; if so, Queller pays one Action die (the action's own when it can), one Army Event card and one
-// Character card (chosen by the Event page discard priority, rule 12), and that is its action. A Faction Army card
+// Character card (chosen by the Event page discard priority, rule 16), and that is its action. A Faction Army card
 // does not count; when Queller cannot pay, the action is not possible and nothing is spent.
 const FORCE_SETTINGS = { dice: true, cards: true, tracker: true, wome: true };
 // A military Phase 5 walk stopped at "Attack using character die", holding the Character die (index 2).

@@ -101,13 +101,13 @@ const adoptStrategy = (strategy) =>
     engine.log(state, message);
     endWalk(state, WALK_RESULT.STRATEGY, message);
   };
-// "Discard unplayable die" (rule 32): set aside one available die at random.
+// "Discard unplayable die" (rule 39): set aside one available die at random.
 function discardUnusableDie(state, node, { diceOn, label }) {
   if (!diceOn)
     return promptAction(
       state,
       node,
-      "Discard unplayable die: set aside one Queller die that could not be used, chosen at random (rule 32).",
+      "Discard unplayable die: set aside one Queller die that could not be used, chosen at random (rule 39).",
     );
   const available = engine.availableDice(state);
   if (!available.length)
@@ -116,15 +116,15 @@ function discardUnusableDie(state, node, { diceOn, label }) {
   die.status = engine.DIE_STATE.USED;
   engine.log(
     state,
-    "Discarded an unplayable " + die.face + " die at random (rule 32).",
+    "Discarded an unplayable " + die.face + " die at random (rule 39).",
   );
   endWalk(
     state,
     WALK_RESULT.ACTION,
-    "Queller sets aside a " + die.face + " die it could not use (rule 32).",
+    "Queller sets aside a " + die.face + " die it could not use (rule 39).",
   );
 }
-// Re-enter Muster 2 holding the Muster die that was set aside for a minion (Rulings: it must be used now).
+// Re-enter Muster 2 holding the Muster die that was set aside for a minion (rule 34: it must be used now).
 function enterMuster2WithReservedDie(state, walk, reservedIndex) {
   walk.fromReserve = true;
   walk.reservedDieIndex = reservedIndex;
@@ -164,7 +164,7 @@ function useReservedMinionDie(state, node, { walk, diceOn, label }) {
 function promptPass(state, node) {
   promptAction(state, node, "Pass", {
     pass: true,
-    help: "Only if the game rules permit a pass (Rulings). If Queller cannot pass, follow the arrow out.",
+    help: "Only if the game rules permit a pass. If Queller cannot pass, follow the arrow out (rule 36).",
   });
 }
 // "Discard": the priority list already discarded with cards on; the die (if any) was spent on the draw.
@@ -341,7 +341,7 @@ export function spendCurrentDie(state, why) {
     );
   releaseCurrentDie(state);
 }
-// Rule 29: an action Queller cannot take is skipped — follow the arrow out of the box, or return to the page that sent us here.
+// Rule 36: an action Queller cannot take is skipped — follow the arrow out of the box, or return to the page that sent us here.
 export function exitAction(state) {
   if (follow(state, null)) return;
   doReturn(state);

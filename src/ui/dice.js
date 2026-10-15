@@ -25,7 +25,7 @@ export function ringIcon(label) {
     '<svg class="ring-ico" viewBox="0 0 24 24" role="img" aria-label="' +
     escapeHTML(label || "Elven Ring condition") +
     '"><title>' +
-    escapeHTML(label || "Elven Ring condition (rule 36)") +
+    escapeHTML(label || "Elven Ring condition (rule 43)") +
     "</title>" +
     RING_PATH +
     "</svg>"

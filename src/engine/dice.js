@@ -84,7 +84,7 @@ export function assignHunt(state, requested) {
       (placed === 1 ? "die" : "dice") +
       " in the Hunt box before rolling" +
       (placed < requested && cap < requested
-        ? " (rule 34: maximum " +
+        ? " (rule 41: maximum " +
           cap +
           " for " +
           (state.board.fs.companions ?? 0) +
@@ -178,7 +178,7 @@ export function spendDie(state, die, why) {
   die.status = DIE_STATE.USED;
   log(state, "Used the " + die.face + " die" + (why ? " — " + why : "") + ".");
 }
-// rule 36 / 23 selection: at random from the dice that do not show a preferred result; from all dice if every die does
+// rule 43 / 29 selection: at random from the dice that do not show a preferred result; from all dice if every die does
 export function nonPreferredFirst(state, dice, count) {
   const preferredResults = preferredFaces(state);
   let candidates = dice.filter((die) => !preferredResults.includes(die.face));
@@ -190,7 +190,7 @@ export function nonPreferredFirst(state, dice, count) {
   }
   return out;
 }
-// Elven Ring (rule 36): change one non-preferred available die to the required result.
+// Elven Ring (rule 43): change one non-preferred available die to the required result.
 export function ringChange(state, req) {
   const available = availableActionDice(state);
   if (!available.length) return null;
@@ -208,7 +208,7 @@ export function ringChange(state, req) {
       from +
       " die to " +
       die.face +
-      " (rule 36). Rings left: " +
+      " (rule 43). Rings left: " +
       state.board.rings +
       ".",
   );

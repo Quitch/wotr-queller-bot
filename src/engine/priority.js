@@ -4,8 +4,8 @@ import { DECK, DISCARD_GUARD, HAND, HAND_LIMIT } from "./constants.js";
 import { discardCard } from "./hand.js";
 import { pick } from "./random.js";
 
-// Priority lists are applied as filters (rule 30): each criterion keeps the cards it accepts, a criterion that would keep
-// nothing is skipped (rule 31), and a tie at the end is broken at random (rule 3).
+// Priority lists are applied as filters (rule 37): each criterion keeps the cards it accepts, a criterion that would keep
+// nothing is skipped (rule 38), and a tie at the end is broken at random (rule 3).
 const keepMatching = (ids, predicate) =>
   ids.filter((id) => predicate(cardById[id]));
 // The best-ranked of the cards `only` selects; the cards it does not select are kept alongside the best.
@@ -74,7 +74,7 @@ export function chooseByRank(items, rankings) {
   }
   return { chosen, steps };
 }
-const notCallToBattle = (card) => card.deck !== DECK.CALL_TO_BATTLE; // rule 19: Call to Battle cards ignore initiative
+const notCallToBattle = (card) => card.deck !== DECK.CALL_TO_BATTLE; // rule 24: Call to Battle cards ignore initiative
 // The card criteria of the priority lists, matched in order (a longer phrase before the prefix it shares). Each entry builds a predicate
 // on a card, or a rank spec {rank, max, only} that keepBestRanked resolves; flagsOf(card) is the card's flags for this game, handLimits the hand-limit facts.
 const phraseIs = (phrase) => (text) => text === phrase,

@@ -57,8 +57,8 @@ function idleText() {
       return "Phase 1: recover Queller’s dice, draw cards and check the hand limit.";
     case PHASE.P2:
       return state.strategy === STRATEGY.CORRUPTION
-        ? "Phase 2: declare or hide your Fellowship, then check whether Queller changes strategy."
-        : "Phase 2: declare or hide your Fellowship. The military strategy has nothing to do here.";
+        ? "Phase 2: declare your Fellowship or change the Guide, then check whether Queller changes strategy."
+        : "Phase 2: declare your Fellowship or change the Guide. The Military strategy has nothing to do here.";
     case PHASE.P3:
       return "Phase 3: Queller allocates dice to the Hunt box.";
     case PHASE.P4:

@@ -108,7 +108,7 @@ function answerRing(state, prompt, value) {
     state,
     "Elven Ring used to create " +
       dieWithArticle(prompt.req) +
-      " die (rule 36).",
+      " die (rule 43).",
   );
   trail(state, {
     kind: TRAIL.RING,
@@ -151,7 +151,7 @@ function applyActionToBoard(state, prompt) {
   if (prompt.faction) bringFactionOnBoard(state, prompt.faction);
 }
 // Not possible on an action or a move step. When a Free Peoples card on the table may be what blocks it, ask first
-// (rule 15: Queller removes such a card when it tries the blocked action).
+// (rule 19: Queller removes such a card when it tries the blocked action).
 function notPossible(state, prompt) {
   if (asksIfBlocked(state, prompt))
     setPrompt(state, {

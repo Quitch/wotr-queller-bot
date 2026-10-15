@@ -97,7 +97,7 @@ function huntMaxStep(state, node, { diceOn, label }) {
     placed + " dice (Companions: " + (state.board.fs.companions ?? 0) + ")",
   );
 }
-// "Assign N dice to the Hunt box": rule 34 may cap the number.
+// "Assign N dice to the Hunt box": rule 41 may cap the number.
 const huntFixedStep = (count) =>
   function huntStep(state, node, { diceOn, label }) {
     if (!diceOn) return FALL_THROUGH;
@@ -108,7 +108,7 @@ const huntFixedStep = (count) =>
       placed < count
         ? "capped at " +
             placed +
-            " (rule 34: " +
+            " (rule 41: " +
             (state.board.fs.companions ?? 0) +
             " Companions)"
         : undefined,

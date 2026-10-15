@@ -29,7 +29,7 @@ const walkDieState = (options) => ({
   fromReserve: false,
   reservedDieIndex: null,
 });
-// Elven Ring state (rules 36-38): a ring condition was met; the ring question was put to the player.
+// Elven Ring state (rules 43-45): a ring condition was met; the ring question was put to the player.
 const walkRingState = () => ({ ringArmed: false, ringAsked: false });
 // Card candidates and the priority-list result.
 const walkCardState = () => ({
@@ -73,7 +73,7 @@ export function beginWalk(state, page, startName, options = {}) {
       " from “" +
       normalizeText(startName) +
       "”" +
-      (options.mode === "ringAny" ? " (looking for a ring use, rule 37)" : "") +
+      (options.mode === "ringAny" ? " (looking for a ring use, rule 44)" : "") +
       ".",
   );
   return true;

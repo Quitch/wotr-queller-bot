@@ -26,7 +26,7 @@ export const YES_NO_PROMPTS = [
   PROMPT.DIE_CHECK,
   PROMPT.RING,
 ];
-// The prompts the player can answer with Not possible (rule 29): an action the app does not perform itself, or a move.
+// The prompts the player can answer with Not possible (rule 36): an action the app does not perform itself, or a move.
 export const offersNotPossible = (prompt) =>
   (prompt.type === PROMPT.ACTION && !prompt.auto) ||
   (prompt.type === PROMPT.STEP && !!prompt.move);

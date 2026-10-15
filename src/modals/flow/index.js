@@ -118,7 +118,7 @@ function textPage(pageKey) {
           .join("; ") +
         "</div>";
     else if (kind === NODE_KIND.ACTION)
-      text += '<div class="notice">then: stop (if not possible, rule 29)</div>';
+      text += '<div class="notice">then: stop (if not possible, rule 36)</div>';
     html +=
       '<li id="tx-' +
       id +

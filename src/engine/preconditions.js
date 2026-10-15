@@ -57,7 +57,7 @@ const PRECONDITIONS = {
     minionInPlay(state, "saruman")
       ? situationalAnswer(state, "isenBesieging")
       : false,
-  // The Lidless Eye has no effect without an unused die (rule 17); only checkable when the app rolls the dice.
+  // The Lidless Eye has no effect without an unused die (rule 21); only checkable when the app rolls the dice.
   unusedDice: (state) =>
     !state.settings.dice ||
     availableDice(state).some(

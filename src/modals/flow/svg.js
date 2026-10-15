@@ -264,7 +264,7 @@ function ringMarkSVG(id, { x, y, width }, bold) {
       (y + 8) +
       ') scale(0.85)" style="color:' +
       SVG_COLOUR.RING +
-      '"><title>Elven Ring condition (rule 36)</title>' +
+      '"><title>Elven Ring condition (rule 43)</title>' +
       ui.RING_PATH +
       "</g>"
     );
@@ -276,7 +276,7 @@ function ringMarkSVG(id, { x, y, width }, bold) {
     (y - 8) +
     ') scale(0.75)" style="color:' +
     SVG_COLOUR.RING +
-    '"><title>Elven Ring condition (rule 36)</title><circle cx="12" cy="13.5" r="9.5" fill="' +
+    '"><title>Elven Ring condition (rule 43)</title><circle cx="12" cy="13.5" r="9.5" fill="' +
     SVG_COLOUR.RING_BACKGROUND +
     '"/>' +
     ui.RING_PATH +

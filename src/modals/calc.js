@@ -59,7 +59,10 @@ function calcHTML() {
     number("reg", "Regular units") +
     number("elite", "Elite units") +
     number("lead", "Leadership (Nazgûl, leaders, minions, Companions)¹") +
-    number("cotw", "Captains of the West (Free Peoples only)") +
+    number(
+      "cotw",
+      "Captains of the West (Free Peoples only; each adds a combat die)",
+    ) +
     checkbox("fort", "Defends in a Fortification or City region") +
     checkbox(
       "strong",
@@ -91,8 +94,7 @@ function calcOut() {
   lines.push("Combat dice: " + dice);
   const lead = Math.min(ARMY_VALUE.MAX_LEADERSHIP, Math.min(calc.lead, units));
   lines.push("Leadership: " + lead);
-  let value = hits + dice + lead + calc.cotw;
-  if (calc.cotw) lines.push("Captains of the West: +" + calc.cotw);
+  let value = hits + dice + lead;
   if (calc.fort) {
     value += ARMY_VALUE.FORTIFICATION_BONUS;
     lines.push("Fortification/City: +" + ARMY_VALUE.FORTIFICATION_BONUS);
