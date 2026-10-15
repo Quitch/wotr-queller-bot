@@ -10,15 +10,15 @@ import { PENDING, PROMPT } from "./prompt.js";
 
 // any die: a walk saved before rule 46 was applied armed the ring this way
 const ANY_DIE = "any";
-const { ARMY, CHARACTER, CHAR_OR_MUSTER, EVENT, MUSTER } = DIE_REQUIREMENT;
+const { ARMY, CHARACTER, EVENT, MUSTER } = DIE_REQUIREMENT;
 const NAZGUL_OR_MINION =
   "Does the *adjacent* *mobile* Army contain a Nazgûl or a minion (rule 46: then an Elven Ring makes a Character die, otherwise an Army die)";
 // Rule 46, by bold box: the dice a ring may create; for a die the rule limits, the box the walk must then answer Yes
-// (needs) or the question to put before the ring is used (ask).
+// (needs), or the question whose answer picks the die (ask: the die for Yes and the die for No).
 const RING_RESULTS = {
   // the die of the first step below the box that is possible
-  "C5.threat": { dice: [CHARACTER, ARMY, MUSTER, CHAR_OR_MUSTER] },
-  "M5.threat": { dice: [CHARACTER, ARMY, MUSTER, CHAR_OR_MUSTER] },
+  "C5.threat": { dice: [CHARACTER, ARMY, MUSTER] },
+  "M5.threat": { dice: [CHARACTER, ARMY, MUSTER] },
   "C5.charMordor": { dice: [CHARACTER, EVENT] },
   "M5.charMordor": { dice: [CHARACTER, EVENT] },
   // only if he can join or create a mobile Army
@@ -30,11 +30,11 @@ const RING_RESULTS = {
   // Character if the adjacent mobile Army contains a Nazgûl or a minion, otherwise Army
   "C5.mordorWin": {
     dice: [CHARACTER, ARMY],
-    ask: { [CHARACTER]: NAZGUL_OR_MINION },
+    ask: { question: NAZGUL_OR_MINION, yes: CHARACTER, no: ARMY },
   },
   "M5.mobAdjBlock": {
     dice: [CHARACTER, ARMY],
-    ask: { [CHARACTER]: NAZGUL_OR_MINION },
+    ask: { question: NAZGUL_OR_MINION, yes: CHARACTER, no: ARMY },
   },
 };
 const PHASE_5_PAGES = ["C5", "M5"];
@@ -46,6 +46,7 @@ export function armRing(state, key, isMainDecision, answer, ringCondition) {
     walk.ringDice = null;
     walk.ringNeeds = null;
     walk.ringAsk = null;
+    walk.ringAnswer = null;
   }
   if (!answer || !ringCondition || state.ringUsedThisTurn) return;
   const result = RING_RESULTS[key] || { dice: ANY_DIE };
@@ -60,18 +61,27 @@ export function ringMayCreate(state, req) {
   if (walk.mode === "ringAny" || walk.ringDice === ANY_DIE) return true;
   return !!walk.ringDice?.includes(req);
 }
-// The question rule 46 puts before a ring makes a die of type `req` (null when there is none).
-export const ringQuestion = (state, req) => state.walk.ringAsk?.[req] || null;
-// With dice rolled by the app, ask that question as a board question: true or false, or PENDING while it is open.
+// The question rule 46 puts before a ring makes a die of type `req`, and the answer that allows it: {question,
+// answer}, or null when the die is not limited.
+export function ringQuestion(state, req) {
+  const ask = state.walk.ringAsk;
+  if (!ask || (req !== ask.yes && req !== ask.no)) return null;
+  return { question: ask.question, answer: req === ask.yes };
+}
+// With dice rolled by the app, ask that question as a board question, once per bold box: true when the ring may make
+// the die, false, or PENDING while the question is open.
 export function ringAllowed(state, req) {
   const walk = state.walk,
-    question = ringQuestion(state, req);
-  if (!question) return true;
+    limit = ringQuestion(state, req);
+  if (!limit) return true;
+  // no die the ring could change: nothing to ask
+  if (!engine.availableActionDice(state).length) return false;
   const part = walk.page + "." + walk.node + ".ring46";
-  if (part in walk.parts) return walk.parts[part];
+  if (part in walk.parts) walk.ringAnswer = walk.parts[part];
+  if (walk.ringAnswer != null) return walk.ringAnswer === limit.answer;
   setPrompt(state, {
     type: PROMPT.YES_NO,
-    text: question,
+    text: limit.question,
     part,
     node: walk.node,
     page: walk.page,
@@ -121,8 +131,13 @@ const ringDieGone = (state, pending) =>
 export function returnRing(state, why) {
   const walk = state.walk,
     pending = walk.ringPending;
+  const held = holdsRingDie(state, pending);
   walk.ringPending = null;
   if (ringDieGone(state, pending)) return;
+  if (held) {
+    walk.die = null;
+    walk.dieIndex = null;
+  }
   walk.ringAsked = false;
   state.board.rings = pending.ringsBefore;
   state.ringUsedThisTurn = false;
