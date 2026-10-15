@@ -18,7 +18,7 @@ function decideNazgulInPlay(state, node, { board }) {
     "tracker: " +
       board.nazgul +
       " Nazgûl" +
-      (witchKing ? ", Witch King in play" : ""),
+      (witchKing ? ", Witch-king in play" : ""),
   );
 }
 function decideNazgulOnMap(state, node, { trackerOn, board }) {

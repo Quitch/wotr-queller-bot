@@ -5,9 +5,9 @@ import { dieWithArticle } from "../jumps-table.js";
 import {
   answerAuto,
   answerByPlayableCount,
-  answerIfOtherDie,
   ask,
   characterHand,
+  requiringDie,
 } from "./common.js";
 import { decidePlayableRevealedCard } from "./phase-5.js";
 
@@ -35,10 +35,8 @@ function decideEventDie(state, node, { walk }) {
     );
   ask(state, node);
 }
-// "Using a Character die and holding a *playable* Character card".
-function decideCharacterDieCard(state, node, facts) {
-  if (!facts.walk.die) return ask(state, node);
-  if (answerIfOtherDie(state, node, DIE_REQUIREMENT.CHARACTER)) return;
+// "… holding a *playable* Character card" (the die is checked by requiringDie).
+function decidePlayableCharacterCard(state, node, facts) {
   if (facts.cardsOn)
     return answerByPlayableCount(
       state,
@@ -48,12 +46,6 @@ function decideCharacterDieCard(state, node, facts) {
       "playable Character card",
     );
   ask(state, node);
-}
-// "Using an Event die and holding less than 4 Event cards".
-function decideEventDieHandUnder4(state, node, facts) {
-  if (!facts.walk.die) return ask(state, node);
-  if (answerIfOtherDie(state, node, DIE_REQUIREMENT.EVENT)) return;
-  decideHandUnder4(state, node, facts);
 }
 function decideHandUnder4(state, node, { cardsOn, handCount }) {
   if (cardsOn)
@@ -118,8 +110,11 @@ export const EVENT_DECISIONS = {
   "EV.prefPlay": decidePreferredPlayable,
   "EV.eventDie": decideEventDie,
   "EV.less4": decideHandUnder4,
-  "EV.less4b": decideEventDieHandUnder4,
-  "EV.charCard": decideCharacterDieCard,
+  "EV.less4b": requiringDie(DIE_REQUIREMENT.EVENT, decideHandUnder4),
+  "EV.charCard": requiringDie(
+    DIE_REQUIREMENT.CHARACTER,
+    decidePlayableCharacterCard,
+  ),
   "EV.less3f": decideFactionHandUnder3,
   "EV.anyPlay": decideAnyPlayable,
   "EV.aboveFull": decideHandAboveLimits,

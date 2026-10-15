@@ -7,7 +7,13 @@ import { findStart, normalizeText } from "./graph.js";
 import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
 import { doReturn, ensureDie } from "./jumps.js";
 import { SHADOW_NATION_KEY } from "./nations.js";
-import { FALL_THROUGH, PENDING, PROMPT, WALK_RESULT } from "./prompt.js";
+import {
+  FALL_THROUGH,
+  PENDING,
+  PROMPT,
+  WALK_RESULT,
+  strategyName,
+} from "./prompt.js";
 
 // Draw steps and actions on the Event/Faction pages: the deck depends on the box; with cards off the player draws.
 // The deck a draw node draws from: Character or Faction Event where the node says so, otherwise the strategy's preferred deck.
@@ -97,7 +103,7 @@ function promptAction(state, node, text, extra) {
 const adoptStrategy = (strategy) =>
   function adopt(state) {
     state.strategy = strategy;
-    const message = "Queller uses the " + strategy + " strategy.";
+    const message = "Queller uses the " + strategyName(strategy) + " strategy.";
     engine.log(state, message);
     endWalk(state, WALK_RESULT.STRATEGY, message);
   };

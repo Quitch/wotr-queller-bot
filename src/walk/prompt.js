@@ -41,6 +41,9 @@ export const WALK_RESULT = {
 };
 const PHASE_RESULT_PREFIX = "phase:";
 export const phaseResult = (startName) => PHASE_RESULT_PREFIX + startName;
+// A strategy (the STRATEGY value) as the text writes it: "Military", "Corruption".
+export const strategyName = (strategy) =>
+  strategy.charAt(0).toUpperCase() + strategy.slice(1);
 // The start point a walk ended at, or null for any other result.
 export const phaseFromResult = (result) =>
   typeof result === "string" && result.startsWith(PHASE_RESULT_PREFIX)

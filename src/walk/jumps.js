@@ -9,7 +9,13 @@ import {
   dieWithArticle,
   jumpSpec,
 } from "./jumps-table.js";
-import { PENDING, PROMPT, WALK_RESULT, phaseResult } from "./prompt.js";
+import {
+  PENDING,
+  PROMPT,
+  WALK_RESULT,
+  phaseResult,
+  strategyName,
+} from "./prompt.js";
 import { startWalk } from "./run.js";
 
 export function handleJump(state, node) {
@@ -33,7 +39,10 @@ export function handleJump(state, node) {
 // "Switch to Military/Corruption": change strategy and either end the walk or restart it on the other strategy's page (rule 48).
 function switchStrategy(state, walk, spec, label) {
   state.strategy = spec.strategy;
-  engine.log(state, "Strategy changed to " + spec.strategy + " (rule 48).");
+  engine.log(
+    state,
+    "Strategy changed to " + strategyName(spec.strategy) + " (rule 48).",
+  );
   trail(state, { kind: TRAIL.JUMP, text: label });
   if (spec.endWalk) {
     endWalk(state, phaseResult(spec.endWalk), spec.text);

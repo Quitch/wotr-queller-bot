@@ -98,6 +98,13 @@ export function answerAuto(state, node, answer, why) {
     why,
   });
 }
+// A "Using a <die> die and …" box: asked when the walk holds no die, No when it holds another, otherwise `decide`.
+export const requiringDie = (required, decide) =>
+  function decideWithDie(state, node, facts) {
+    if (!facts.walk.die) return ask(state, node);
+    if (answerIfOtherDie(state, node, required)) return;
+    return decide(state, node, facts);
+  };
 // A decision that needs a given die: No, naming the die, when the walk holds another one. Returns true when it answered.
 export function answerIfOtherDie(state, node, required) {
   const die = state.walk.die;
