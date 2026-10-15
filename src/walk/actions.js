@@ -5,7 +5,7 @@ import { NODE, NODE_KIND } from "../flow/index.js";
 import { endWalk, follow, goto, setPrompt, trail } from "./core.js";
 import { findStart, normalizeText } from "./graph.js";
 import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
-import { doReturn, ensureDie } from "./jumps.js";
+import { doReturn, ensureDie, letGoOtherRingDie } from "./jumps.js";
 import { SHADOW_NATION_KEY } from "./nations.js";
 import { ringDieSpent } from "./rings.js";
 import {
@@ -71,6 +71,7 @@ export function drawStep(state, node) {
 function claimActionDie(state, walk, node, label) {
   const die = NODE.extra(node).die;
   if (!die || (walk.die === die && walk.dieIndex != null)) return true;
+  letGoOtherRingDie(state, die);
   const dieResult = ensureDie(state, die, label);
   if (dieResult === PENDING) return PENDING;
   if (!dieResult) {

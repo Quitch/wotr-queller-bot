@@ -38,11 +38,12 @@ const RING_RESULTS = {
   },
 };
 const PHASE_5_PAGES = ["C5", "M5"];
-// A decision was recorded: a main decision on a Phase 5 page ends what the last bold box armed, and a Yes to a bold box
-// arms the dice rule 46 gives it.
+// A decision was recorded: a main decision on a Phase 5 page ends what the last bold box armed (a ring die the walk no
+// longer holds turns back), and a Yes to a bold box arms the dice rule 46 gives it.
 export function armRing(state, key, isMainDecision, answer, ringCondition) {
   const walk = state.walk;
   if (isMainDecision && PHASE_5_PAGES.includes(walk.page)) {
+    settleRing(state, true);
     walk.ringDice = null;
     walk.ringNeeds = null;
     walk.ringAsk = null;
@@ -89,6 +90,14 @@ export function ringAllowed(state, req) {
     board: true,
   });
   return PENDING;
+}
+// With dice off, the player declined a ring for a die of type `req`. Where rule 46 picks the die by a question, the
+// answer may have ruled out this die only: the ring may still make the other one.
+export function ringDeclined(state, req) {
+  const walk = state.walk;
+  if (!ringQuestion(state, req)) return;
+  walk.ringDice = walk.ringDice.filter((die) => die !== req);
+  walk.ringAsked = false;
 }
 // A ring was used for a die of type `req` (the ring count already taken down): ringsBefore is the count before it, and
 // with dice on dieIndex and from are the pool die it changed and the face it showed.
