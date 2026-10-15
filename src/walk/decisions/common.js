@@ -47,11 +47,11 @@ export function recordDecision(
     answer,
     ringCondition,
   );
+  walk.sub = 0;
+  walk.parts = {};
   if (ringNeedAnswered(state, key, answer)) return doReturn(state);
   const hook = DECIDE_HOOKS[key];
   if (hook) hook(state, answer);
-  walk.sub = 0;
-  walk.parts = {};
   if (!follow(state, answer ? "Yes" : "No")) {
     endWalk(
       state,

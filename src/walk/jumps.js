@@ -152,16 +152,22 @@ function jumpWithDie(state, spec, label) {
     enterPage(state, spec, label);
     return;
   }
+  const before = { die: walk.die, dieIndex: walk.dieIndex };
   const characterDie = exposedCharacterDie(state, walk);
   if (characterDie === PENDING) return;
   if (characterDie !== null) {
-    enterPage(state, { ...spec, die: DIE_REQUIREMENT.CHARACTER }, label);
+    enterPage(
+      state,
+      { ...spec, die: DIE_REQUIREMENT.CHARACTER },
+      label,
+      before,
+    );
     state.walk.dieIndex = characterDie;
     return;
   }
   const dieResult = ensureDie(state, spec.die, label);
   if (dieResult === PENDING) return;
-  if (dieResult) enterPage(state, spec, label);
+  if (dieResult) enterPage(state, spec, label, before);
   else exitJump(state);
 }
 // Rule 11: the move towards an exposed target uses an Army die, else an Army/Muster die, else a Character die with an
@@ -304,8 +310,10 @@ function askForDie(state, walk, req, label) {
         dieWithArticle(req) +
         " result. Choose the die at random. If the step then turns out not to be possible, the app tells you to turn the die back (rule 43)." +
         (ringQuestion(state, req)
-          ? " Only if the answer to this is Yes: " +
-            ringQuestion(state, req) +
+          ? " Only if the answer to this is " +
+            (ringQuestion(state, req).answer ? "Yes" : "No") +
+            ": " +
+            ringQuestion(state, req).question +
             "?"
           : ""),
     });
@@ -318,13 +326,14 @@ function askForDie(state, walk, req, label) {
   });
   return false;
 }
-function enterPage(state, spec, label) {
+// before: the die the walk held before ensureDie claimed one for this page, which the return gives back.
+function enterPage(state, spec, label, before) {
   const walk = state.walk;
   walk.stack.push({
     page: walk.page,
     node: walk.node,
-    die: walk.die,
-    dieIndex: walk.dieIndex,
+    die: before ? before.die : walk.die,
+    dieIndex: before ? before.dieIndex : walk.dieIndex,
     dieUsed: walk.dieUsed,
   });
   if (spec.held) ringDieHeldAs(state, spec.die);

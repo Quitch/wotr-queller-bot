@@ -56,9 +56,9 @@ export function startBattle(state, round) {
   } else run(state);
 }
 export function nextTurn(state) {
+  abandonWalk(state);
   state.turn++;
   state.phase = PHASE.P1;
-  abandonWalk(state);
   state.situational = {};
   state.playable = {};
   state.battle = null;
