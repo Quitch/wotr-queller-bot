@@ -333,7 +333,17 @@ export function handleAction(state, node) {
     if (result !== FALL_THROUGH) return result;
   }
   if (isEndBox(label)) return endAction(state, walk);
-  promptAction(state, node, label, { help: NODE.extra(node).help });
+  promptAction(state, node, label, {
+    help: NODE.extra(node).help,
+    ...armyMoveFlags(walk, label),
+  });
+}
+// An Army die gives two moves by two different Armies (rule 9): on the Army page a move action is the first of them;
+// "Move/Attack" asks which it was, because an attack uses the whole die.
+function armyMoveFlags(walk, label) {
+  if (walk.page !== "AR" || walk.die !== DIE_REQUIREMENT.ARMY) return {};
+  if (label === "Move/Attack") return { armyMove: true, moveOrAttack: true };
+  return label.startsWith("Move") ? { armyMove: true } : {};
 }
 // The walk no longer holds a die (spent, or given up unspent).
 export function releaseCurrentDie(state) {

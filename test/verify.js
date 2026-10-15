@@ -1688,6 +1688,73 @@ function messengerMusterDieActsAsArmyOncePerTurn() {
   engine.nextTurn(state);
   ok(!state.messengerUsedThisTurn, "the next turn makes it available again");
 }
+// Rule 9: an Army die moves two different Armies. After the first move the Army page is walked again from the same start
+// point; the die is spent after the second move, or when the second walk finds none. An attack uses the whole die, and a
+// Character die makes one move.
+function armyDieMovesTwoArmies() {
+  const armyWalk = (face, req, rules) => {
+    const state = phase5State(
+      { dice: true, cards: false, tracker: false, wome: false },
+      STRATEGY.MILITARY,
+    );
+    state.dice.pool = [die(face)];
+    engine.startWalk(state, "AR", "Army 4", { die: req, dieIndex: 0 });
+    const seen = driveWalk(state, rules);
+    const moveAsks = seen.filter((prompt) => prompt?.text === "Move/Attack");
+    return { state, moveAsks };
+  };
+  const toMove = [/can move or attack towards closest/, true];
+  const twice = armyWalk("Army", DIE_REQUIREMENT.ARMY, [
+    toMove,
+    [/^Move\/Attack$/, "done"],
+  ]);
+  ok(
+    twice.moveAsks.length === 2 &&
+      twice.moveAsks[0].moveOrAttack &&
+      twice.state.dice.pool[0].status === DIE_STATE.USED &&
+      twice.state.walk.result === WALK_RESULT.ACTION &&
+      twice.state.walk.trail.some((entry) =>
+        /Second Army move: “Army 4”/.test(entry.text),
+      ),
+    "after the first move the Army page is walked again from “Army 4”; the die is spent after the second",
+  );
+  const attacked = armyWalk("Army", DIE_REQUIREMENT.ARMY, [
+    toMove,
+    [/^Move\/Attack$/, "attacked"],
+  ]);
+  ok(
+    attacked.moveAsks.length === 1 &&
+      attacked.state.dice.pool[0].status === DIE_STATE.USED,
+    "an attack uses the whole die",
+  );
+  let firstWalk = true;
+  const noSecond = armyWalk("Army", DIE_REQUIREMENT.ARMY, [
+    {
+      test: (prompt) => /can move or attack towards closest/.test(prompt.text),
+      answer: () => {
+        const answer = firstWalk;
+        firstWalk = false;
+        return answer;
+      },
+    },
+    [/^Move\/Attack$/, "done"],
+  ]);
+  ok(
+    noSecond.moveAsks.length === 1 &&
+      noSecond.state.dice.pool[0].status === DIE_STATE.USED &&
+      noSecond.state.walk.result === WALK_RESULT.ACTION &&
+      /No second Army move/.test(lastLogText(noSecond.state)),
+    "when the second walk finds no move, the die is spent",
+  );
+  const character = armyWalk("Character", DIE_REQUIREMENT.CHARACTER, [
+    toMove,
+    [/^Move\/Attack$/, "done"],
+  ]);
+  ok(
+    character.moveAsks.length === 1 && !character.moveAsks[0].moveOrAttack,
+    "a Character die makes one move",
+  );
+}
 // The scenarios, with the section of the change log each one guards.
 const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
@@ -1706,6 +1773,7 @@ const SCENARIOS = [
   ["decks", emptyEventDecksFallBack],
   ["dice", wildResultOnlyForFactionEvents],
   ["dice", messengerMusterDieActsAsArmyOncePerTurn],
+  ["army", armyDieMovesTwoArmies],
   ["6.6", wornWithSorrowAsksAndWormtongueOnSaruman],
   ["7.1", reservedDieCannotBeReservedAgain],
   ["muster", musterChoiceCardAutoAnswered],

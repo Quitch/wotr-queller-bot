@@ -32,6 +32,7 @@ import {
   settleRing,
 } from "./rings.js";
 import { startWalk } from "./run.js";
+import { spendCurrentDie } from "./actions.js";
 
 export function handleJump(state, node) {
   const walk = state.walk,
@@ -295,6 +296,10 @@ function enterPage(state, spec, label) {
   walk.cands = null;
   walk.chosen = null;
   walk.steps = null;
+  if (spec.page === "AR") {
+    walk.armyStart = spec.start;
+    walk.armyMoves = 0;
+  }
   goto(state, spec.page, findStart(spec.page, spec.start));
   follow(state, null);
 }
@@ -304,6 +309,15 @@ function exitJump(state) {
 }
 export function doReturn(state) {
   const walk = state.walk;
+  if (walk.page === "AR" && walk.armyMoves === 1) {
+    spendCurrentDie(state, "one Army move; no second move was possible");
+    endWalk(
+      state,
+      WALK_RESULT.ACTION,
+      "No second Army move is possible: the Army die is used (rule 9).",
+    );
+    return;
+  }
   if (!walk.stack.length) {
     // A die brought back from "set aside for a minion" that found no action is spent, not set aside again (rule 34: it cannot be used for anything else).
     if (

@@ -3,7 +3,8 @@ import * as engine from "../engine/index.js";
 import { CARD, TRAIL, cardById } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
 import { exitAction, spendCurrentDie } from "./actions.js";
-import { cur, endWalk, follow, setPrompt, trail } from "./core.js";
+import { cur, endWalk, follow, goto, setPrompt, trail } from "./core.js";
+import { findStart } from "./graph.js";
 import { decisionText, recordDecision } from "./decisions/common.js";
 import { dieWithArticle } from "./jumps-table.js";
 import { SHADOW_NATION_NAME } from "./nations.js";
@@ -187,8 +188,15 @@ function answerBlocked(state, prompt, value) {
 }
 function answerAction(state, prompt, value) {
   const walk = state.walk;
-  if (value !== "done") return notPossible(state, prompt);
-  trail(state, { kind: TRAIL.ACTION, text: prompt.text, answer: "done" });
+  if (value !== "done" && value !== "attacked")
+    return notPossible(state, prompt);
+  trail(state, {
+    kind: TRAIL.ACTION,
+    text: prompt.text,
+    answer: value === "attacked" ? "attacked" : "done",
+  });
+  if (value === "done" && prompt.armyMove && !walk.armyMoves && walk.armyStart)
+    return secondArmyMove(state, walk);
   if (prompt.pass) {
     endWalk(state, WALK_RESULT.PASS, "Queller passes.");
     engine.log(state, "Queller passes.");
@@ -198,6 +206,25 @@ function answerAction(state, prompt, value) {
   if (walk.die) spendCurrentDie(state, "“" + prompt.text + "”");
   else engine.log(state, "Queller: " + prompt.text);
   endWalk(state, WALK_RESULT.ACTION, prompt.text);
+}
+// Rule 9: after the first move of an Army die, walk the Army page again from the same start point for the second move,
+// by another Army.
+function secondArmyMove(state, walk) {
+  walk.armyMoves = 1;
+  engine.log(
+    state,
+    "First Army move made: the Army page again from “" +
+      walk.armyStart +
+      "” for the second move, by another Army (rule 9).",
+  );
+  trail(state, {
+    kind: TRAIL.JUMP,
+    text: "Second Army move: “" + walk.armyStart + "”",
+  });
+  walk.cands = null;
+  walk.chosen = null;
+  goto(state, "AR", findStart("AR", walk.armyStart));
+  follow(state, null);
 }
 function answerPlayCard(state, prompt) {
   const walk = state.walk;

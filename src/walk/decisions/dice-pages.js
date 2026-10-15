@@ -51,6 +51,8 @@ function decideHuntDiceForArmy(state, node, { diceOn, trackerOn, board }) {
 // "Using an Army/Muster die": the die the Army page was entered with.
 function decideArmyMusterDie(state, node, { walk, diceOn }) {
   if (answerIfOtherDie(state, node, DIE_REQUIREMENT.ARMY)) return;
+  if (walk.armyMoves)
+    return answerAuto(state, node, false, "the die has made an Army move");
   if (diceOn && walk.dieIndex != null) {
     const face = state.dice.pool[walk.dieIndex].face;
     return answerAuto(state, node, face === FACE.ARMY_MUSTER, face + " die");

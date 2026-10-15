@@ -32,6 +32,9 @@ const walkDieState = (options) => ({
   reservedDieIndex: null,
   // a Muster die held as an Army die with Messenger of the Dark Tower (rule 30): its pool index
   messengerDieIndex: null,
+  // an Army die on the Army page (rule 9): the start point it entered at, and the moves it has made (0 or 1)
+  armyStart: null,
+  armyMoves: 0,
 });
 // Elven Ring state (rules 43-46, walk/rings.js): the dice a bold box lets a ring create and the box a limited use needs,
 // whether the ring question was put to the player, and a ring use waiting for its die to be spent.
@@ -83,6 +86,7 @@ export function beginWalk(state, page, startName, options = {}) {
     ...walkChoiceState(),
     ...walkDecisionState(),
   };
+  if (page === "AR") state.walk.armyStart = startName;
   trail(state, { kind: TRAIL.START, text: startName, page });
   engine.log(
     state,

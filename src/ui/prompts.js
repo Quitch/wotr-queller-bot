@@ -21,6 +21,9 @@ export const NODE_KIND_NAME = {
 const YES_NO_BUTTONS =
   '<button class="btn yes" data-ans="yes">Yes</button><button class="btn no" data-ans="no">No</button>';
 const DONE_BUTTON = '<button class="btn yes" data-ans="done">Done</button>';
+// "Move/Attack" with an Army die: a move leaves a second move (rule 9), an attack uses the die
+const MOVED_OR_ATTACKED_BUTTONS =
+  '<button class="btn yes" data-ans="done">Moved</button><button class="btn yes" data-ans="attacked">Attacked</button>';
 const orderedListHTML = (items) =>
   items
     ? "<ol>" +
@@ -52,6 +55,9 @@ function promptEyebrowHTML(walk, page, kind) {
       ? " · " + escapeHTML(engine.DIE_REQUIREMENT_NAME[walk.die]) + " die"
       : "") +
     (walk.mode === "ringAny" ? " · Elven Ring search" : "") +
+    (walk.armyMoves
+      ? " · second Army move: not the Army that has moved (rule 9)"
+      : "") +
     "</div>"
   );
 }
@@ -145,7 +151,7 @@ function renderActionPrompt(prompt, walk) {
         : "") +
       (prompt.pass ? "" : '<div class="help">' + dieHelpText(walk) + "</div>"),
     answers:
-      DONE_BUTTON +
+      (prompt.moveOrAttack ? MOVED_OR_ATTACKED_BUTTONS : DONE_BUTTON) +
       (engine.offersNotPossible(prompt)
         ? '<button class="btn no" data-ans="no">Not possible (rule 36)</button>'
         : ""),
