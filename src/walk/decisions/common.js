@@ -1,10 +1,12 @@
 // What every decision handler builds on: recording an answer, asking the player, board facts and playable-card counts.
 import * as engine from "../../engine/index.js";
 import { DECK, MINION_STATUS, TRAIL } from "../../engine/index.js";
-import { NODE, NODE_KIND } from "../../flow/index.js";
+import { FLOW, NODE, NODE_KIND } from "../../flow/index.js";
 import { endWalk, follow, setPrompt, trail } from "../core.js";
+import { doReturn } from "../jumps.js";
 import { dieWithArticle } from "../jumps-table.js";
 import { evalPlayable } from "../playable.js";
+import { armRing, ringNeedAnswered } from "../rings.js";
 import { PENDING, PROMPT, WALK_RESULT } from "../prompt.js";
 
 // Board consequences of a decision the player answered (the tracker keeps up with what the flowchart just established).
@@ -37,8 +39,16 @@ export function recordDecision(
     why,
     ring: !!ringCondition,
   });
-  if (answer && ringCondition && !state.ringUsedThisTurn) walk.ringArmed = true;
-  const hook = DECIDE_HOOKS[walk.page + "." + walk.node];
+  const key = walk.page + "." + walk.node;
+  armRing(
+    state,
+    key,
+    NODE.kind(FLOW[walk.page].nodes[walk.node]) === NODE_KIND.DECISION,
+    answer,
+    ringCondition,
+  );
+  if (ringNeedAnswered(state, key, answer)) return doReturn(state);
+  const hook = DECIDE_HOOKS[key];
   if (hook) hook(state, answer);
   walk.sub = 0;
   walk.parts = {};

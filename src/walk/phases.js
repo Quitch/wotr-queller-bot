@@ -1,7 +1,7 @@
 // The phase driver: which page a phase walks, starting a phase or a battle round, the next turn.
 import * as engine from "../engine/index.js";
 import { PHASE, STRATEGY } from "../engine/index.js";
-import { beginWalk } from "./core.js";
+import { abandonWalk, beginWalk } from "./core.js";
 import { PROMPT } from "./prompt.js";
 import { run, startWalk } from "./run.js";
 
@@ -14,7 +14,7 @@ export function phase5Page(state) {
 export function startPhase(state, phase) {
   const page = phasePage(state);
   if (phase === PHASE.SETUP) {
-    state.walk = null;
+    abandonWalk(state);
     startWalk(state, "C14", "Start of game");
     return;
   }
@@ -45,7 +45,7 @@ export function startPhase(state, phase) {
   }
 }
 export function startBattle(state, round) {
-  state.walk = null;
+  abandonWalk(state);
   beginWalk(state, "BA", round === 1 ? "Battle" : "Battle (next round)", {
     battleRound: round,
   });
@@ -60,7 +60,7 @@ export function startBattle(state, round) {
 export function nextTurn(state) {
   state.turn++;
   state.phase = PHASE.P1;
-  state.walk = null;
+  abandonWalk(state);
   state.situational = {};
   state.playable = {};
   state.battle = null;

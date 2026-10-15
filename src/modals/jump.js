@@ -50,7 +50,6 @@ function wireJumpModal(modal, el) {
     const die = el.querySelector("#jumpDie").value || null;
     ui.act(
       () => {
-        ui.state.walk = null;
         engine.startWalk(
           ui.state,
           pageKey,

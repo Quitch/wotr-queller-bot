@@ -7,6 +7,7 @@ import { findStart, normalizeText } from "./graph.js";
 import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
 import { doReturn, ensureDie } from "./jumps.js";
 import { SHADOW_NATION_KEY } from "./nations.js";
+import { ringDieSpent } from "./rings.js";
 import {
   FALL_THROUGH,
   PENDING,
@@ -329,6 +330,7 @@ export function releaseCurrentDie(state) {
 export function spendCurrentDie(state, why) {
   const walk = state.walk;
   if (!walk?.die) return;
+  ringDieSpent(state);
   if (state.settings.dice && walk.dieIndex != null) {
     engine.spendDie(state, state.dice.pool[walk.dieIndex], why);
   } else

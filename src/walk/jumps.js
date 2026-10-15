@@ -2,7 +2,15 @@
 import * as engine from "../engine/index.js";
 import { DIE_REQUIREMENT, TRAIL } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
-import { cur, endWalk, follow, goto, setPrompt, trail } from "./core.js";
+import {
+  abandonWalk,
+  cur,
+  endWalk,
+  follow,
+  goto,
+  setPrompt,
+  trail,
+} from "./core.js";
 import { findStart, normalizeText } from "./graph.js";
 import {
   DIE_REQUIREMENT_NAME,
@@ -16,6 +24,13 @@ import {
   phaseResult,
   strategyName,
 } from "./prompt.js";
+import {
+  giveUpRingDie,
+  returnRing,
+  ringMayCreate,
+  ringUsed,
+  settleRing,
+} from "./rings.js";
 import { startWalk } from "./run.js";
 
 export function handleJump(state, node) {
@@ -69,6 +84,14 @@ function reserveDie(state, walk, spec, label) {
     exitJump(state);
     return;
   }
+  // rule 46: an Elven Ring does not make a Muster die to be set aside, so without it there is no die to set aside
+  if (walk.ringPending) {
+    returnRing(state, "the Muster page would set the die aside");
+    walk.die = null;
+    walk.dieIndex = null;
+    doReturn(state);
+    return;
+  }
   state.minionReserved = true;
   if (walk.dieIndex != null && state.settings.dice) {
     state.dice.pool[walk.dieIndex].status = engine.DIE_STATE.RESERVED;
@@ -86,6 +109,7 @@ function reserveDie(state, walk, spec, label) {
 }
 // "Phase 5 (use an Elven Ring)": restart the walk looking for an Elven Ring use (rule 44) when a ring and a die to change are available.
 function ringAnyJump(state, walk, spec, label) {
+  settleRing(state);
   const canUseRing =
     walk.mode !== "ringAny" &&
     engine.ringAvailable(state) &&
@@ -93,8 +117,7 @@ function ringAnyJump(state, walk, spec, label) {
   if (canUseRing) {
     trail(state, { kind: TRAIL.JUMP, text: label });
     const entry = walk.entry;
-    walk.done = true;
-    state.walk = null;
+    abandonWalk(state);
     startWalk(state, entry.page, entry.start, { mode: "ringAny" });
     return;
   }
@@ -145,31 +168,43 @@ export function ensureDie(state, req, label) {
   const walk = state.walk;
   if (walk.pendingDie === label) {
     walk.pendingDie = null;
-    const dieResult = walk.dieAns[req];
-    walk.ringArmed = false;
-    if (!dieResult)
-      trail(state, {
-        kind: TRAIL.SKIP,
-        text: label,
-        why: "no " + DIE_REQUIREMENT_NAME[req] + " die",
-      });
-    return !!dieResult;
+    if (walk.dieAns[req]) return true;
+    // no such die: an Elven Ring may still make one (asked once per walk)
+    if (!state.settings.dice && ringMayCreate(state, req) && !walk.ringAsked)
+      return askForDie(state, walk, req, label);
+    trail(state, {
+      kind: TRAIL.SKIP,
+      text: label,
+      why: "no " + DIE_REQUIREMENT_NAME[req] + " die",
+    });
+    return false;
   }
+  // claiming a die for another step gives up a die a ring made for the last one
+  if (walk.ringPending && walk.ringPending.req !== req) giveUpRingDie(state);
   if (state.settings.dice) return ensureDieFromPool(state, walk, req, label);
   return askForDie(state, walk, req, label);
 }
 // With dice rolled by the app: take a matching die from the pool, changing one with an Elven Ring when that is armed.
 function ensureDieFromPool(state, walk, req, label) {
   let die = engine.findDie(state, req);
-  if (!die && ringPossible(state)) {
-    die = engine.ringChange(state, req);
-    if (die)
+  if (!die && ringMayCreate(state, req)) {
+    const ringsBefore = state.board.rings;
+    const changed = engine.ringChange(state, req);
+    if (changed) {
+      die = changed.die;
+      ringUsed(
+        state,
+        req,
+        ringsBefore,
+        state.dice.pool.indexOf(die),
+        changed.from,
+      );
       trail(state, {
         kind: TRAIL.RING,
         text: "Elven Ring: die changed to " + die.face,
       });
+    }
   }
-  walk.ringArmed = false;
   if (!die) {
     trail(state, {
       kind: TRAIL.SKIP,
@@ -199,11 +234,8 @@ function askForDie(state, walk, req, label) {
     });
     return PENDING;
   }
-  if (walk.dieAns[req]) {
-    walk.ringArmed = false;
-    return true;
-  }
-  if (ringPossible(state) && !walk.ringAsked) {
+  if (walk.dieAns[req]) return true;
+  if (ringMayCreate(state, req) && !walk.ringAsked) {
     walk.ringAsked = true;
     setPrompt(state, {
       type: PROMPT.RING,
@@ -215,23 +247,16 @@ function askForDie(state, walk, req, label) {
           : "If the Shadow holds an Elven Ring: ") +
         "Use an Elven Ring (rule 43): change one Queller die that does not show a *preferred* result into " +
         dieWithArticle(req) +
-        " result. Choose the die at random.",
+        " result. Choose the die at random. If the step then turns out not to be possible, the app tells you to turn the die back (rule 43).",
     });
     return PENDING;
   }
-  walk.ringArmed = false;
   trail(state, {
     kind: TRAIL.SKIP,
     text: label,
     why: "no " + DIE_REQUIREMENT_NAME[req] + " die",
   });
   return false;
-}
-function ringPossible(state) {
-  const walk = state.walk;
-  return (
-    engine.ringAvailable(state) && (walk.ringArmed || walk.mode === "ringAny")
-  );
 }
 function enterPage(state, spec, label) {
   const walk = state.walk;
@@ -295,6 +320,7 @@ export function doReturn(state) {
   walk.die = frame.die;
   walk.dieIndex = frame.dieIndex;
   walk.dieUsed = frame.dieUsed;
+  settleRing(state);
   walk.cands = null;
   walk.chosen = null;
   trail(state, {

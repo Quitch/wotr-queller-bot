@@ -1,9 +1,10 @@
 // The app version, the enums and the limits the engine and the rest of the app share.
 
 export const VERSION = 61; // app version (shown in the debug log and stamped on saves)
-// The flowchart revision a walk was made on: 1 was the released flowchart, 2 the Draft of 2026-10-15. Every node id of
-// revision 1 is still there, so an unfinished walk from it resumes on the new graph (migrate).
-export const FLOW_REV = 2;
+// The flowchart revision a walk was made on: 1 was the released flowchart, 2 the Draft of 2026-10-15, 3 the same with
+// the Elven Ring results of rule 46 (walk.ringDice replaces walk.ringArmed). Every node id of revision 1 is still there, so
+// an unfinished walk from an older revision resumes on the new graph (migrate).
+export const FLOW_REV = 3;
 // Revision 1's steps that became priority lists, and the step drawn after each that now carries what they asked: a
 // walk paused at one moves there with its open prompt.
 export const FLOW_REV_1_MOVED_STEPS = {

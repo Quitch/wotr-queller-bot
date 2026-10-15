@@ -3,6 +3,7 @@ import * as engine from "../engine/index.js";
 import { TRAIL } from "../engine/index.js";
 import { EDGE, FLOW } from "../flow/index.js";
 import { edgeFor, findStart, normalizeText } from "./graph.js";
+import { settleRing } from "./rings.js";
 
 // The parts of a walk (state.walk is the flat union of them).
 // Where the walk is: its page and node, the start point it began at, the pages it will return to, its record and its prompt.
@@ -30,8 +31,14 @@ const walkDieState = (options) => ({
   fromReserve: false,
   reservedDieIndex: null,
 });
-// Elven Ring state (rules 43-45): a ring condition was met; the ring question was put to the player.
-const walkRingState = () => ({ ringArmed: false, ringAsked: false });
+// Elven Ring state (rules 43-46, walk/rings.js): the dice a bold box lets a ring create and the box a limited use needs,
+// whether the ring question was put to the player, and a ring use waiting for its die to be spent.
+const walkRingState = () => ({
+  ringDice: null,
+  ringNeeds: null,
+  ringAsked: false,
+  ringPending: null,
+});
 // Card candidates and the priority-list result.
 const walkCardState = () => ({
   cands: null,
@@ -51,6 +58,11 @@ const walkChoiceState = () => ({
 // Multi-part decisions (sub: which part) and answers to board questions asked once per node.
 const walkDecisionState = () => ({ sub: 0, parts: {} });
 // Create the walk at a start point without stepping it; returns false when the start point does not exist.
+// Drop the walk in progress: a ring it used for a die it never spent comes back (rule 43).
+export function abandonWalk(state) {
+  if (state.walk && !state.walk.done) settleRing(state, true);
+  state.walk = null;
+}
 export function beginWalk(state, page, startName, options = {}) {
   const id = findStart(page, startName);
   if (!id) {
@@ -60,6 +72,7 @@ export function beginWalk(state, page, startName, options = {}) {
     );
     return false;
   }
+  abandonWalk(state);
   state.walk = {
     ...walkPosition(page, id, startName, options),
     ...walkDieState(options),
@@ -104,6 +117,7 @@ export function follow(state, label) {
 }
 export function endWalk(state, result, message) {
   const walk = state.walk;
+  settleRing(state, true);
   walk.done = true;
   walk.result = result;
   walk.prompt = null;

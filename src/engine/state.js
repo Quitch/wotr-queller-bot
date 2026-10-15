@@ -146,7 +146,20 @@ function migrateMinions(chars) {
 }
 // An unfinished walk from the released flowchart resumes on the new graph, so nothing it already did is done twice.
 function migrateWalk(walk) {
+  const from = walk.flowRev || 1;
+  if (from < 2) migrateWalkFromRev1(walk);
+  if (from < 3) migrateWalkFromRev2(walk);
   walk.flowRev = FLOW_REV;
+}
+// Revision 2 armed a ring for whatever die the next step needed (ringArmed); revision 3 keeps the dice rule 46 allows
+// ("any" is that same reading) and a ring use waiting for its die to be spent.
+function migrateWalkFromRev2(walk) {
+  walk.ringDice = walk.ringArmed ? "any" : null;
+  delete walk.ringArmed;
+  walk.ringNeeds = null;
+  walk.ringPending = null;
+}
+function migrateWalkFromRev1(walk) {
   walk.attacking ??= null;
   const moved = FLOW_REV_1_MOVED_STEPS[walk.page + "." + walk.node];
   if (moved) {
