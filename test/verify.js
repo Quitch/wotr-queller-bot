@@ -1742,6 +1742,57 @@ function ringSettledWhereTheDieGoes() {
     "a ring die the player marked used does not turn back when the walk is dropped",
   );
 }
+// Rules 43 and 46, round 4: a ring die still held when the walk reaches the next bold box turns back there, so that box
+// arms its own ring; and with dice off, a No to the ring offer for one of rule 46's two dice leaves the other.
+function ringSettledAtTheNextBoldBox() {
+  const held = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  held.board.rings = 1;
+  held.dice.pool = ["Muster", "Muster", "Muster"].map((face) => die(face));
+  engine.startPhase(held, PHASE.P5);
+  const seen = driveWalk(held, [
+    [/^Character cards > 0 and ANY condition true:/, true],
+    [/^Holding a Character card that uses the term/, true],
+    [/^Play card using/, "no"],
+    [/^\*Mobile\* Army \*adjacent\* to \*target\* or an Army/, true],
+    [/^ANY condition true:/, true],
+    [/contain a Nazgûl or a minion/, true],
+    [/can move or attack towards closest/, true],
+    [/^Move\/Attack$/, "done"],
+  ]);
+  const trailIndex = (pattern) =>
+    held.walk.trail.findIndex((entry) => pattern.test(entry.text));
+  ok(
+    trailIndex(/^Elven Ring not used for an Event die/) > -1 &&
+      trailIndex(/^Elven Ring not used for an Event die/) <
+        trailIndex(/^ANY condition true:/) &&
+      seen.some((prompt) => /Nazgûl or a minion/.test(prompt?.text || "")),
+    "the Event die a ring made for “Play card using Event die” turns back at the next bold box, which asks rule 46's question",
+  );
+  const declined = phase5State(
+    { dice: false, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  declined.board.rings = 1;
+  engine.startPhase(declined, PHASE.P5);
+  const offers = driveWalk(declined, [
+    [/^\*Mobile\* Army \*adjacent\* to \*target\* or an Army/, true],
+    [/^ANY condition true:/, true],
+    [/^Does Queller have/, false],
+    byType(PROMPT.RING, false),
+  ])
+    .filter((prompt) => prompt?.type === PROMPT.RING)
+    .map((prompt) => prompt.req);
+  ok(
+    offers.includes(DIE_REQUIREMENT.CHARACTER) &&
+      offers.includes(DIE_REQUIREMENT.ARMY),
+    "dice off: after a No to the ring for a Character die, the attack box offers it for an Army die (" +
+      offers.join() +
+      ")",
+  );
+}
 // A walk saved with revision 2's ring state takes revision 3's.
 function ringStateFromRevision2Migrates() {
   const state = phase5State({ dice: true });
@@ -1859,6 +1910,7 @@ const SCENARIOS = [
   ["rings", ringUsedOnlyWhereRule46Allows],
   ["rings", diceOffRingOfferedAndTurnedBack],
   ["rings", ringSettledWhereTheDieGoes],
+  ["rings", ringSettledAtTheNextBoldBox],
   ["migrate", ringStateFromRevision2Migrates],
 ];
 function main() {
