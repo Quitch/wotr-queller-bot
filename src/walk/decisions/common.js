@@ -8,9 +8,6 @@ import { PENDING, PROMPT, WALK_RESULT } from "../prompt.js";
 
 // Board consequences of a decision the player answered (the tracker keeps up with what the flowchart just established).
 const DECIDE_HOOKS = {
-  "BA.defStrong": (state, answer) => {
-    if (answer) state.walk.attacking = false;
-  },
   "BA.attacking": (state, answer) => {
     state.walk.attacking = answer;
   },
@@ -160,24 +157,19 @@ export const partText = (items) =>
         : item.text,
     )
     .join(" or ");
-// An ANY list with both Elven Ring conditions and plain conditions is asked in two parts, the ring part first.
-export const isTwoPart = (state, node) => {
-  const { ring, plain } = listParts(state, node);
-  return !!NODE.extra(node).any && ring.length > 0 && plain.length > 0;
-};
-// A decision the app cannot answer: a two-part list asks the ring part first, then the plain part; any other list
-// shows the items that apply to this game.
+// A decision the app cannot answer: an ANY list with both Elven Ring conditions and plain conditions is asked in two
+// parts, the ring part first; any other list shows the items that apply to this game.
 export function askDecision(state, node) {
   const nodeExtra = NODE.extra(node);
-  if (isTwoPart(state, node)) {
-    const { ring, plain } = listParts(state, node);
+  const { items, ring, plain } = listParts(state, node);
+  if (nodeExtra.any && ring.length && plain.length) {
     if (state.walk.sub === 0)
       return ask(state, node, partText(ring), { sub: 1, bold: true });
     return ask(state, node, partText(plain), { sub: 2 });
   }
   if (!nodeExtra.items) return ask(state, node);
   ask(state, node, null, {
-    items: listParts(state, node).items.map((item) => item.text),
+    items: items.map((item) => item.text),
     any: !!nodeExtra.any,
   });
 }

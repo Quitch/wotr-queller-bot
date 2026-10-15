@@ -1288,7 +1288,7 @@ function eventPageChecksTheDie() {
     "a Military Character die plays a playable Character card that is not preferred",
   );
 }
-// A walk saved on the released flowchart is dropped on load, with the battle it was in; a current walk is kept.
+// An unfinished walk saved on the released flowchart is dropped on load; a finished one and a current one are kept.
 function staleSavedWalkIsDropped() {
   const state = phase5State(
     { dice: true, cards: false, tracker: true, wome: false },
@@ -1305,8 +1305,65 @@ function staleSavedWalkIsDropped() {
   delete old.walk.flowRev;
   const migrated = engine.migrate(old);
   ok(
-    migrated.walk === null && migrated.battleOpen === false,
-    "a walk from the released flowchart is dropped and the battle closed",
+    migrated.walk === null && migrated.battleOpen,
+    "an unfinished walk from the released flowchart is dropped; the open battle keeps its next-round button",
+  );
+  const finished = JSON.parse(JSON.stringify(state));
+  delete finished.walk.flowRev;
+  finished.walk.done = true;
+  ok(
+    engine.migrate(finished).walk?.done === true,
+    "a finished walk from the released flowchart is kept",
+  );
+}
+// Draft flowchart: "Use Muster die set aside for minion" now comes before "Discard unplayable die". When Muster 2
+// finds nothing for the die brought back, that die is spent (rule 34); "Discard unplayable die" does not pick another.
+function reservedDieSpentBeforeDiscardingAnother() {
+  // "Discard unplayable die" picks at random, so a wrong pick shows only in some walks: run enough of them
+  let wrong = 0;
+  for (let trial = 0; trial < RANDOM_PICK_TRIALS; trial++) {
+    const state = phase5State(
+      { dice: true, cards: false, tracker: true, wome: false },
+      STRATEGY.MILITARY,
+    );
+    state.board.nations.isengard = 0;
+    state.dice.pool = [die("Muster", DIE_STATE.RESERVED), die("Character")];
+    state.minionReserved = true;
+    engine.startPhase(state, PHASE.P5);
+    driveWalk(state, [[/^Pass/, "no"], byType(PROMPT.ACTION, "no")]);
+    if (
+      state.dice.pool[0].status !== DIE_STATE.USED ||
+      state.dice.pool[1].status !== DIE_STATE.AVAIL ||
+      state.minionReserved
+    )
+      wrong++;
+  }
+  ok(
+    wrong === 0,
+    "the set-aside Muster die is spent and the Character die is left, in every walk (" +
+      wrong +
+      " of " +
+      RANDOM_PICK_TRIALS +
+      " wrong)",
+  );
+}
+// The army value calculator counts a Captain of the West once: he adds a combat die, not a point of his own.
+function captainOfTheWestCountsOnce() {
+  const inputs = (extra) => ({
+    reg: 3,
+    elite: 0,
+    lead: 1,
+    cotw: 0,
+    fort: false,
+    strong: false,
+    sortie: false,
+    ...extra,
+  });
+  ok(
+    fakeWindow.armyValue(inputs({})).value === 7 &&
+      fakeWindow.armyValue(inputs({ cotw: 1 })).value === 8 &&
+      fakeWindow.armyValue(inputs({ reg: 5, lead: 0, cotw: 1 })).value === 10,
+    "3 Regulars and 1 Leadership: 7, 8 with a Captain; 5 Regulars and a Captain: 10 (combat dice capped at 5)",
   );
 }
 // The scenarios, with the section of the change log each one guards.
@@ -1338,6 +1395,8 @@ const SCENARIOS = [
   ["draft", noSetAsideDieFallsThroughToDiscard],
   ["draft", eventPageChecksTheDie],
   ["migrate", staleSavedWalkIsDropped],
+  ["draft", reservedDieSpentBeforeDiscardingAnother],
+  ["calc", captainOfTheWestCountsOnce],
 ];
 function main() {
   for (const [number, scenario] of SCENARIOS) {

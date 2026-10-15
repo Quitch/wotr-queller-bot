@@ -132,13 +132,8 @@ function enterMuster2WithReservedDie(state, walk, reservedIndex) {
     kind: TRAIL.JUMP,
     text: "Muster 2 (die set aside for the minion)",
   });
-  walk.stack.push({
-    page: walk.page,
-    node: walk.node,
-    die: null,
-    dieIndex: null,
-    dieUsed: false,
-  });
+  // no frame to return to: if Muster 2 finds nothing, doReturn spends the die (rule 34), and the walk does not go
+  // on to "Discard unplayable die"
   walk.die = DIE_REQUIREMENT.MUSTER;
   walk.dieIndex = reservedIndex;
   goto(state, "MU", findStart("MU", "Muster 2"));
@@ -243,8 +238,6 @@ function advancePoliticalTrack(state, node, { walk, trackerOn, label }) {
 const MINION_KEY = {
   Saruman: "saruman",
   "Witch-king": "witchKing",
-  // saved walks before the Draft text spelt it this way
-  "Witch King": "witchKing",
   "Mouth of Sauron": "mouth",
 };
 function musterMinion(state, node, { walk, label }) {

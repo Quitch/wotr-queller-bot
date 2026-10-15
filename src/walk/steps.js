@@ -64,7 +64,11 @@ function drawTurnCardsStep(state, node, { cardsOn, wome, label }) {
 function discardChosenStep(state, node, { walk, cardsOn, label }) {
   if (!cardsOn || !walk.chosen) return FALL_THROUGH;
   const id = walk.chosen;
-  engine.discardCard(state, id, "hand above the limit");
+  engine.discardCard(
+    state,
+    id,
+    ["hand above the limit", ...(walk.steps || [])].join("; "),
+  );
   walk.chosen = null;
   continueStep(state, label, "discarded “" + cardById[id].title + "”");
 }

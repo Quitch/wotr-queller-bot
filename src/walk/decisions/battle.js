@@ -72,7 +72,7 @@ function decideFieldBattleOrMilitary(state, node, { trackerOn, board }) {
 }
 // The second "Shadow Army attacking" (after casualties): the round already established who attacks.
 function decideAttackingThisRound(state, node, { walk }) {
-  if (walk.attacking === undefined) return ask(state, node);
+  if (walk.attacking === null) return ask(state, node);
   answerAuto(state, node, walk.attacking, "answered earlier this round");
 }
 function decideAggressiveContinue(state, node, { trackerOn, board }) {

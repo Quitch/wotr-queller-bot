@@ -151,11 +151,9 @@ export function migrate(save) {
   if (save.board?.nations) migrateNations(save.board.nations);
   if (save.board?.chars) migrateMinions(save.board.chars);
   if (save.board && save.board.rings === undefined) save.board.rings = 0;
-  // a walk on an older flowchart cannot go on: drop it, and the battle it was in, so the phase buttons start afresh
-  if (save.walk && save.walk.flowRev !== FLOW_REV) {
+  // an unfinished walk on an older flowchart cannot go on: drop it, and the phase or battle button starts it again
+  if (save.walk && !save.walk.done && save.walk.flowRev !== FLOW_REV)
     save.walk = null;
-    save.battleOpen = false;
-  }
   delete save.shownCard;
   delete save.lastAction;
   return save;

@@ -39,6 +39,8 @@ const walkCardState = () => ({
   steps: null,
   ctb: null,
   discards: null,
+  // the answer to the round's first "Shadow Army attacking", for the second one
+  attacking: null,
 });
 // Results of the Muster and Faction priority lists.
 const walkChoiceState = () => ({

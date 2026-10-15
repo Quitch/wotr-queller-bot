@@ -80,35 +80,43 @@ function calcHTML() {
     "</p></div></div>"
   );
 }
-function calcOut() {
-  const units = calc.reg + calc.elite;
+// An Army's *value* from the calculator's inputs: {value, lines} (lines say how it was reached).
+export function armyValue(inputs) {
+  const units = inputs.reg + inputs.elite;
   const lines = [];
-  let hits = calc.reg + ARMY_VALUE.ELITE_HITS * calc.elite;
-  if (calc.strong) {
+  let hits = inputs.reg + ARMY_VALUE.ELITE_HITS * inputs.elite;
+  if (inputs.strong) {
     const top = Math.min(ARMY_VALUE.STRONGEST_UNITS, units);
-    const eliteCounted = Math.min(top, calc.elite);
+    const eliteCounted = Math.min(top, inputs.elite);
     hits = eliteCounted * ARMY_VALUE.ELITE_HITS + (top - eliteCounted);
     lines.push("Hits (five strongest units): " + hits);
   } else lines.push("Hits: " + hits);
-  const dice = Math.min(ARMY_VALUE.MAX_COMBAT_DICE, units + calc.cotw);
+  const dice = Math.min(ARMY_VALUE.MAX_COMBAT_DICE, units + inputs.cotw);
   lines.push("Combat dice: " + dice);
-  const lead = Math.min(ARMY_VALUE.MAX_LEADERSHIP, Math.min(calc.lead, units));
+  const lead = Math.min(
+    ARMY_VALUE.MAX_LEADERSHIP,
+    Math.min(inputs.lead, units),
+  );
   lines.push("Leadership: " + lead);
   let value = hits + dice + lead;
-  if (calc.fort) {
+  if (inputs.fort) {
     value += ARMY_VALUE.FORTIFICATION_BONUS;
     lines.push("Fortification/City: +" + ARMY_VALUE.FORTIFICATION_BONUS);
   }
-  if (calc.strong) {
+  if (inputs.strong) {
     value = Math.floor(value * ARMY_VALUE.STRONGHOLD_MULTIPLIER);
     lines.push(
       "Stronghold: ×" + ARMY_VALUE.STRONGHOLD_MULTIPLIER + " rounded down",
     );
   }
-  if (calc.sortie) {
+  if (inputs.sortie) {
     value = Math.floor(value * ARMY_VALUE.SORTIE_MULTIPLIER);
     lines.push("Sortie: ×" + ARMY_VALUE.SORTIE_MULTIPLIER + " rounded down");
   }
+  return { value, lines };
+}
+function calcOut() {
+  const { value, lines } = armyValue(calc);
   return (
     '<div class="n">' +
     value +

@@ -8,7 +8,7 @@
 // matches records by page, ends and label, so order only matters for a readable diff.
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { FLOW, NODE, EDGE } from "../src/flow/index.js";
+import { FLOW, NODE, NODE_KIND, EDGE } from "../src/flow/index.js";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const OUT = path.join(ROOT, "src", "flow", "anchors.json");
@@ -207,13 +207,16 @@ function arrowEnds(cell, nodeIds, boxes) {
   return { from, to, ex, en };
 }
 // The arrow's label and whether it is drawn: {label, nolabel}. The label is the arrow's value or, failing that, a label
-// cell attached to it. Overlapping arrows share one drawn label, so an arrow whose ends match one flow.js edge takes
-// that edge's label whatever it draws; when flow.js labels the arrow but the diagram does not, the label is not drawn
-// (an arrow with an empty value attribute is a label that was cleared, and is drawn).
-function arrowLabel(cell, candidates, childLabel) {
+// cell attached to it. Overlapping arrows share one drawn label: a label drawn on a grey box's exit belongs to the
+// arrow it overlaps, so that exit takes its flow.js edge's label; any other drawn label must match flow.js, or the
+// caller warns. When flow.js labels the arrow but the diagram does not, the label is not drawn (an arrow with an empty
+// value attribute is a label that was cleared, and is drawn).
+function arrowLabel(cell, candidates, childLabel, fromJump) {
   const drawn = plainText(cell.attrs.value || "") || childLabel || null;
   if (candidates.length !== 1) return { label: drawn, nolabel: false };
   const label = EDGE.label(candidates[0]) || null;
+  if (drawn && drawn !== label && !fromJump)
+    return { label: drawn, nolabel: false };
   return {
     label,
     nolabel: !!label && !drawn && !("value" in cell.attrs),
@@ -247,6 +250,7 @@ function pageRecords(page, pageKey) {
       cell,
       candidates,
       childLabels.get(cell.attrs.id),
+      NODE.kind(FLOW[pageKey].nodes[from]) === NODE_KIND.JUMP,
     );
     if (!candidates.some((edge) => (EDGE.label(edge) || null) === label))
       console.warn(
