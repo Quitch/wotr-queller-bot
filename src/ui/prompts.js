@@ -169,7 +169,12 @@ function renderPlayCardPrompt(prompt, walk) {
 }
 function renderStepPrompt(prompt) {
   return {
-    body: questionHTML(prompt.text) + orderedListHTML(prompt.items),
+    body:
+      questionHTML(prompt.text) +
+      orderedListHTML(prompt.items) +
+      (prompt.help
+        ? '<div class="help">' + formatText(prompt.help) + "</div>"
+        : ""),
     answers: engine.offersNotPossible(prompt)
       ? DONE_BUTTON +
         '<button class="btn no" data-ans="no">Not possible</button>'

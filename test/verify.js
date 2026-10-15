@@ -609,9 +609,10 @@ function migrateUpgradesOldSaves() {
     "a current save is unchanged by migrate",
   );
 }
-// Drawing from an empty deck reshuffles its discards; with both empty nothing is drawn. Servants of Sauron tops up a
-// short Faction deck from the discards before it looks at three cards.
-function emptyDeckReshufflesDiscards() {
+// Rule 25: an empty Character or Strategy deck is not rebuilt; the Event page draws from the other one, and with both
+// empty the draw is not possible. Phase 1 draws only what is there. A Faction Event deck is rebuilt from its discards
+// (WoME rules): Servants of Sauron tops up a short Faction deck before it looks at three cards.
+function emptyEventDecksFallBack() {
   const state = phase5State({
     dice: true,
     cards: true,
@@ -621,23 +622,62 @@ function emptyDeckReshufflesDiscards() {
   const characterCards = state.cards.decks.C.slice(0, 3);
   state.cards.decks.C = [];
   state.cards.discards.C = characterCards.slice();
-  const drawn = engine.drawCard(state, engine.DECK.CHARACTER);
-  ok(
-    characterCards.includes(drawn) &&
-      state.cards.hand.length === 1 &&
-      state.cards.decks.C.length === 2 &&
-      state.cards.discards.C.length === 0 &&
-      state.log.some((entry) =>
-        /Reshuffled the Character discards/.test(entry.text),
-      ),
-    "an empty deck is rebuilt from its discards before the draw",
-  );
-  state.cards.decks.C = [];
   ok(
     engine.drawCard(state, engine.DECK.CHARACTER) === null &&
-      state.cards.hand.length === 1 &&
+      state.cards.hand.length === 0 &&
+      state.cards.discards.C.length === 3 &&
       /Character deck is empty/.test(lastLogText(state)),
-    "with deck and discards both empty nothing is drawn",
+    "an empty Character deck is not rebuilt from its discards",
+  );
+  const drawEvent2 = (setUp) => {
+    const walkState = phase5State(
+      { dice: true, cards: true, tracker: true, wome: false },
+      STRATEGY.MILITARY,
+    );
+    setUp(walkState);
+    walkState.dice.pool = [die("Event")];
+    walkState.walk = null;
+    engine.startWalk(walkState, "EV", "Event 2", {
+      die: DIE_REQUIREMENT.EVENT,
+      dieIndex: 0,
+    });
+    driveWalk(walkState, []);
+    return walkState;
+  };
+  const fallback = drawEvent2((walkState) => {
+    walkState.cards.decks.C = [];
+  });
+  ok(
+    fallback.cards.hand.length === 1 &&
+      engine.cardById[fallback.cards.hand[0]].deck === engine.DECK.STRATEGY &&
+      fallback.walk.result === WALK_RESULT.ACTION,
+    '"Draw a Character Event card" draws a Strategy card when the Character deck is empty',
+  );
+  const bothEmpty = drawEvent2((walkState) => {
+    walkState.cards.decks.C = [];
+    walkState.cards.decks.S = [];
+  });
+  ok(
+    bothEmpty.cards.hand.length === 0 &&
+      bothEmpty.dice.pool[0].status === DIE_STATE.AVAIL &&
+      bothEmpty.walk.trail.some((entry) => /rule 25/.test(entry.why || "")),
+    "with both Event decks empty the draw is not possible and the die is kept",
+  );
+  const phase1 = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  phase1.strategy = STRATEGY.CORRUPTION;
+  phase1.cards.discards.S = phase1.cards.decks.S.splice(0, 3);
+  phase1.cards.decks.S = [];
+  engine.startPhase(phase1, PHASE.P1);
+  driveWalk(phase1, []);
+  ok(
+    phase1.cards.hand.length === 1 &&
+      engine.cardById[phase1.cards.hand[0]].deck === engine.DECK.CHARACTER,
+    "Phase 1 draws one card when the Strategy deck is empty, and leaves its discards alone",
   );
   const servants = engine.CARDS.find(
     (card) => card.effect === engine.CARD_EFFECT.SERVANTS,
@@ -1601,7 +1641,7 @@ const SCENARIOS = [
   ["6.7", callToBattleCardsIgnoreInitiative],
   ["7.3/7.4", battleOpenResetAndRunGuard],
   ["migrate", migrateUpgradesOldSaves],
-  ["decks", emptyDeckReshufflesDiscards],
+  ["decks", emptyEventDecksFallBack],
   ["6.6", wornWithSorrowAsksAndWormtongueOnSaruman],
   ["7.1", reservedDieCannotBeReservedAgain],
   ["muster", musterChoiceCardAutoAnswered],

@@ -4,11 +4,13 @@ import { DECK } from "./constants.js";
 import { log } from "./log.js";
 import { shuffle } from "./random.js";
 
+// Draw the top card of a deck. An empty Faction Event deck is rebuilt from its discards first (WoME rules); an empty
+// Character or Strategy deck gives nothing (rule 25). Returns the card, or null.
 export function drawCard(state, deckKey) {
   const deck = state.cards.decks[deckKey];
   if (!deck.length) {
     const discards = state.cards.discards[deckKey];
-    if (!discards.length) {
+    if (deckKey !== DECK.FACTION || !discards.length) {
       log(state, "The " + deckName(deckKey) + " deck is empty.");
       return null;
     }

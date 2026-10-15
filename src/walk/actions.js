@@ -17,34 +17,47 @@ import {
 } from "./prompt.js";
 
 // Draw steps and actions on the Event/Faction pages: the deck depends on the box; with cards off the player draws.
-// The deck a draw node draws from: Character or Faction Event where the node says so, otherwise the strategy's preferred deck.
+// The deck a draw node draws from: Character or Faction Event where the node says so, otherwise the strategy's preferred
+// deck. An empty Character or Strategy deck gives way to the other one (rule 25); null when both are empty.
 function drawDeck(state, key) {
-  if (key === "EV.drawChar") return DECK.CHARACTER;
   if (key === "EV.drawFac" || key === "FA.drawT") return DECK.FACTION;
-  return state.strategy === STRATEGY.CORRUPTION
-    ? DECK.CHARACTER
-    : DECK.STRATEGY;
+  let named = DECK.STRATEGY;
+  if (key === "EV.drawChar" || state.strategy === STRATEGY.CORRUPTION)
+    named = DECK.CHARACTER;
+  const other = named === DECK.CHARACTER ? DECK.STRATEGY : DECK.CHARACTER;
+  if (state.cards.decks[named].length) return named;
+  return state.cards.decks[other].length ? other : null;
 }
+const EMPTY_DECK_HELP =
+  "If that deck is empty, draw from the other Event deck (Character or Strategy); if both are empty, the draw is not possible (rule 25).";
 export function drawStep(state, node) {
   const walk = state.walk,
     key = walk.page + "." + walk.node,
     label = normalizeText(NODE.text(node)),
     isStep = NODE.kind(node) === NODE_KIND.STEP;
+  const fromFaction = key === "EV.drawFac" || key === "FA.drawT";
   if (!state.settings.cards)
     return setPrompt(state, {
       type: isStep ? PROMPT.STEP : PROMPT.ACTION,
       text: label,
       node: walk.node,
+      help: fromFaction ? undefined : EMPTY_DECK_HELP,
     });
   const deckKey = drawDeck(state, key);
-  const id = engine.drawCard(state, deckKey);
+  const id = deckKey && engine.drawCard(state, deckKey);
+  if (!id) {
+    trail(state, {
+      kind: TRAIL.SKIP,
+      text: label,
+      why: "no card to draw (rule 25)",
+    });
+    if (isStep) follow(state, null);
+    else exitAction(state);
+    return;
+  }
   trail(state, {
     kind: TRAIL.NOTE,
-    text:
-      "Drew a " +
-      engine.deckName(deckKey) +
-      " card" +
-      (id ? "" : " — deck empty"),
+    text: "Drew a " + engine.deckName(deckKey) + " card",
   });
   if (isStep) {
     follow(state, null);
