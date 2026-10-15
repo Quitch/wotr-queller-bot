@@ -188,10 +188,12 @@ export function criterionTest(crit, state, play, handLimits) {
   return entry ? entry[1](flagsOf, handLimits) : null;
 }
 // Discard one hand (HAND.EVENT or HAND.FACTION) down to its limit using a priority list (discard = the card that best fits).
+// The cards of one hand (the Event hand or the Faction Event hand).
+export const handCards = (state, hand) =>
+  hand === HAND.FACTION ? state.cards.factionHand : state.cards.hand;
 export function autoDiscard(state, criteria, hand) {
   const limit = HAND_LIMIT[hand];
-  const cards =
-    hand === HAND.FACTION ? state.cards.factionHand : state.cards.hand;
+  const cards = handCards(state, hand);
   const done = [];
   let guard = 0;
   while (cards.length > limit && guard++ < DISCARD_GUARD) {

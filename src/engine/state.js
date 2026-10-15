@@ -12,6 +12,7 @@ import {
   STARTING_COMPANIONS,
   VERSION,
   FLOW_REV,
+  FLOW_REV_1_REDRAWN_NODES,
 } from "./constants.js";
 import { log } from "./log.js";
 import { shuffle } from "./random.js";
@@ -144,6 +145,27 @@ function migrateMinions(chars) {
     else if (!statuses.has(chars[key])) chars[key] = MINION_STATUS.AVAILABLE;
   }
 }
+// An unfinished walk from the released flowchart: resume it on the new graph (so nothing it already did is done twice),
+// or drop it when it stands on, or is due to return to, a redrawn node; the phase or battle button then starts it again.
+function migrateWalk(save) {
+  const walk = save.walk;
+  const positions = [walk, ...(walk.stack || [])];
+  if (
+    positions.some((at) =>
+      FLOW_REV_1_REDRAWN_NODES.includes(at.page + "." + at.node),
+    )
+  ) {
+    save.walk = null;
+    if (Array.isArray(save.log))
+      log(
+        save,
+        "The walk in progress stood on a part of the flowchart that has been redrawn and was dropped: start it again from its button.",
+      );
+    return;
+  }
+  walk.flowRev = FLOW_REV;
+  walk.attacking ??= null;
+}
 export function migrate(save) {
   if (save.settings && save.settings.tracker === undefined) {
     save.settings.tracker = save.settings.walk !== false;
@@ -152,15 +174,8 @@ export function migrate(save) {
   if (save.board?.nations) migrateNations(save.board.nations);
   if (save.board?.chars) migrateMinions(save.board.chars);
   if (save.board && save.board.rings === undefined) save.board.rings = 0;
-  // an unfinished walk on an older flowchart cannot go on: drop it, and the phase or battle button starts it again
-  if (save.walk && !save.walk.done && save.walk.flowRev !== FLOW_REV) {
-    save.walk = null;
-    if (Array.isArray(save.log))
-      log(
-        save,
-        "The walk in progress was made on an older flowchart and was dropped: start it again from its button.",
-      );
-  }
+  if (save.walk && !save.walk.done && save.walk.flowRev !== FLOW_REV)
+    migrateWalk(save);
   delete save.shownCard;
   delete save.lastAction;
   return save;

@@ -1,7 +1,7 @@
 // Decision handlers for the Event page: (state, node, facts), each answering a box from the state or asking the player.
 import * as engine from "../../engine/index.js";
 import { DIE_REQUIREMENT, cardById } from "../../engine/index.js";
-import { DIE_REQUIREMENT_NAME } from "../jumps-table.js";
+import { dieWithArticle } from "../jumps-table.js";
 import {
   answerAuto,
   answerByPlayableCount,
@@ -31,12 +31,13 @@ function decideEventDie(state, node, { walk }) {
       state,
       node,
       walk.die === DIE_REQUIREMENT.EVENT,
-      "using a " + DIE_REQUIREMENT_NAME[walk.die] + " die",
+      "using " + dieWithArticle(walk.die) + " die",
     );
   ask(state, node);
 }
 // "Using a Character die and holding a *playable* Character card".
 function decideCharacterDieCard(state, node, facts) {
+  if (!facts.walk.die) return ask(state, node);
   if (answerIfOtherDie(state, node, DIE_REQUIREMENT.CHARACTER)) return;
   if (facts.cardsOn)
     return answerByPlayableCount(
@@ -50,6 +51,7 @@ function decideCharacterDieCard(state, node, facts) {
 }
 // "Using an Event die and holding less than 4 Event cards".
 function decideEventDieHandUnder4(state, node, facts) {
+  if (!facts.walk.die) return ask(state, node);
   if (answerIfOtherDie(state, node, DIE_REQUIREMENT.EVENT)) return;
   decideHandUnder4(state, node, facts);
 }

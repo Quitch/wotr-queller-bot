@@ -1287,8 +1287,24 @@ function eventPageChecksTheDie() {
     ),
     "a Military Character die plays a playable Character card that is not preferred",
   );
+  // the Jump modal can start the page holding no die: the die boxes are then the player's to answer
+  const noDie = phase5State(
+    { dice: true, cards: true, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  noDie.cards.hand = [characterCard];
+  noDie.walk = null;
+  engine.startWalk(noDie, "EV", "Event");
+  const asked = driveWalk(noDie, [byType(PROMPT.CONFIRM, true)]);
+  ok(
+    asked.some(
+      (prompt) => prompt?.type === PROMPT.YES_NO && prompt.node === "charCard",
+    ),
+    "holding no die, the Character-card box is asked, not answered from the hand",
+  );
 }
-// An unfinished walk saved on the released flowchart is dropped on load; a finished one and a current one are kept.
+// A walk saved on the released flowchart resumes on load, unless it stands on a redrawn node; a finished one and a
+// current one are kept.
 function staleSavedWalkIsDropped() {
   const state = phase5State(
     { dice: true, cards: false, tracker: true, wome: false },
@@ -1303,10 +1319,26 @@ function staleSavedWalkIsDropped() {
   );
   const old = JSON.parse(JSON.stringify(state));
   delete old.walk.flowRev;
-  const migrated = engine.migrate(old);
+  delete old.walk.attacking;
+  const resumed = engine.migrate(old);
   ok(
-    migrated.walk === null && migrated.battleOpen,
-    "an unfinished walk from the released flowchart is dropped; the open battle keeps its next-round button",
+    resumed.walk?.node === "downgrade" &&
+      resumed.walk.flowRev === engine.FLOW_REV &&
+      resumed.walk.attacking === null &&
+      resumed.battleOpen,
+    "an unfinished walk from the released flowchart resumes where it stood, so nothing it did is done twice",
+  );
+  const redrawn = JSON.parse(JSON.stringify(state));
+  delete redrawn.walk.flowRev;
+  redrawn.walk.page = "C14";
+  redrawn.walk.node = "disc14";
+  const logLength = redrawn.log.length;
+  const dropped = engine.migrate(redrawn);
+  ok(
+    dropped.walk === null &&
+      dropped.battleOpen &&
+      dropped.log.length === logLength + 1,
+    "a walk standing on a step that became a priority list is dropped, with a log line",
   );
   const finished = JSON.parse(JSON.stringify(state));
   delete finished.walk.flowRev;

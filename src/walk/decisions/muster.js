@@ -39,7 +39,7 @@ function decideWillOfTheWest(state, node, { trackerOn, board, walk }) {
       false,
       "a minion was recruited (eliminated since)",
     );
-  askDecision(state, node);
+  ask(state, node, "Free Peoples have a Will of the West die");
 }
 function decideNationNotAtWar(state, node, { trackerOn, wome }) {
   if (!trackerOn) return askDecision(state, node);

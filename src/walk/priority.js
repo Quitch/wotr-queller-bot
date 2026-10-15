@@ -127,10 +127,7 @@ const chooseDiscard = (hand) =>
       state,
       node,
       walk,
-      (hand === HAND.FACTION
-        ? state.cards.factionHand
-        : state.cards.hand
-      ).slice(),
+      engine.handCards(state, hand).slice(),
     );
   };
 const SHADOW_FACTION_NAMES = ["Corsairs", "Dunlendings", "Spiders"];
