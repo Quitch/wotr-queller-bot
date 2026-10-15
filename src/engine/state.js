@@ -13,6 +13,7 @@ import {
   VERSION,
   FLOW_REV,
 } from "./constants.js";
+import { log } from "./log.js";
 import { shuffle } from "./random.js";
 
 // Every part of a new game, before the decks are built.
@@ -152,8 +153,14 @@ export function migrate(save) {
   if (save.board?.chars) migrateMinions(save.board.chars);
   if (save.board && save.board.rings === undefined) save.board.rings = 0;
   // an unfinished walk on an older flowchart cannot go on: drop it, and the phase or battle button starts it again
-  if (save.walk && !save.walk.done && save.walk.flowRev !== FLOW_REV)
+  if (save.walk && !save.walk.done && save.walk.flowRev !== FLOW_REV) {
     save.walk = null;
+    if (Array.isArray(save.log))
+      log(
+        save,
+        "The walk in progress was made on an older flowchart and was dropped: start it again from its button.",
+      );
+  }
   delete save.shownCard;
   delete save.lastAction;
   return save;

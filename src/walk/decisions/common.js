@@ -3,6 +3,7 @@ import * as engine from "../../engine/index.js";
 import { DECK, MINION_STATUS, TRAIL } from "../../engine/index.js";
 import { NODE, NODE_KIND } from "../../flow/index.js";
 import { endWalk, follow, setPrompt, trail } from "../core.js";
+import { dieWithArticle } from "../jumps-table.js";
 import { evalPlayable } from "../playable.js";
 import { PENDING, PROMPT, WALK_RESULT } from "../prompt.js";
 
@@ -97,6 +98,13 @@ export function answerAuto(state, node, answer, why) {
     why,
   });
 }
+// A decision that needs a given die: No, naming the die, when the walk holds another one. Returns true when it answered.
+export function answerIfOtherDie(state, node, required) {
+  const die = state.walk.die;
+  if (!die || die === required) return false;
+  answerAuto(state, node, false, "using " + dieWithArticle(die) + " die");
+  return true;
+}
 // Answer from the tracker when it is on, otherwise put the question to the player.
 export function answerFromTracker(state, node, answer, why) {
   if (state.settings.tracker) answerAuto(state, node, answer, why);
@@ -170,6 +178,6 @@ export function askDecision(state, node) {
   if (!nodeExtra.items) return ask(state, node);
   ask(state, node, null, {
     items: items.map((item) => item.text),
-    any: !!nodeExtra.any,
+    conditions: !!(nodeExtra.any || nodeExtra.all),
   });
 }

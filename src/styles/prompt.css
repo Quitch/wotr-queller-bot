@@ -99,11 +99,13 @@
   margin: -4px 0 10px;
   max-width: 75ch;
 }
-.prompt ol {
+.prompt ol,
+.prompt ul {
   margin: 0 0 12px;
   padding-left: 22px;
 }
-.prompt ol li {
+.prompt ol li,
+.prompt ul li {
   margin: 2px 0;
 }
 .prompt .answers {

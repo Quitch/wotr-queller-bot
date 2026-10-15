@@ -27,6 +27,11 @@ const orderedListHTML = (items) =>
       items.map((item) => "<li>" + formatText(item) + "</li>").join("") +
       "</ol>"
     : "";
+// A condition list (ANY/ALL) is a bulleted list, as the diagram draws it; a priority list is numbered.
+const conditionListHTML = (items) =>
+  "<ul>" +
+  items.map((item) => "<li>" + formatText(item) + "</li>").join("") +
+  "</ul>";
 const stepsHTML = (steps) =>
   steps?.length
     ? '<ol class="steps">' +
@@ -58,11 +63,14 @@ function renderYesNoPrompt(prompt, walk, node) {
       '<p class="q">' +
       (isRing ? ringIcon() + " " : "") +
       formatText(prompt.text) +
-      "?</p>" +
+      (prompt.text.endsWith(":") ? "" : "?") +
+      "</p>" +
       (isRing
         ? '<div class="bold-note">Elven Ring condition: if it is true and Queller lacks the die the next step needs, it uses an Elven Ring (rule 43).</div>'
         : "") +
-      orderedListHTML(prompt.items),
+      (prompt.conditions
+        ? conditionListHTML(prompt.items)
+        : orderedListHTML(prompt.items)),
     answers: YES_NO_BUTTONS,
   };
 }
