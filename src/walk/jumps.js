@@ -184,9 +184,29 @@ export function ensureDie(state, req, label) {
   if (state.settings.dice) return ensureDieFromPool(state, walk, req, label);
   return askForDie(state, walk, req, label);
 }
+// What else counts as the die asked about, without dice rolled by the app.
+const DIE_QUESTION_NOTE = {
+  [DIE_REQUIREMENT.ARMY]:
+    " (an Army/Muster die counts; so does a Muster die once per turn with Messenger of the Dark Tower when the Mouth of Sauron is in play, rule 30)",
+  [DIE_REQUIREMENT.MUSTER]: " (an Army/Muster die counts)",
+};
+// Messenger of the Dark Tower (rule 30): with the Mouth of Sauron in play, once per turn, a Muster die may act as an
+// Army die when Queller has no Army or Army/Muster die.
+const messengerAvailable = (state) =>
+  engine.minionInPlay(state, "mouth") && !state.messengerUsedThisTurn;
 // With dice rolled by the app: take a matching die from the pool, changing one with an Elven Ring when that is armed.
 function ensureDieFromPool(state, walk, req, label) {
   let die = engine.findDie(state, req);
+  if (!die && req === DIE_REQUIREMENT.ARMY && messengerAvailable(state)) {
+    die = engine.findDie(state, DIE_REQUIREMENT.MUSTER);
+    if (die) {
+      walk.messengerDieIndex = state.dice.pool.indexOf(die);
+      trail(state, {
+        kind: TRAIL.NOTE,
+        text: "Messenger of the Dark Tower: the Muster die acts as an Army die (rule 30)",
+      });
+    }
+  }
   if (!die && ringMayCreate(state, req)) {
     const ringsBefore = state.board.rings;
     const changed = engine.ringChange(state, req);
@@ -227,9 +247,7 @@ function askForDie(state, walk, req, label) {
         "Does Queller have " +
         dieWithArticle(req) +
         " die available" +
-        (req === DIE_REQUIREMENT.ARMY || req === DIE_REQUIREMENT.MUSTER
-          ? " (an Army/Muster die counts)"
-          : "") +
+        (DIE_QUESTION_NOTE[req] || "") +
         "?",
     });
     return PENDING;

@@ -344,6 +344,16 @@ export function spendCurrentDie(state, why) {
   const walk = state.walk;
   if (!walk?.die) return;
   ringDieSpent(state);
+  if (
+    walk.messengerDieIndex != null &&
+    walk.messengerDieIndex === walk.dieIndex
+  ) {
+    state.messengerUsedThisTurn = true;
+    engine.log(
+      state,
+      "Messenger of the Dark Tower used: a Muster die acted as an Army die (rule 30).",
+    );
+  }
   if (state.settings.dice && walk.dieIndex != null) {
     engine.spendDie(state, state.dice.pool[walk.dieIndex], why);
   } else

@@ -1649,6 +1649,45 @@ function wildResultOnlyForFactionEvents() {
     "the Faction die's Wild result plays a Faction Event card and nothing else",
   );
 }
+// Rule 30, Messenger of the Dark Tower: with the Mouth of Sauron in play and no Army or Army/Muster die, a Muster die
+// acts as an Army die, once per turn; a step that turns out not possible does not use the ability.
+function messengerMusterDieActsAsArmyOncePerTurn() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.board.chars.mouth = MINION_STATUS.IN_PLAY;
+  state.dice.pool = [die("Muster"), die("Muster")];
+  const attackThreat = (attack) =>
+    driveWalk(state, [
+      [/under \*threat\*/, true],
+      [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+      [/Attack using Army/, attack],
+      [/^Pass/, "no"],
+      byType(PROMPT.ACTION, "no"),
+    ]);
+  engine.startPhase(state, PHASE.P5);
+  const firstTry = attackThreat("no");
+  const offeredThenNotPossible =
+    firstTry.some((prompt) => /Attack using Army/.test(prompt?.text || "")) &&
+    !state.messengerUsedThisTurn;
+  engine.startPhase(state, PHASE.P5);
+  attackThreat("done");
+  const usedOnce =
+    state.messengerUsedThisTurn &&
+    state.dice.pool.filter((pooled) => pooled.status === DIE_STATE.USED)
+      .length >= 1;
+  engine.startPhase(state, PHASE.P5);
+  const third = attackThreat("done");
+  ok(
+    offeredThenNotPossible &&
+      usedOnce &&
+      !third.some((prompt) => /Attack using Army/.test(prompt?.text || "")),
+    "a Muster die attacks as an Army die once; Not possible does not use the ability; the second time it is not offered",
+  );
+  engine.nextTurn(state);
+  ok(!state.messengerUsedThisTurn, "the next turn makes it available again");
+}
 // The scenarios, with the section of the change log each one guards.
 const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
@@ -1666,6 +1705,7 @@ const SCENARIOS = [
   ["migrate", migrateUpgradesOldSaves],
   ["decks", emptyEventDecksFallBack],
   ["dice", wildResultOnlyForFactionEvents],
+  ["dice", messengerMusterDieActsAsArmyOncePerTurn],
   ["6.6", wornWithSorrowAsksAndWormtongueOnSaruman],
   ["7.1", reservedDieCannotBeReservedAgain],
   ["muster", musterChoiceCardAutoAnswered],
