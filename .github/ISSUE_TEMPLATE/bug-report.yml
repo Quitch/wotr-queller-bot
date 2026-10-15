@@ -7,9 +7,9 @@ body:
       value: |
         Every bug report needs a debug log. Without it the maintainer cannot see the game state and the actions that led to the fault.
 
-        **How to get one.** In the app, open **Settings** (in the **Tools** menu on a narrow screen) and press **Export debug log**. The same button is on the New game screen and on the red error bar after a crash. In the Debug log window, type what went wrong in the box (it is saved into the log), then press **Download debug log**.
+        **How to get one.** In the app, open **Settings** (in the **Tools** menu on a narrow screen) and press **Export debug log**. The same button is on the New game screen and on the red error bar after a crash. In the Debug log window, type what went wrong in the box (it is saved into the log), then press **Download debug log**. Attach the downloaded file below. If GitHub does not accept the `.json` file, rename it to `.txt` or zip it.
 
-        **If nothing downloads.** Press **Copy debug log** (or select all in the text area and copy it), paste it into a new text file, save it as `.txt` and attach that file. The log is too large to paste into this form. If GitHub does not accept the `.json` file, rename it to `.txt` or zip it.
+        **If nothing downloads.** Press **Copy debug log** (or select all in the text area and copy it), paste it into a new text file, save it as `.txt` and attach that file. If you cannot make a file, for example on a phone, paste the log into the Debug log field instead. GitHub rejects a report longer than 65,536 characters, so pasting works only for a short log.
 
         **What is in it.** The app version, the game state, your last actions, any errors, and your browser's user agent, language, screen size and time zone. No personal details. It shows Queller's hidden cards, so only read it if you do not mind seeing them.
 
@@ -25,7 +25,7 @@ body:
     id: expected
     attributes:
       label: What did you expect?
-      description: The rule or the flowchart step, if you know it.
+      description: The rule or the flowchart step, if you know it; otherwise what you thought the app would do.
     validations:
       required: true
   - type: textarea
@@ -50,7 +50,7 @@ body:
     id: debug_log
     attributes:
       label: Debug log
-      description: Drag the `queller-debug-…json` file here (or the `.txt` file you saved). Wait until the upload shows as a link.
+      description: Drag the `queller-debug-…json` file here (or the `.txt` file you saved) and wait until the upload shows as a link. If GitHub refuses the `.json` file, rename it to `.txt` or zip it. Paste the log only if you cannot attach a file; a long log is too large to paste.
     validations:
       required: true
   - type: textarea
@@ -72,7 +72,7 @@ body:
     attributes:
       label: Before sending
       options:
-        - label: The debug log file is attached above.
+        - label: The debug log is attached or pasted above.
           required: true
         - label: I know the log shows Queller's hidden cards.
           required: false
