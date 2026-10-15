@@ -1852,7 +1852,7 @@ function exposedMoveFallsBackToCharacterDie() {
     state.dice.pool = [die("Character")];
     engine.startPhase(state, PHASE.P5);
     const seen = driveWalk(state, [
-      [/under \*threat\*/, true],
+      [/^Shadow under \*threat\*/, true],
       [/^Can move towards \*exposed\*$/, true],
       [/contain a Nazgûl or a minion/, hasNazgul],
       [/^\*Exposed\* \*target\* exists$/, true],
