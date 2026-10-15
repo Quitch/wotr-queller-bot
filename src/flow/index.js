@@ -3,9 +3,9 @@
 // J jump (grey box), P priority list (purple), T step (orange), N note/title.
 // Node: [kind, x, y, width, height, text, extra]. extra: {items: [...], any: true / all: true (the items are a condition
 //   list: ANY or ALL of them; the text is the list's header), plainHeader: true (the header is not bold), bold: true (the
-//   whole box is an Elven Ring condition), wome: true (WoME only), die: "Army" (the die an action box uses), name: "..." (a
-//   jump box's start point when it differs from its text)}. An item is its text, or {text, bold: true (an Elven Ring
-//   condition), wome: true (WoME only)}; read items through NODE.items.
+//   whole box is an Elven Ring condition), wome: true (WoME only), die: "Army" (the die an action box uses), help: "..."
+//   (a line of help under an action), name: "..." (a jump box's start point when it differs from its text)}. An item is
+//   its text, or {text, bold: true (an Elven Ring condition), wome: true (WoME only)}; read items through NODE.items.
 // Edge: [from, to, label, waypoints, anchors {ex, en}, style ("elbow"), hideLabel]; slots 3-6 are filled from
 //   anchors.json (generated from the draw.io file by scripts/sync-anchors.js: exact exit/entry anchors and waypoints per edge).
 //   A decision edge with no label is the answer the other edge lacks.

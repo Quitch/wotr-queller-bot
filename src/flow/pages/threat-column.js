@@ -52,7 +52,10 @@ export function threatColumn(threatY) {
       120,
       60,
       "Move using Character die",
-      { die: "Character" },
+      {
+        die: "Character",
+        help: "Move on the Army page with an Army that contains a Nazgûl or a minion.",
+      },
     ],
     routeThreat: [
       "d",
