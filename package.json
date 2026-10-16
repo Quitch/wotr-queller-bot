@@ -15,7 +15,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "test": "node test/check.js && node test/verify.js && node test/debuglog.js && node test/render.js && node test/ui.js && node test/contrast.js && node test/fuzz.js 1",
-    "coverage": "c8 --src src --all --exclude test --exclude scripts --exclude build.js -r text -r lcov npm test",
+    "coverage": "c8 --src src --all --exclude test --exclude scripts --exclude build.js --check-coverage --lines 92 --statements 92 --functions 91 --branches 93 -r text -r lcov npm test",
     "smoke": "node test/smoke.js",
     "a11y": "node test/a11y.js",
     "reader": "node test/reader.js",

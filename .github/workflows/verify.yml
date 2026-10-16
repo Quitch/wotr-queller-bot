@@ -23,12 +23,12 @@ jobs:
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run lint
-      - run: npm run coverage # every Node test under c8; writes coverage/lcov.info for Sonar
+      - run: npm run coverage # every Node test under c8; fails below the coverage floor; writes coverage/lcov.info for Sonar
       - run: npm run build # a bundle that no longer builds fails here (esbuild's platform binary is an optional dependency, so no install script is needed)
       - name: Check for the SonarQube Cloud token # a fork's pull request has no secret; the rest of the job still verifies it
         id: sonar
         run: echo "token=${{ secrets.SONAR_TOKEN != '' }}" >> "$GITHUB_OUTPUT" # the expression is expanded to true or false, so the token never reaches the shell
-      - name: SonarQube Cloud scan
+      - name: SonarQube Cloud scan # waits for the quality gate (sonar.qualitygate.wait) and fails when it fails
         if: steps.sonar.outputs.token == 'true'
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:
