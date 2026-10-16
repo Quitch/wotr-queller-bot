@@ -230,47 +230,56 @@ function pageRecords(page, pageKey) {
   for (const cell of page.cells)
     if (styleOf(cell.attrs.style).edgeLabel && cell.attrs.value)
       childLabels.set(cell.attrs.parent, plainText(cell.attrs.value));
+  const context = { pageKey, nodeIds, boxes, flowEdges, childLabels };
   const records = [];
   for (const cell of page.cells) {
     if (cell.attrs.edge !== "1") continue;
-    const style = styleOf(cell.attrs.style);
-    const { from, to, ex, en } = arrowEnds(cell, nodeIds, boxes);
-    // an arrow from a box back to itself is a drawing slip, not a route
-    if (from && from === to) continue;
-    if (!from || !to) {
-      console.warn(
-        `${pageKey}: arrow ${cell.attrs.id} joins boxes flow.js does not have (${cell.attrs.source || JSON.stringify(cell.ends.sourcePoint)} -> ${cell.attrs.target || JSON.stringify(cell.ends.targetPoint)})`,
-      );
-      continue;
-    }
-    const candidates = flowEdges.filter(
-      (edge) => EDGE.from(edge) === from && EDGE.to(edge) === to,
-    );
-    const { label, nolabel } = arrowLabel(
-      cell,
-      candidates,
-      childLabels.get(cell.attrs.id),
-      NODE.kind(FLOW[pageKey].nodes[from]) === NODE_KIND.JUMP,
-    );
-    if (!candidates.some((edge) => (EDGE.label(edge) || null) === label))
-      console.warn(
-        `${pageKey}: no flow.js edge ${from} -> ${to} labelled ${JSON.stringify(label)}`,
-      );
-    const an = ex || en ? {} : null;
-    if (ex) an.ex = ex;
-    if (en) an.en = en;
-    records.push({
-      p: pageKey,
-      f: from,
-      t: to,
-      l: label,
-      wp: cell.points.length ? cell.points : null,
-      an,
-      elbow: style.edgeStyle === "elbowEdgeStyle",
-      nolabel,
-    });
+    const record = arrowRecord(cell, context);
+    if (record) records.push(record);
   }
   return records;
+}
+// The record of one arrow, or null for an arrow that is not a route (a loop on one box, or ends flow.js lacks).
+function arrowRecord(
+  cell,
+  { pageKey, nodeIds, boxes, flowEdges, childLabels },
+) {
+  const style = styleOf(cell.attrs.style);
+  const { from, to, ex, en } = arrowEnds(cell, nodeIds, boxes);
+  // an arrow from a box back to itself is a drawing slip, not a route
+  if (from && from === to) return null;
+  if (!from || !to) {
+    console.warn(
+      `${pageKey}: arrow ${cell.attrs.id} joins boxes flow.js does not have (${cell.attrs.source || JSON.stringify(cell.ends.sourcePoint)} -> ${cell.attrs.target || JSON.stringify(cell.ends.targetPoint)})`,
+    );
+    return null;
+  }
+  const candidates = flowEdges.filter(
+    (edge) => EDGE.from(edge) === from && EDGE.to(edge) === to,
+  );
+  const { label, nolabel } = arrowLabel(
+    cell,
+    candidates,
+    childLabels.get(cell.attrs.id),
+    NODE.kind(FLOW[pageKey].nodes[from]) === NODE_KIND.JUMP,
+  );
+  if (!candidates.some((edge) => (EDGE.label(edge) || null) === label))
+    console.warn(
+      `${pageKey}: no flow.js edge ${from} -> ${to} labelled ${JSON.stringify(label)}`,
+    );
+  const an = ex || en ? {} : null;
+  if (ex) an.ex = ex;
+  if (en) an.en = en;
+  return {
+    p: pageKey,
+    f: from,
+    t: to,
+    l: label,
+    wp: cell.points.length ? cell.points : null,
+    an,
+    elbow: style.edgeStyle === "elbowEdgeStyle",
+    nolabel,
+  };
 }
 // List the records that are new, changed or gone between the tracked file and the regenerated ones.
 function reportDifferences(current, records) {
