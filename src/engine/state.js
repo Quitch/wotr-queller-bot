@@ -93,6 +93,7 @@ export function newState(settings) {
     cards: newCards(),
     board: newBoard(),
     ringUsedThisTurn: false,
+    messengerUsedThisTurn: false, // Messenger of the Dark Tower (rule 30): once per turn
     situational: {},
     playable: {},
     battle: null,

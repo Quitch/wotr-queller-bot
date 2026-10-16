@@ -346,11 +346,19 @@ export function handleAction(state, node) {
 export function releaseCurrentDie(state) {
   state.walk.die = null;
   state.walk.dieIndex = null;
+  state.walk.dieViaMessenger = false;
 }
 export function spendCurrentDie(state, why) {
   const walk = state.walk;
   if (!walk?.die) return;
   ringDieSpent(state);
+  if (walk.dieViaMessenger) {
+    state.messengerUsedThisTurn = true;
+    engine.log(
+      state,
+      "Messenger of the Dark Tower used: a Muster die acted as an Army die (rule 30).",
+    );
+  }
   if (state.settings.dice && walk.dieIndex != null) {
     engine.spendDie(state, state.dice.pool[walk.dieIndex], why);
   } else

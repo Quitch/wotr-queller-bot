@@ -64,5 +64,6 @@ export function nextTurn(state) {
   state.battle = null;
   state.battleOpen = false;
   state.ringUsedThisTurn = false;
+  state.messengerUsedThisTurn = false;
   engine.log(state, "— Turn " + state.turn + " —");
 }

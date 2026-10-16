@@ -54,6 +54,7 @@ export function recoverDice(state) {
     });
   state.minionReserved = false;
   state.ringUsedThisTurn = false;
+  state.messengerUsedThisTurn = false;
   state.situational = {};
   state.playable = {};
   log(

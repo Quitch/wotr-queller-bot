@@ -1992,6 +1992,93 @@ function wildResultOnlyForFactionSteps() {
     "dice off: the question for a Faction die says a Wild result counts",
   );
 }
+// Rule 30, Messenger of the Dark Tower: with the Mouth of Sauron in play and no Army or Army/Muster die, a Muster die
+// acts as an Army die, once per turn; a step that turns out not possible does not use the ability.
+function messengerMusterDieActsAsArmyOncePerTurn() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.board.chars.mouth = MINION_STATUS.IN_PLAY;
+  state.dice.pool = [die("Muster"), die("Muster")];
+  const attackThreat = (attack) =>
+    driveWalk(state, [
+      [/^Shadow under \*threat\*/, true],
+      [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+      [/Attack using Army/, attack],
+      [/^Pass/, "no"],
+      byType(PROMPT.ACTION, "no"),
+    ]);
+  engine.startPhase(state, PHASE.P5);
+  const firstTry = attackThreat("no");
+  const offeredThenNotPossible =
+    firstTry.some((prompt) => /Attack using Army/.test(prompt?.text || "")) &&
+    !state.messengerUsedThisTurn;
+  // the first walk found no action and set a die aside (rule 39); the attack spends exactly one more
+  const usedDice = () =>
+    state.dice.pool.filter((pooled) => pooled.status === DIE_STATE.USED).length;
+  const usedBefore = usedDice();
+  engine.startPhase(state, PHASE.P5);
+  attackThreat("done");
+  const usedOnce = state.messengerUsedThisTurn && usedDice() === usedBefore + 1;
+  engine.startPhase(state, PHASE.P5);
+  const third = attackThreat("done");
+  ok(
+    offeredThenNotPossible &&
+      usedOnce &&
+      !third.some((prompt) => /Attack using Army/.test(prompt?.text || "")),
+    "a Muster die attacks as an Army die once; Not possible does not use the ability; the second time it is not offered",
+  );
+  engine.nextTurn(state);
+  ok(!state.messengerUsedThisTurn, "the next turn makes it available again");
+  // the Army attack claims the Muster die through Messenger and is not possible; the Muster page then spends that die
+  // as a Muster die, which uses no Messenger
+  const musterAfter = phase5State(
+    { dice: true, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  musterAfter.board.chars.mouth = MINION_STATUS.IN_PLAY;
+  musterAfter.dice.pool = [die("Muster")];
+  engine.startPhase(musterAfter, PHASE.P5);
+  driveWalk(musterAfter, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+    [/^Attack using Army die$/, "no"],
+    [/is valid for muster$/, true],
+    [/able to muster$/, true],
+    byType(PROMPT.ACTION, "done"),
+  ]);
+  ok(
+    musterAfter.dice.pool[0].status === DIE_STATE.USED &&
+      !musterAfter.messengerUsedThisTurn,
+    "a Muster die given up as an Army die and then spent as a Muster die uses no Messenger",
+  );
+  // dice off: after a No to the Army die, Messenger is its own question; a Yes and the attack use it for the turn
+  const diceOff = phase5State(
+    { dice: false, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  diceOff.board.chars.mouth = MINION_STATUS.IN_PLAY;
+  const messengerAsks = (attack) => {
+    engine.startPhase(diceOff, PHASE.P5);
+    return driveWalk(diceOff, [
+      [/^Shadow under \*threat\*/, true],
+      [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+      [/^Does Queller have a Muster die to use as an Army die/, true],
+      [/^Does Queller have/, false],
+      [/^Attack using Army die$/, attack],
+      [/^Pass/, "no"],
+      byType(PROMPT.ACTION, "no"),
+    ]).filter((prompt) => prompt?.messenger).length;
+  };
+  const firstAsks = messengerAsks("done");
+  const usedOff = diceOff.messengerUsedThisTurn;
+  const secondAsks = messengerAsks("done");
+  ok(
+    firstAsks === 1 && usedOff && secondAsks === 0,
+    "dice off: the Messenger question comes after a No to the Army die, and once used it is not asked again that turn",
+  );
+}
 // A walk started from the Jump modal holds no die: "Using a Character die and …" asks only about the die and checks the
 // cards from the hand, and "Muster 3" claims a Muster die from the pool instead of carrying a die it does not hold.
 function walkWithoutADie() {
@@ -2050,6 +2137,7 @@ const SCENARIOS = [
   ["migrate", migrateUpgradesOldSaves],
   ["decks", emptyEventDecksFallBack],
   ["dice", wildResultOnlyForFactionSteps],
+  ["dice", messengerMusterDieActsAsArmyOncePerTurn],
   ["6.6", wornWithSorrowAsksAndWormtongueOnSaruman],
   ["7.1", reservedDieCannotBeReservedAgain],
   ["muster", musterChoiceCardAutoAnswered],

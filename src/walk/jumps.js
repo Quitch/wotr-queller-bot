@@ -159,7 +159,11 @@ function jumpWithDie(state, spec, label) {
     return;
   }
   letGoOtherRingDie(state, spec.die);
-  const before = { die: walk.die, dieIndex: walk.dieIndex };
+  const before = {
+    die: walk.die,
+    dieIndex: walk.dieIndex,
+    dieViaMessenger: walk.dieViaMessenger,
+  };
   const dieResult = ensureDie(state, spec.die, label);
   if (dieResult === PENDING) return;
   if (!dieResult) {
@@ -175,7 +179,7 @@ function jumpWithDie(state, spec, label) {
     state,
     spec,
     label,
-    sameDie ? { die: null, dieIndex: null } : before,
+    sameDie ? { die: null, dieIndex: null, dieViaMessenger: false } : before,
   );
 }
 // Make sure Queller has a die of type `req` for the step `label`. Returns true (use it), false (skipped, trail written), or PENDING (prompt open).
@@ -189,9 +193,24 @@ export function ensureDie(state, req, label) {
   if (state.settings.dice) return ensureDieFromPool(state, walk, req, label);
   return askForDie(state, walk, req, label);
 }
+// Messenger of the Dark Tower (rule 30): with the Mouth of Sauron in play, once per turn, a Muster die may act as an
+// Army die when Queller has no Army or Army/Muster die.
+const messengerAvailable = (state) =>
+  engine.minionInPlay(state, "mouth") && !state.messengerUsedThisTurn;
 // With dice rolled by the app: take a matching die from the pool, changing one with an Elven Ring when that is armed.
 function ensureDieFromPool(state, walk, req, label) {
   let die = engine.findDie(state, req);
+  let viaMessenger = false;
+  if (!die && req === DIE_REQUIREMENT.ARMY && messengerAvailable(state)) {
+    die = engine.findDie(state, DIE_REQUIREMENT.MUSTER);
+    if (die) {
+      viaMessenger = true;
+      trail(state, {
+        kind: TRAIL.NOTE,
+        text: "Messenger of the Dark Tower: the Muster die acts as an Army die (rule 30)",
+      });
+    }
+  }
   const allowed = !die && ringMayCreate(state, req) && ringAllowed(state, req);
   if (allowed === PENDING) return PENDING;
   if (allowed) {
@@ -221,6 +240,7 @@ function ensureDieFromPool(state, walk, req, label) {
     return false;
   }
   walk.dieIndex = state.dice.pool.indexOf(die);
+  walk.dieViaMessenger = viaMessenger;
   return true;
 }
 // The rule 46 question a limited ring offer depends on, as the offer states it.
@@ -242,6 +262,38 @@ const DIE_QUESTION_NOTE = {
   [DIE_REQUIREMENT.FACTION_DRAW]:
     " (a Wild result on the Faction die counts, rule 31)",
 };
+// With dice off, Messenger of the Dark Tower may apply unless it was used this turn or the tracker shows no Mouth of
+// Sauron in play.
+const messengerPossible = (state) =>
+  !state.messengerUsedThisTurn &&
+  (!state.settings.tracker || engine.minionInPlay(state, "mouth"));
+// With dice off, after a No to the Army die: may a Muster die act as one (rule 30)?
+function askMessenger(state, req, label) {
+  setPrompt(state, {
+    type: PROMPT.DIE_CHECK,
+    req,
+    label,
+    messenger: true,
+    text: "Does Queller have a Muster die to use as an Army die with Messenger of the Dark Tower (the Mouth of Sauron in play, once per turn, rule 30)?",
+  });
+  return PENDING;
+}
+// With dice off and no die of type `req`: offer an Elven Ring, once per walk.
+function offerRing(state, walk, req, label) {
+  walk.ringAsked = true;
+  setPrompt(state, {
+    type: PROMPT.RING,
+    req,
+    label,
+    text:
+      (engine.ringsKnown(state) ? "" : "If the Shadow holds an Elven Ring: ") +
+      "Use an Elven Ring (rule 43): change one Queller die that does not show a *preferred* result into " +
+      dieWithArticle(req) +
+      " result. Choose the die at random. If the step then turns out not to be possible, the app tells you to turn the die back (rule 43)." +
+      ringLimitText(ringQuestion(state, req)),
+  });
+  return PENDING;
+}
 // Without dice: ask the player whether Queller has the die (once per type per walk), then offer an Elven Ring before giving up.
 function askForDie(state, walk, req, label) {
   if (walk.dieAns[req] === undefined) {
@@ -258,25 +310,19 @@ function askForDie(state, walk, req, label) {
     });
     return PENDING;
   }
-  if (walk.dieAns[req]) return true;
-  if (ringMayCreate(state, req) && !walk.ringAsked) {
-    walk.ringAsked = true;
-    const limit = ringQuestion(state, req);
-    setPrompt(state, {
-      type: PROMPT.RING,
-      req,
-      label,
-      text:
-        (engine.ringsKnown(state)
-          ? ""
-          : "If the Shadow holds an Elven Ring: ") +
-        "Use an Elven Ring (rule 43): change one Queller die that does not show a *preferred* result into " +
-        dieWithArticle(req) +
-        " result. Choose the die at random. If the step then turns out not to be possible, the app tells you to turn the die back (rule 43)." +
-        ringLimitText(limit),
-    });
-    return PENDING;
+  if (walk.dieAns[req]) {
+    if (req === DIE_REQUIREMENT.ARMY && walk.messengerAns)
+      walk.dieViaMessenger = true;
+    return true;
   }
+  if (
+    req === DIE_REQUIREMENT.ARMY &&
+    walk.messengerAns === null &&
+    messengerPossible(state)
+  )
+    return askMessenger(state, req, label);
+  if (ringMayCreate(state, req) && !walk.ringAsked)
+    return offerRing(state, walk, req, label);
   trail(state, {
     kind: TRAIL.SKIP,
     text: label,
@@ -292,6 +338,7 @@ function enterPage(state, spec, label, before) {
     node: walk.node,
     die: before ? before.die : walk.die,
     dieIndex: before ? before.dieIndex : walk.dieIndex,
+    dieViaMessenger: before ? before.dieViaMessenger : walk.dieViaMessenger,
     dieUsed: walk.dieUsed,
   });
   if (spec.held) ringDieHeldAs(state, spec.die);
