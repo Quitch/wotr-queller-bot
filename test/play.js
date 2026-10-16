@@ -227,10 +227,11 @@ function playPhase5(state, tag, hooks) {
   return true;
 }
 // One game: setup, then `turns` turns of every phase; returns the final state (early when a problem stopped it).
-// hooks: see driveWalk, plus afterPhase(state, tag) after each phase of a turn.
+// hooks: see driveWalk, plus onGameStart(state) on the new game and afterPhase(state, tag) after each phase of a turn.
 export function game(settings, gameNumber, hooks = {}, turns = TURNS_PER_GAME) {
   const state = engine.newState(settings);
   const gameTag = JSON.stringify(settings) + " g" + gameNumber;
+  hooks.onGameStart?.(state);
   if (!playSetup(state, gameTag, hooks)) return state;
   for (let turn = 0; turn < turns; turn++) {
     const tag = gameTag + " T" + state.turn;
