@@ -19,6 +19,12 @@ const SRC_DIR = path.join(import.meta.dirname, "..", "src");
 const CARD_COUNT = 79;
 const CARDS_PER_DECK = { C: 25, S: 28, F: 20, B: 6 };
 const CARDS_PER_SET = { "2E": 48, WoME: 29, "WoME-rev": 2 };
+// The decks a new game deals: 24 Character and 24 Strategy cards, and with WoME (whose cards replace base ones, WoME
+// rules setup) the same plus 20 Faction Event cards.
+const BUILT_DECK_SIZES = {
+  base: { C: 24, S: 24, F: 0 },
+  wome: { C: 24, S: 24, F: 20 },
+};
 const CARD_TYPES = ["Character", "Army", "Muster"];
 const INIT_RANGE = /^\d+-\d+$/; // an initiative given as a range, "3-5"
 const CARD_TEXT_FIELDS = [
@@ -190,6 +196,24 @@ function checkCardData() {
       fail(card.id + " has half a combat half");
   }
 }
+// A new game's decks, with and without WoME, have the sizes the rulebooks set up.
+function checkBuiltDecks() {
+  for (const [name, expected] of Object.entries(BUILT_DECK_SIZES)) {
+    const { decks } = engine.newState({ wome: name === "wome" }).cards;
+    const deckKeys = new Set(Object.keys(decks).concat(Object.keys(expected)));
+    for (const deckKey of deckKeys)
+      if ((decks[deckKey]?.length ?? -1) !== expected[deckKey])
+        fail(
+          name +
+            " built deck " +
+            deckKey +
+            " has " +
+            decks[deckKey]?.length +
+            " cards, expected " +
+            expected[deckKey],
+        );
+  }
+}
 // The glossary key a *term* resolves to, as ui/dom.js termKey does: the term, an alias, or the term without its plural s.
 function termKey(term) {
   term = term.toLowerCase().replace(/\s+/g, " ").trim();
@@ -356,6 +380,7 @@ async function main() {
   checkFlowchartShape();
   checkCardFlags(state);
   checkCardData();
+  checkBuiltDecks();
   const { terms, citations } = checkReferenceText();
   checkAnchors();
   checkPromptTables();
