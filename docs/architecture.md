@@ -19,7 +19,7 @@ From the bottom up:
 
 ## Import cycles
 
-`ui/` and `modals/` import each other, and inside the walker `run.js → actions.js → jumps.js → run.js` and `core.js ↔ rings.js`, but only through functions called at run time. Never read a binding imported across a cycle while a module evaluates (for example, to build a table); `test/check.js` loads every module under `walk/`, `ui/` and `modals/` first, in a fresh process, to catch one that does; `MODAL` and the text helpers therefore come from `ui/constants.js` and `ui/dom.js` directly, not from `ui/index.js`.
+`ui/` and `modals/` import each other, and inside the walker `run.js → actions.js → jumps.js → run.js` and `core.js ↔ rings.js`, but only through functions called at run time. Never read a binding imported across a cycle while a module evaluates (for example, to build a table); `MODAL` and the text helpers therefore come from `ui/constants.js` and `ui/dom.js` directly, not from `ui/index.js`. `test/check.js` loads every module under `walk/`, `ui/` and `modals/` first, in a fresh process, to catch one that does.
 
 ## Public surfaces and module state
 

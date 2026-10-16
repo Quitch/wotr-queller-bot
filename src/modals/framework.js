@@ -69,8 +69,10 @@ function focusAfterRender(modal, el, previousKey) {
   if (!previousKey) ui.find("#mtitle").focus();
 }
 function modalContent(modal) {
-  const spec = registry()[modal.name];
-  return spec ? spec.content(modal) : { title: "", body: "", narrow: false };
+  const spec = specOf(modal);
+  return spec.content
+    ? spec.content(modal)
+    : { title: "", body: "", narrow: false };
 }
 export function renderModal() {
   const modal = ui.modal;

@@ -1,6 +1,7 @@
 // Static consistency checks between the walker / the engine, the UI and the flowchart, card, reference and arrow data.
 // Exit 1 on any failure.
 import fs from "node:fs";
+import os from "node:os";
 import { execFile } from "node:child_process";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -307,7 +308,7 @@ function checkPromptTables() {
     if (!types.includes(type)) fail("renderer for unknown prompt " + type);
 }
 // The import cycles stay safe: each module under src/walk/, src/ui/ and src/modals/ loads first, in a fresh process,
-// without reading a binding that a cycle has not yet initialised. The processes run side by side.
+// without reading a binding that a cycle has not yet initialised. As many processes run side by side as there are CPUs.
 const LOAD_ORDER_DIRS = ["walk", "ui", "modals"];
 async function checkLoadsInAnyOrder() {
   const modules = LOAD_ORDER_DIRS.flatMap((dir) =>
@@ -333,7 +334,14 @@ async function checkLoadsInAnyOrder() {
       );
     }
   };
-  await Promise.all(modules.map(loadFirst));
+  const queue = modules.slice();
+  // each worker loads the next module when its last one is done
+  const worker = async () => {
+    if (!queue.length) return;
+    await loadFirst(queue.shift());
+    await worker();
+  };
+  await Promise.all(Array.from({ length: os.availableParallelism() }, worker));
   return modules.length;
 }
 async function main() {
