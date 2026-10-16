@@ -250,14 +250,13 @@ function ensureDieFromPool(state, walk, req, label) {
   const allowed = !die && ringMayCreate(state, req) && ringAllowed(state, req);
   if (allowed === PENDING) return PENDING;
   if (allowed) {
-    const ringsBefore = state.board.rings;
     const changed = engine.ringChange(state, req);
     if (changed) {
       die = changed.die;
       ringUsed(
         state,
         req,
-        ringsBefore,
+        changed.taken,
         state.dice.pool.indexOf(die),
         changed.from,
       );

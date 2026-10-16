@@ -36,6 +36,8 @@ export {
   allShadowFactionsInPlay,
   ringsKnown,
   ringAvailable,
+  takeRing,
+  giveBackRing,
   huntCap,
   minionsAvailable,
 } from "./board.js";

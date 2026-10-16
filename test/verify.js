@@ -2005,13 +2005,27 @@ function ringMakesNoFactionDie() {
     engine.startWalk(state, "M5", "Phase 5", { mode: "ringAny" });
     return state;
   };
+  const factionFaces = new Set([
+    "Wild",
+    DIE_REQUIREMENT.FACTION_RECRUIT,
+    DIE_REQUIREMENT.FACTION_PLAY,
+    DIE_REQUIREMENT.FACTION_DRAW,
+  ]);
   const diceOn = ringSearch(true);
   driveWalk(diceOn, [byType(PROMPT.ACTION, "no")]);
   ok(
-    !diceOn.log.some((entry) =>
-      /Elven Ring: changed a \w+ die to Wild/.test(entry.text),
-    ),
-    "dice on: the rule 44 walk never changes a die to Wild for a Faction step",
+    !diceOn.log.some((entry) => {
+      const changed = /Elven Ring: changed a \w+ die to (\w+)/.exec(entry.text);
+      return changed && factionFaces.has(changed[1]);
+    }),
+    "dice on: the rule 44 walk never changes a die for a Faction step",
+  );
+  const direct = ringSearch(true);
+  ok(
+    engine.ringChange(direct, DIE_REQUIREMENT.FACTION_RECRUIT) === null &&
+      direct.board.rings === 1 &&
+      direct.dice.pool[0].face === "Eye",
+    "dice on: ringChange makes no Faction die and keeps the ring",
   );
   const diceOff = ringSearch(false);
   const factionOffers = driveWalk(diceOff, [
@@ -2024,6 +2038,34 @@ function ringMakesNoFactionDie() {
   ok(
     diceOff.walk.done && factionOffers.length === 0,
     "dice off: the rule 44 walk offers no ring for a Faction step",
+  );
+  // a save from before this fix may hold a ring offer for a Faction step: a Yes to it uses no ring
+  const restored = ringSearch(false);
+  driveWalk(restored, [
+    byType(PROMPT.ACTION, "no"),
+    {
+      test: (prompt) =>
+        prompt.type === PROMPT.DIE_CHECK &&
+        prompt.req === DIE_REQUIREMENT.FACTION_PLAY,
+      answer: (prompt) => {
+        restored.walk.prompt = {
+          type: PROMPT.RING,
+          req: prompt.req,
+          label: prompt.label,
+          text: "Use an Elven Ring",
+        };
+        return true;
+      },
+    },
+  ]);
+  ok(
+    restored.walk.done &&
+      restored.board.rings === 1 &&
+      !restored.ringUsedThisTurn &&
+      restored.log.some((entry) =>
+        /cannot make a Faction die/.test(entry.text),
+      ),
+    "dice off: a Yes to a saved ring offer for a Faction step uses no ring",
   );
 }
 // Rule 30, Messenger of the Dark Tower: with the Mouth of Sauron in play and no Army or Army/Muster die, a Muster die

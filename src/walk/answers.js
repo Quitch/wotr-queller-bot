@@ -111,6 +111,14 @@ function answerDieCheck(state, prompt, value) {
 }
 function answerRing(state, prompt, value) {
   const walk = state.walk;
+  // a save from before WoME p.8 was applied may hold a ring offer for a Faction step: a ring cannot make that die
+  if (value && engine.isFactionRequirement(prompt.req)) {
+    engine.log(
+      state,
+      "An Elven Ring cannot make a Faction die (WoME p.8): no ring used.",
+    );
+    value = false;
+  }
   if (prompt.messenger) walk.messengerAns = !!value;
   walk.dieAns[prompt.req] = !!value;
   walk.pendingDie = prompt.label;
@@ -118,10 +126,7 @@ function answerRing(state, prompt, value) {
     ringDeclined(state, prompt.req);
     return;
   }
-  const ringsBefore = state.board.rings;
-  state.board.rings = Math.max(0, state.board.rings - 1);
-  state.ringUsedThisTurn = true;
-  ringUsed(state, prompt.req, ringsBefore);
+  ringUsed(state, prompt.req, engine.takeRing(state));
   engine.log(
     state,
     "Elven Ring used to create " +

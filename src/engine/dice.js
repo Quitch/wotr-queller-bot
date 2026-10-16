@@ -1,5 +1,10 @@
 // The dice: recovering, the Hunt box, rolling, finding and spending a die, and the Elven Ring change.
-import { huntCap, minionInPlay, shadowFactionInPlay } from "./board.js";
+import {
+  huntCap,
+  minionInPlay,
+  shadowFactionInPlay,
+  takeRing,
+} from "./board.js";
 import {
   BASE_ACTION_DICE,
   DIE_KIND,
@@ -8,6 +13,7 @@ import {
   FACE,
   MINIONS,
   STRATEGY,
+  isFactionRequirement,
 } from "./constants.js";
 import { log } from "./log.js";
 import { pick, randomBelow } from "./random.js";
@@ -189,10 +195,11 @@ export function nonPreferredFirst(state, dice, count) {
   }
   return out;
 }
-// Elven Ring (rule 43): change one non-preferred available die to the required result. Returns {die, from} (the face it
-// showed), or null when no die is available. A ring never serves a Faction step (WoME p.8: it cannot change the Faction
-// die, and an Action die cannot act on Faction figures); walk/rings.js ringMayCreate keeps it from being asked to.
+// Elven Ring (rule 43): change one non-preferred available die to the required result. Returns {die, from, taken} (the
+// face it showed and takeRing's count), or null when no die is available or the step is a Faction step (WoME p.8: a
+// ring cannot change the Faction die, and an Action die cannot act on Faction figures).
 export function ringChange(state, req) {
+  if (isFactionRequirement(req)) return null;
   const available = availableActionDice(state);
   if (!available.length) return null;
   const die = nonPreferredFirst(state, available, 1)[0];
@@ -200,8 +207,7 @@ export function ringChange(state, req) {
   let face = req;
   if (req === DIE_REQUIREMENT.CHAR_OR_MUSTER) face = FACE.CHARACTER;
   die.face = face;
-  state.board.rings = Math.max(0, state.board.rings - 1);
-  state.ringUsedThisTurn = true;
+  const taken = takeRing(state);
   log(
     state,
     "Used an Elven Ring: changed a " +
@@ -212,5 +218,5 @@ export function ringChange(state, req) {
       state.board.rings +
       ".",
   );
-  return { die, from };
+  return { die, from, taken };
 }
