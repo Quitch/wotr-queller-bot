@@ -436,8 +436,34 @@ function checkArmyMovePrompts() {
       ")",
   );
 }
+// The tracker's Declared row shows, in the full and the minimal tracker, only while a card a declaration may discard
+// is on the table.
+function checkDeclaredRow() {
+  for (const tracker of [true, false]) {
+    const state = engine.newState({
+      dice: true,
+      cards: true,
+      tracker,
+      wome: false,
+    });
+    ui.setState(state);
+    state.cards.table = [engine.CARD.THREATS_AND_PROMISES];
+    const without = fakeWindow.gameHTML();
+    state.cards.table.push(engine.CARD.WORN_WITH_SORROW);
+    const withCard = fakeWindow.gameHTML();
+    ok(
+      !without.includes('id="t-fs-declared"') &&
+        withCard.includes('id="t-fs-declared"') &&
+        withCard.includes('aria-describedby="t-fs-declared-what"'),
+      "tracker " +
+        (tracker ? "full" : "minimal") +
+        ": the Declared row shows only with Flocks of Crebain or Worn with Sorrow and Toil on the table",
+    );
+  }
+}
 function main() {
   playGames();
+  checkDeclaredRow();
   checkArmyMovePrompts();
   checkSituationalPrompt();
   checkConditionListPrompt();
