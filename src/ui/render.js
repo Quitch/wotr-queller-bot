@@ -1,6 +1,7 @@
 // Rendering the page: the New game screen or the game screen, keeping focus, open details and scroll positions
 // across a re-render.
 import { renderModal } from "../modals/index.js";
+import { settleBattleDraft } from "./battle-form.js";
 import { LEGAL } from "./constants.js";
 import { diceHTML } from "./dice.js";
 import { find, focusKey } from "./dom.js";
@@ -16,19 +17,29 @@ import { wire } from "./wire.js";
 
 // The regions whose scroll position survives a re-render.
 const SCROLLED = [".trail", ".log"];
-const captureFocus = () => ({
-  key: focusKey(document.activeElement),
-  wasAnswer: document.activeElement?.dataset?.ans !== undefined,
-});
-// After an answer (or when a prompt opened with nothing focused) focus the prompt or result; otherwise the same control as before.
-function restoreFocus(root, { key, wasAnswer }) {
-  if (wasAnswer || (state.walk?.prompt && !key)) {
-    const focusTarget = find(".prompt, .result");
-    if (focusTarget) focusTarget.focus();
-  } else if (key) {
-    const el = root.querySelector(key);
-    if (el) el.focus();
+const captureFocus = () => {
+  const el = document.activeElement;
+  return {
+    key: focusKey(el),
+    wasAnswer: el?.dataset?.ans !== undefined,
+    inModal: !!el?.closest?.("#modal"),
+  };
+};
+// Focus the first candidate that takes it (one that is gone, disabled or hidden does not).
+function focusFirst(candidates) {
+  for (const el of candidates) {
+    el?.focus();
+    if (el && document.activeElement === el) return;
   }
+}
+// After an answer (or when a prompt opened with nothing focused) focus the prompt or result; otherwise the same control
+// as before, or, when that control is gone or cannot take focus, the prompt or result, then the walkthrough. Focus in
+// the modal is the modal's to restore (modals/framework.js).
+function restoreFocus(root, { key, wasAnswer, inModal }) {
+  if (inModal) return;
+  const fallbacks = () => [find(".prompt, .result"), find("#main")];
+  if (wasAnswer || (state.walk?.prompt && !key)) focusFirst(fallbacks());
+  else if (key) focusFirst([root.querySelector(key), ...fallbacks()]);
 }
 // Each <details> with its open state and its data-key (what it is about), so a toggle survives a re-render of the same thing.
 // These four bookkeeping helpers are exported for test/ui.js, which runs them over stand-in roots.
@@ -71,6 +82,7 @@ export function render() {
     wireSetup();
     return;
   }
+  settleBattleDraft();
   root.innerHTML = gameHTML();
   wire();
   restoreDetails(root, details);

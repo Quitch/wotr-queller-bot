@@ -1,5 +1,6 @@
 // Browser smoke test: boots the built page the way the artifact host does, plays through a turn with every option on,
-// exercises the tracker triggers, the table-card list, the die tap, undo and every modal, then a 360px touch screen
+// checks that a double-click answers one prompt and that the battle form keeps its ticks across a re-render, exercises
+// the tracker triggers, the table-card list, the die tap, undo and every modal, then a 360px touch screen
 // (the Tools menu, no sideways scroll). axe-core runs on every screen and modal. Fails on any page error or a serious
 // axe violation.
 import { readFile } from "node:fs/promises";
@@ -49,6 +50,32 @@ const debugLog = async (page) =>
   JSON.parse(await page.inputValue(SEL.DEBUG_TEXT));
 const usable = (state, status) =>
   state.dice.pool.filter((die) => die.status === status).length;
+const undoDepth = (page) => page.evaluate(() => window.QBUI.history.length);
+// A double-click on an answer answers that prompt only. The first click re-renders, so the second one lands on
+// whatever is under the pointer; that is sent straight to the next prompt's first button (or, when the walk ended, the
+// first phase button), as a click with detail 2, so the check does not depend on where the layout puts it.
+async function checkDoubleClickAnswersOnce(page) {
+  const button = await page.$(SEL.ANSWER_BUTTONS);
+  if (!button) {
+    debugFailures.push("no prompt to double-click");
+    return;
+  }
+  const before = await undoDepth(page);
+  await button.click();
+  const next =
+    (await page.$(SEL.ANSWER_BUTTONS)) ||
+    (await page.$(".phasebar [data-phase]"));
+  const box = await next.boundingBox();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down({ clickCount: 2 });
+  await page.mouse.up({ clickCount: 2 });
+  const after = await undoDepth(page);
+  console.log("double-click on an answer: undo steps", before, "→", after);
+  if (after !== before + 1)
+    debugFailures.push(
+      "a double-click on an answer recorded " + (after - before) + " answers",
+    );
+}
 
 async function newGameWithEverythingOn(page) {
   await axeCheck(page, "setup screen");
@@ -87,12 +114,13 @@ async function newGameWithEverythingOn(page) {
     state.phase,
   );
 }
-// Phase 5 walks until the Phase 6 button appears (bounded).
+// Phase 5 walks until the Phase 6 button appears (bounded); the first walk's first answer is a double-click.
 async function playPhase5UntilPhase6(page) {
   for (let i = 0; i < MAX_PHASE5_WALKS; i++) {
     const phase5Btn = await page.$(SEL.phase("p5"));
     if (!phase5Btn) break;
     await phase5Btn.click();
+    if (i === 0) await checkDoubleClickAnswersOnce(page);
     await answerAll(page);
   }
   const state = await readState(page);
@@ -105,8 +133,24 @@ async function playPhase5UntilPhase6(page) {
     state.log.length,
   );
 }
+// The battle form keeps a tick across a re-render (a tracker change and its Undo) until it is submitted.
 async function playBattle(page) {
   await page.click(SEL.phase("battle1"));
+  if (await page.$(SEL.BATTLE_FORM_OK)) {
+    await page.check(SEL.BATTLE_NEAR_MORIA);
+    await page.click(SEL.RINGS_INCREASE);
+    const afterChange = await page.isChecked(SEL.BATTLE_NEAR_MORIA);
+    await page.click(SEL.UNDO);
+    const afterUndo = await page.isChecked(SEL.BATTLE_NEAR_MORIA);
+    console.log(
+      "battle form tick after a tracker change:",
+      afterChange,
+      "after its Undo:",
+      afterUndo,
+    );
+    if (!afterChange || !afterUndo)
+      debugFailures.push("a re-render cleared the unsubmitted battle form");
+  } else debugFailures.push("the battle did not open the battle form");
   await answerAll(page);
 }
 // Put Saruman in play with Wormtongue + Palantír on the table, set him to eliminated → auto-discards; Gondor to war →

@@ -64,7 +64,10 @@ function tableCardHTML(id) {
   return (
     '<div class="tc"><b>' +
     escapeHTML(card.title) +
-    '</b><button class="btn small" data-card="' +
+    // the id keeps focus on the toggle when it flips between Details and Hide
+    '</b><button class="btn small" id="tcd-' +
+    id +
+    '" data-card="' +
     (open ? "hide" : "show") +
     '" data-id="' +
     id +

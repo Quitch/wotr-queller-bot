@@ -16,7 +16,12 @@ export * as QB_UI from "../src/ui/index.js";
 // The panels and tables the render and unit tests build or check without a DOM.
 export { gameHTML } from "../src/ui/render.js";
 export { PROMPT_RENDERERS, promptHTML } from "../src/ui/prompts.js";
-export { battleFormHTML, dieHelpText } from "../src/ui/battle-form.js";
+export {
+  battleFormHTML,
+  dieHelpText,
+  settleBattleDraft,
+} from "../src/ui/battle-form.js";
+export { battleDraft, setBattleDraft } from "../src/ui/session.js";
 export { setupHTML } from "../src/ui/setup.js";
 export { resultHTML, trailHTML } from "../src/ui/trail.js";
 export { PHASE_BY_LABEL } from "../src/ui/header.js";

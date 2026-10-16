@@ -6,7 +6,11 @@ import { modalRegistrations } from "./index.js";
 
 let modals = null; // the registry, built on first use: index.js is still evaluating when a modal loads first
 const OPEN_CLASS = "modalOpen"; // on <html> while a modal is open: the page behind it does not scroll
-let opener = null; // the element to give focus back to when the modal closes
+// The element to give focus back to when the modal closes, and its focus key, which finds it again when a re-render
+// of the page has replaced it.
+let opener = null;
+let openerKey = null;
+let shownModal = null; // the ui.modal last rendered: a different one is a new modal, not a re-render
 const registry = () => (modals ??= modalRegistrations());
 const specOf = (modal) => registry()[modal.name] || {};
 // The modal's element: a dialog box with a header (title, the modal's own buttons, Close) and the content's body.
@@ -26,6 +30,8 @@ function buildModalElement(modal, { title, body, narrow }) {
     "</div>";
   return el;
 }
+const precedes = (a, b) =>
+  !!(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 // Tab and Shift+Tab stay inside the modal while it is open.
 function trapTabFocus(el) {
   el.addEventListener("keydown", (event) => {
@@ -38,12 +44,21 @@ function trapTabFocus(el) {
       (candidate) => !candidate.disabled && candidate.offsetParent !== null,
     );
     if (!focusable.length) return;
-    const first = focusable[0],
+    const active = document.activeElement,
+      first = focusable[0],
       last = focusable.at(-1);
-    if (event.shiftKey && document.activeElement === first) {
+    // Focus on an element outside the list (the title, a glossary entry) wraps when nothing lies beyond it that way.
+    const index = focusable.indexOf(active);
+    const before =
+      index === -1
+        ? focusable.filter((c) => precedes(c, active)).length
+        : index;
+    const atStart = before === 0,
+      atEnd = index === -1 ? before === focusable.length : active === last;
+    if (event.shiftKey && atStart) {
       last.focus();
       event.preventDefault();
-    } else if (!event.shiftKey && document.activeElement === last) {
+    } else if (!event.shiftKey && atEnd) {
       first.focus();
       event.preventDefault();
     }
@@ -80,10 +95,14 @@ export function renderModal() {
   const existing = ui.find("#modal");
   let previousKey = null;
   if (existing) {
-    if (existing.contains(document.activeElement))
+    if (modal === shownModal && existing.contains(document.activeElement))
       previousKey = focusKey(document.activeElement) || "#mtitle";
     existing.remove();
-  } else opener = document.activeElement;
+  } else {
+    opener = document.activeElement;
+    openerKey = focusKey(opener);
+  }
+  shownModal = modal;
   specOf(modal).beforeRender?.(modal);
   const content = modalContent(modal);
   const el = buildModalElement(modal, content);
@@ -107,8 +126,9 @@ export function closeModal() {
   document.documentElement.classList.remove(OPEN_CLASS);
   const app = ui.find("#app");
   if (app) app.removeAttribute("inert");
-  if (opener?.isConnected) {
-    opener.focus();
-  }
+  const target = opener?.isConnected ? opener : openerKey && ui.find(openerKey);
+  if (target) target.focus();
   opener = null;
+  openerKey = null;
+  shownModal = null;
 }
