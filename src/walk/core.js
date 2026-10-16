@@ -156,6 +156,15 @@ export function exitJump(state) {
   // follow the arrow out of the current grey box; if none, return further
   if (!follow(state, null)) doReturn(state);
 }
+// The Muster die brought back from "set aside for a minion" is still unspent: with dice off, the walk still holds it.
+function reservedDieUnspent(state) {
+  const walk = state.walk;
+  if (!state.settings.dice) return walk.die != null;
+  return (
+    walk.reservedDieIndex != null &&
+    state.dice.pool[walk.reservedDieIndex].status === engine.DIE_STATE.AVAIL
+  );
+}
 export function doReturn(state) {
   const walk = state.walk;
   if (walk.page === "AR" && walk.armyMoves === 1) {
@@ -169,17 +178,11 @@ export function doReturn(state) {
   }
   if (!walk.stack.length) {
     // A die brought back from "set aside for a minion" that found no action is spent, not set aside again (rule 34: it cannot be used for anything else).
-    if (
-      walk.fromReserve &&
-      state.settings.dice &&
-      walk.reservedDieIndex != null &&
-      state.dice.pool[walk.reservedDieIndex].status === engine.DIE_STATE.AVAIL
-    ) {
-      engine.spendDie(
-        state,
-        state.dice.pool[walk.reservedDieIndex],
-        "set aside for a minion, no action possible",
-      );
+    if (walk.fromReserve && reservedDieUnspent(state)) {
+      const why = "set aside for a minion, no action possible";
+      if (state.settings.dice)
+        engine.spendDie(state, state.dice.pool[walk.reservedDieIndex], why);
+      else spendCurrentDie(state, why);
       endWalk(
         state,
         WALK_RESULT.ACTION,
