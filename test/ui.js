@@ -463,12 +463,20 @@ function checkBattleFormDraft() {
     fakeWindow.battleDraft === null,
     "the draft is dropped once the battle form prompt is gone",
   );
+  const other = engine.newState({ cards: true, wome: true });
+  other.phase = PHASE.P5;
+  engine.startBattle(other, 1);
   fakeWindow.setBattleDraft(draft);
-  ui.setState(null);
-  fakeWindow.settleBattleDraft();
+  ui.setState(other);
   ok(
     fakeWindow.battleDraft === null,
-    "the draft is dropped on the New game screen",
+    "the draft is dropped when another game, also at a battle form, replaces this one",
+  );
+  fakeWindow.setBattleDraft(draft);
+  ui.setState(null);
+  ok(
+    fakeWindow.battleDraft === null,
+    "the draft is dropped when the game is cleared for the New game screen",
   );
 }
 // Saving into a slot writes the game with its turn and time under qb.slots (a fake localStorage as in checkStorage).

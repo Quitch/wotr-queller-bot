@@ -843,6 +843,124 @@ function sideWalkKeepsTheBattleOpen() {
       ") keeps the battle open; the Phase 5 walk closes it",
   );
 }
+// A stand-in document just deep enough for ui/render.js and the modal framework to run in Node: every query finds a
+// blank element (none finds an open #modal), and nothing ever takes focus.
+function fakeElement() {
+  return {
+    dataset: {},
+    style: {},
+    classList: { add() {}, remove() {}, contains: () => false },
+    setAttribute() {},
+    removeAttribute() {},
+    hasAttribute: () => false,
+    addEventListener() {},
+    appendChild() {},
+    remove() {},
+    focus() {},
+    contains: () => false,
+    closest: () => null,
+    querySelector: () => fakeElement(),
+    querySelectorAll: () => [],
+  };
+}
+function withFakeDocument(fn) {
+  const body = fakeElement();
+  globalThis.document = {
+    body,
+    documentElement: fakeElement(),
+    activeElement: body,
+    createElement: fakeElement,
+    querySelector: (selector) => (selector === "#modal" ? null : fakeElement()),
+    querySelectorAll: () => [],
+    getElementById: () => fakeElement(),
+  };
+  try {
+    fn();
+  } finally {
+    delete globalThis.document;
+    fakeWindow.QB_UI.setState(null);
+    fakeWindow.QB_UI.setHistory([]);
+  }
+}
+// Opening the Jump modal changes nothing in the game, so it is not an Undo step.
+function openingJumpAddsNoUndoStep() {
+  const ui = fakeWindow.QB_UI;
+  withFakeDocument(() => {
+    ui.setState(
+      phase5State({ dice: false, cards: false, tracker: false, wome: false }),
+    );
+    ui.setHistory([]);
+    fakeWindow.onPhase(fakeWindow.PHASE_ACTION.JUMP_TO);
+    ok(
+      ui.history.length === 0 && ui.modal?.name === ui.MODAL.JUMP,
+      "the Jump modal opens with no Undo step (" +
+        ui.history.length +
+        " steps)",
+    );
+    fakeWindow.closeModal();
+  });
+}
+// The battle form's unsubmitted answers survive a re-render and an Undo of the same game, and go when the game is
+// replaced: by another game at a battle form, or by the New game screen and then a loaded game at a battle form.
+function battleDraftSurvivesRendersNotANewGame() {
+  const ui = fakeWindow.QB_UI;
+  const atBattleForm = () => {
+    const state = phase5State({
+      dice: false,
+      cards: true,
+      tracker: true,
+      wome: false,
+    });
+    engine.startBattle(state, 1);
+    return state;
+  };
+  const draft = {
+    nazLead: 1,
+    shadowElite: false,
+    seElite: false,
+    isengardStronghold: false,
+    defInFs: false,
+    nearMoria: true,
+    figures: { corsairs: false, dunlendings: false, spiders: false },
+    underSiege: false,
+    attackingSiege: false,
+  };
+  const nearMoriaTicked = () =>
+    /id="bf-nearMoria" [^>]*checked/.test(fakeWindow.gameHTML());
+  withFakeDocument(() => {
+    ui.setState(atBattleForm());
+    ui.setHistory([]);
+    fakeWindow.setBattleDraft(draft);
+    ui.render();
+    ui.act(() => {
+      ui.state.board.rings++;
+    });
+    const afterRender = fakeWindow.battleDraft === draft && nearMoriaTicked();
+    fakeWindow.undo();
+    const afterUndo = fakeWindow.battleDraft === draft && nearMoriaTicked();
+    ui.setState(atBattleForm());
+    ui.render();
+    const afterReplace = fakeWindow.battleDraft === null && !nearMoriaTicked();
+    fakeWindow.setBattleDraft(draft);
+    ui.setState(null);
+    ui.render();
+    ui.setState(atBattleForm());
+    ui.render();
+    const afterLoad = fakeWindow.battleDraft === null && !nearMoriaTicked();
+    ok(
+      afterRender && afterUndo && afterReplace && afterLoad,
+      "the battle form draft survives a re-render (" +
+        afterRender +
+        ") and an Undo (" +
+        afterUndo +
+        "), and goes when another game replaces it (" +
+        afterReplace +
+        ") or is loaded from the New game screen (" +
+        afterLoad +
+        ")",
+    );
+  });
+}
 function battleOpenResetAndRunGuard() {
   const turnState = phase5State({
     dice: false,
@@ -3255,6 +3373,8 @@ const SCENARIOS = [
   ["6.7", callToBattleCardsIgnoreInitiative],
   ["7.3/7.4", battleOpenResetAndRunGuard],
   ["7.3/7.4", sideWalkKeepsTheBattleOpen],
+  ["ui", openingJumpAddsNoUndoStep],
+  ["ui", battleDraftSurvivesRendersNotANewGame],
   ["migrate", migrateUpgradesOldSaves],
   ["decks", emptyEventDecksFallBack],
   ["decks", drawStepWithNoCardKeepsTheDie],

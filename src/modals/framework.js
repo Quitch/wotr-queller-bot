@@ -11,6 +11,10 @@ const OPEN_CLASS = "modalOpen"; // on <html> while a modal is open: the page beh
 let opener = null;
 let openerKey = null;
 let shownModal = null; // the ui.modal last rendered: a different one is a new modal, not a re-render
+// False from when a new modal opens until it gets a single click (or a key press): until then a click with detail > 1
+// is the rest of the double-click that opened it, landing on its backdrop or a button, and is dropped. Repeat clicks
+// after that (a stepper pressed quickly) go through.
+let takesRepeatClicks = false;
 const registry = () => (modals ??= modalRegistrations());
 const specOf = (modal) => registry()[modal.name] || {};
 // The modal's element: a dialog box with a header (title, the modal's own buttons, Close) and the content's body.
@@ -64,6 +68,13 @@ function trapTabFocus(el) {
     }
   });
 }
+function dropOpeningRepeatClick(event) {
+  if (event.detail <= 1) takesRepeatClicks = true;
+  else if (!takesRepeatClicks) {
+    event.stopImmediatePropagation();
+    event.preventDefault();
+  }
+}
 // The scrollable body of a modal is a focusable landmark for keyboard and screen-reader users.
 function labelBodyRegions(el, title) {
   el.querySelectorAll(".body").forEach((region) => {
@@ -102,6 +113,7 @@ export function renderModal() {
     opener = document.activeElement;
     openerKey = focusKey(opener);
   }
+  if (modal !== shownModal) takesRepeatClicks = false;
   shownModal = modal;
   specOf(modal).beforeRender?.(modal);
   const content = modalContent(modal);
@@ -111,6 +123,7 @@ export function renderModal() {
   const app = ui.find("#app");
   if (app) app.setAttribute("inert", "");
   ui.find("#mclose").onclick = closeModal;
+  el.addEventListener("click", dropOpeningRepeatClick, true);
   el.addEventListener("click", (event) => {
     if (event.target === el) closeModal();
   });

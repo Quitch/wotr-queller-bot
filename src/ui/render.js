@@ -77,12 +77,12 @@ export function render() {
   const focus = captureFocus();
   const details = detailsBefore(root);
   const scroll = scrollBefore(root);
+  settleBattleDraft();
   if (!state) {
     root.innerHTML = setupHTML();
     wireSetup();
     return;
   }
-  settleBattleDraft();
   root.innerHTML = gameHTML();
   wire();
   restoreDetails(root, details);

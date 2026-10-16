@@ -22,7 +22,8 @@ import {
 } from "./tracker.js";
 
 // The second click of a double-click lands on whatever the first one rendered (the next prompt's button), so the
-// controls that move the game on ignore it. A keyboard press is a click with detail 0.
+// controls that move the game on ignore it (a modal the first click opened drops it itself, modals/framework.js). A
+// keyboard press is a click with detail 0.
 const isRepeatClick = (event) => event?.detail > 1;
 function wireHeader() {
   find("#undoBtn").onclick = undo;
@@ -78,9 +79,7 @@ function wireBattleForm() {
   });
 }
 function wireDiceSpend() {
-  onClickEach("[data-spend]", (button, event) => {
-    if (!isRepeatClick(event)) spendDieClick(+button.dataset.spend);
-  });
+  onClickEach("[data-spend]", (button) => spendDieClick(+button.dataset.spend));
 }
 function wireTableCards() {
   onClickEach("[data-card]", (button) =>
