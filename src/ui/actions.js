@@ -14,13 +14,14 @@ function snapshot() {
 }
 // The page is built before the autosave is written, so a game that cannot be drawn never replaces the autosave.
 export function commit() {
+  let html;
   if (state) {
     state.appVersion = engine.VERSION;
-    gameHTML();
+    html = gameHTML();
   }
   if (!storageSet(STORAGE_KEY.AUTOSAVE, JSON.stringify(state)))
     showStorageNotice();
-  render();
+  render(html);
 }
 // Every change to the game goes through here. `info` names the action for the debug log ({a:"answer", ...}).
 // If the action or drawing its result throws, the game is put back as it was before it, the error is recorded and the

@@ -1200,6 +1200,24 @@ const HOSTILE_FIELDS = {
   "die index": (save) => (save.walk.dieIndex = "__proto__"),
   "die index past the pool": (save) => (save.walk.dieIndex = 1),
   "return frame die index": (save) => (save.walk.stack[0].dieIndex = 5),
+  "deck without its Faction pile": (save) => delete save.cards.decks.F,
+  "discard pile that is not a list": (save) => (save.cards.discards.S = {}),
+  "choice that writes another walk field": (save) =>
+    (save.walk.prompt = {
+      type: PROMPT.CHOICE,
+      text: "x",
+      set: "dieIndex",
+      options: [{ value: "1", label: "x" }],
+    }),
+  "choice option that is not text": (save) =>
+    (save.walk.prompt = {
+      type: PROMPT.CHOICE,
+      text: "x",
+      set: "minionPick",
+      options: [{ value: { toString: XSS }, label: "x" }],
+    }),
+  "roll option that is not text": (save) =>
+    (save.walk.prompt = { type: PROMPT.ROLL, text: "x", options: [[XSS]] }),
   "node of a newer flowchart": (save) => {
     save.walk.flowRev = engine.FLOW_REV + 1;
     save.walk.node = "nodeOfTheNextRevision";
@@ -1360,6 +1378,25 @@ function corruptSlotsReadAsEmpty() {
   });
 }
 // STATE-06: a stored debug log keeps only its object records, so a corrupt entry cannot block the export.
+// A refused autosave inside an action is noted on that action's record, not recorded in its place.
+function noteGoesOnTheOpenAction() {
+  const debug = fakeWindow.QB_DEBUG;
+  const state = engine.newState({});
+  debug.begin({ action: "probe", detail: 1 }, state);
+  debug.note({ storageFailed: true }, state);
+  debug.finishAction(state);
+  const record = debug.actions.at(-1);
+  debug.note({ storageFailed: true }, state);
+  const alone = debug.actions.at(-1);
+  ok(
+    record.action === "probe" &&
+      record.detail === 1 &&
+      record.notes?.[0]?.storageFailed &&
+      alone.action === "note" &&
+      alone.storageFailed,
+    "a note goes on the open action, or on a record of its own when none is open",
+  );
+}
 function corruptDebugRecordsAreDropped() {
   const debug = fakeWindow.QB_DEBUG;
   const stored = JSON.stringify({
@@ -3764,6 +3801,7 @@ const SCENARIOS = [
   ["save", unrenderableActionKeepsTheGame],
   ["save", corruptSlotsReadAsEmpty],
   ["save", corruptDebugRecordsAreDropped],
+  ["save", noteGoesOnTheOpenAction],
   ["decks", emptyEventDecksFallBack],
   ["decks", drawStepWithNoCardKeepsTheDie],
   ["faction", servantsOfSauronCannotDrawItself],

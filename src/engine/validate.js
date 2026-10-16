@@ -3,6 +3,7 @@
 import { FLOW, NODE_KIND } from "../flow/index.js";
 import { cardById } from "./cards.js";
 import {
+  DECK,
   DEFAULT_STEP_LIMIT,
   DIE_KIND,
   DIE_REQUIREMENT,
@@ -15,6 +16,12 @@ import {
 } from "./constants.js";
 
 const TURN_LIMIT = [1, DEFAULT_STEP_LIMIT[1]];
+// The piles cards.decks and cards.discards must hold (the engine indexes all three).
+const PILES = [DECK.CHARACTER, DECK.STRATEGY, DECK.FACTION];
+// The walk fields a choice prompt's answer is written to (prompt.set; walk/priority.js promptChoice, the fields of
+// walkChoiceState in walk/core.js). "choice" is PROMPT.CHOICE in walk/prompt.js.
+const CHOICE_FIELDS = new Set(["nationChoice", "factionChoice", "minionPick"]);
+const CHOICE_PROMPT = "choice";
 const valuesOf = (values) => new Set(Object.values(values));
 const PHASES = valuesOf(PHASE),
   STRATEGIES = valuesOf(STRATEGY),
@@ -44,9 +51,10 @@ function integer(value, [min, max], field) {
 function checkCardList(list, field) {
   check(Array.isArray(list) && list.every(isCard), field);
 }
-// A pile of piles (the decks, the discards): each one a list of card ids.
+// A pile of piles (the decks, the discards): the Character, Strategy and Faction piles, each one a list of card ids.
 function checkCardPiles(piles, field) {
   check(isObject(piles), field);
+  for (const key of PILES) checkCardList(piles[key], field + "." + key);
   for (const [key, list] of Object.entries(piles))
     checkCardList(list, field + "." + key);
 }
@@ -98,12 +106,26 @@ function checkTrail(trail) {
       "walk.trail",
     );
 }
+// A prompt's options: the strings of a roll, or {value, label} strings of a choice.
+const isOption = (option) =>
+  typeof option === "string" ||
+  (isObject(option) &&
+    typeof option.value === "string" &&
+    typeof option.label === "string");
 function checkPrompt(prompt) {
   if (prompt == null) return;
+  const choice = prompt?.type === CHOICE_PROMPT;
   check(
     isObject(prompt) &&
       optional(prompt.kind, (kind) => NODE_KINDS.has(kind)) &&
-      optional(prompt.card, isCard),
+      optional(prompt.card, isCard) &&
+      (prompt.options === undefined ||
+        (Array.isArray(prompt.options) && prompt.options.every(isOption))) &&
+      (prompt.set === undefined || CHOICE_FIELDS.has(prompt.set)) &&
+      (!choice ||
+        (CHOICE_FIELDS.has(prompt.set) &&
+          Array.isArray(prompt.options) &&
+          prompt.options.every(isObject))),
     "walk.prompt",
   );
 }

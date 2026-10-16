@@ -50,9 +50,9 @@ function saveHTML() {
 export function loadHTML() {
   return '<p class="notice" style="margin:0 0 6px">Paste a save code, or choose a save file.</p><label for="loadTxt" class="notice">Save code</label><textarea id="loadTxt" placeholder="Paste the save code here"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="loadTxtBtn">Load from code</button><label class="btn filebtn">Save file <input type="file" id="loadFile" accept=".json,.txt,application/json,text/plain"></label></div><div id="loadErr" class="notice" role="alert" style="color:var(--bad)"></div>';
 }
-// Replace the game with a parsed save. A save that cannot be drawn throws before the autosave is written (ui.commit):
-// the game in progress, its Undo steps and its battle form draft come back, and so does the save modal it was loaded
-// from.
+// Replace the game with a parsed save. A save that cannot be drawn throws (ui.commit builds the page before the
+// autosave): the game in progress, its Undo steps and its battle form draft come back, are saved and drawn again (in
+// case only wiring the page failed after the autosave was written), and so does the save modal it was loaded from.
 function replaceGame(save, title) {
   const previous = {
     state: ui.state,
@@ -73,22 +73,42 @@ function replaceGame(save, title) {
     ui.setHistory(previous.history);
     ui.setBattleDraft(previous.battleDraft);
     debug.error(error, { action: "loadFailed", rolledBack: true }, save);
+    ui.storageSet(
+      ui.STORAGE_KEY.AUTOSAVE,
+      previous.state ? JSON.stringify(previous.state) : "",
+    );
+    ui.render();
     if (previous.state) ui.openModal(MODAL.SAVE);
     throw error;
   }
   debug.finishAction(save);
 }
-function showLoadError(error) {
+function showLoadError(text) {
   const errorEl = ui.find("#loadErr");
-  if (errorEl)
-    errorEl.textContent = "That is not a Queller save: " + error.message;
+  if (errorEl) errorEl.textContent = text;
 }
+// A save refused by loadJSON (not JSON, or migrate's checks: "not a Queller save (field)"), and one that loaded but
+// could not be drawn.
+const refusedText = (error) =>
+  /^not a Queller save/.test(error.message)
+    ? "That is " + error.message + "."
+    : "That is not a Queller save: " + error.message;
+const notDrawnText = (error) =>
+  "That save loaded but could not be shown, so it was not used: " +
+  error.message;
 // Parse a save and load it; what goes wrong is said in the Load area.
 function loadText(text, title) {
+  let save;
   try {
-    loadGame(ui.loadJSON(text), title);
+    save = ui.loadJSON(text);
   } catch (error) {
-    showLoadError(error);
+    showLoadError(refusedText(error));
+    return;
+  }
+  try {
+    loadGame(save, title);
+  } catch (error) {
+    showLoadError(notDrawnText(error));
   }
 }
 // Ask before replacing a game in progress; No returns to the save modal.
@@ -108,7 +128,7 @@ function confirmReplace(save, title) {
       try {
         replaceGame(save, title);
       } catch (error) {
-        showLoadError(error);
+        showLoadError(notDrawnText(error));
       }
     },
   });

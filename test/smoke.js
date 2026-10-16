@@ -517,31 +517,55 @@ async function checkFailedActionAndUncaughtError(page) {
   return log.actions.length;
 }
 // Storage that refuses every write: the first autosave that fails says so in the bar, once per page load.
+// An error bar already shown stays beside the notice, and the debug log notes the refusal on the action that saved.
 async function checkStorageNotice(page) {
   const first = await page.evaluate(() => {
+    const byId = (id) => window.document.getElementById(id);
+    window.QBUI.showErrBar();
     window.smokeSetItem = Storage.prototype.setItem;
     Storage.prototype.setItem = () => {
       throw new Error("smoke: storage full");
     };
     window.QBUI.act(() => {}, { action: "smokeStorage" });
-    return window.document.getElementById("errbar")?.textContent || "";
+    return {
+      notice: byId("storebar")?.textContent || "",
+      errorKept: !!byId("errbarLog"),
+    };
   });
-  await axeCheck(page, "storage notice");
+  await axeCheck(page, "storage notice beside the error bar");
   const shownAgain = await page.evaluate(() => {
-    window.document.getElementById("errbarClose").click();
+    const byId = (id) => window.document.getElementById(id);
+    byId("storebarClose").click();
+    byId("errbarClose").click();
     window.QBUI.act(() => {}, { action: "smokeStorage" });
     Storage.prototype.setItem = window.smokeSetItem;
     window.QBUI.act(() => {}, { action: "smokeStorage" });
-    return !!window.document.getElementById("errbar");
+    return !!byId("storebar");
   });
+  await page.click(SEL.modal("settings"));
+  await page.click(SEL.DEBUG_OPEN);
+  const noted = (await debugLog(page)).actions.some(
+    (record) =>
+      record.action === "smokeStorage" && record.notes?.[0]?.storageFailed,
+  );
+  await page.click(SEL.MODAL_CLOSE);
   console.log(
     "storage notice:",
-    first.slice(0, 60),
+    first.notice.slice(0, 60),
+    "error bar kept:",
+    first.errorKept,
     "shown again:",
     shownAgain,
+    "noted on the action:",
+    noted,
   );
-  if (!/not saving the game/.test(first) || shownAgain)
-    debugFailures.push("storage notice not shown once");
+  if (
+    !/not saving the game/.test(first.notice) ||
+    !first.errorKept ||
+    shownAgain ||
+    !noted
+  )
+    debugFailures.push("storage notice not shown once beside the error bar");
 }
 // Reload from the autosave; the action history survives the reload and a new game clears the game.
 async function checkReloadKeepsHistory(page, actionsBefore) {
