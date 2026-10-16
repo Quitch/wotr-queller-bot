@@ -1651,6 +1651,35 @@ function ringUsedOnlyWhereRule46Allows() {
     "no ring for the Witch-king when he cannot join or create a mobile Army",
   );
 }
+// Corruption's "Mordor win" box: without the tracker the bold question keeps "Fellowship on the Mordor Track"; with it,
+// and the Fellowship not on the Mordor Track, only the target part is asked.
+function mordorWinRingPartAsksWholeBoldCondition() {
+  const boldPrompt = (tracker) => {
+    const state = phase5State({
+      dice: false,
+      cards: false,
+      tracker,
+      wome: false,
+    });
+    engine.startPhase(state, PHASE.P5);
+    const seen = driveWalk(state, [
+      [/^\*Mobile\* Army \*adjacent\* to \*target\*$/, true],
+    ]);
+    return seen.find((prompt) => /would win the game/.test(prompt.text));
+  };
+  const untracked = boldPrompt(false);
+  ok(
+    untracked?.bold &&
+      /Fellowship on the Mordor Track/.test(untracked.text) &&
+      /would win the game/.test(untracked.text),
+    "tracker off: the bold question asks about the Mordor Track and the target's win",
+  );
+  const tracked = boldPrompt(true);
+  ok(
+    tracked?.bold && tracked.text === "*Target* would win the game",
+    "tracker on, Fellowship not on the Mordor Track: the bold question asks about the target only",
+  );
+}
 // Dice off: a No to "Does Queller have … die?" goes on to offer the ring, and a ring for a step that was not possible
 // tells the player to turn the die back.
 function diceOffRingOfferedAndTurnedBack() {
@@ -2414,6 +2443,7 @@ const SCENARIOS = [
   ["calc", captainOfTheWestCountsOnce],
   ["rings", ringReturnedWhenItsStepIsNotPossible],
   ["rings", ringUsedOnlyWhereRule46Allows],
+  ["rings", mordorWinRingPartAsksWholeBoldCondition],
   ["rings", diceOffRingOfferedAndTurnedBack],
   ["rings", ringSettledWhereTheDieGoes],
   ["rings", ringSettledAtTheNextBoldBox],
