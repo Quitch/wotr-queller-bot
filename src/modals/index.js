@@ -4,7 +4,6 @@ import { askDialog } from "./ask.js";
 import { calculator } from "./calc.js";
 import { debugLog } from "./debug.js";
 import { flowViewer } from "./flow/index.js";
-import { registerModals } from "./framework.js";
 import { glossary } from "./glossary.js";
 import { help } from "./help.js";
 import { jump } from "./jump.js";
@@ -13,8 +12,9 @@ import { saveLoad } from "./save.js";
 import { settings } from "./settings.js";
 import { tools } from "./tools.js";
 
-// The registrations by modal name (test/render.js builds every modal's content from them).
-export const MODAL_REGISTRATIONS = {
+// The registrations by modal name (test/render.js builds every modal's content from them). A function, so nothing
+// imported across the ui/ and modals/ cycle is read while this module evaluates.
+export const modalRegistrations = () => ({
   [MODAL.GLOSSARY]: glossary,
   [MODAL.RULES]: rules,
   [MODAL.FLOW]: flowViewer,
@@ -26,8 +26,7 @@ export const MODAL_REGISTRATIONS = {
   [MODAL.DEBUG]: debugLog,
   [MODAL.ASK]: askDialog,
   [MODAL.TOOLS]: tools,
-};
-registerModals(MODAL_REGISTRATIONS);
+});
 
 export { renderModal, closeModal } from "./framework.js";
 export { loadHTML, wireLoad } from "./save.js";

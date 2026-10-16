@@ -690,7 +690,7 @@ async function checkTransferWiring() {
     "dbgDl",
     "dbgCopy",
   ]);
-  fakeWindow.MODAL_REGISTRATIONS.debug.wire(null, debugEl);
+  fakeWindow.modalRegistrations().debug.wire(null, debugEl);
   const { dbgShare, dbgDl, dbgNote, dbgTxt } = debugEl.nodes;
   ok(
     dbgShare.hidden === false && /could not be built/.test(dbgTxt.value),
@@ -723,7 +723,7 @@ async function checkTransferWiring() {
   );
 
   const saveEl = fakeEl(["shareBtn", "dlBtn", "copyBtn", "dlNote"]);
-  fakeWindow.MODAL_REGISTRATIONS.save.wire(null, saveEl);
+  fakeWindow.modalRegistrations().save.wire(null, saveEl);
   const { shareBtn, dlBtn, dlNote } = saveEl.nodes;
   ok(shareBtn.hidden === false, "the Save window shows Share too");
   dlBtn.onclick();

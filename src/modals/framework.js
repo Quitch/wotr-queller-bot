@@ -2,14 +2,13 @@
 // {content(modal) -> {title, body, narrow}, wire?(modal, el), headerButtons?, beforeRender?(modal), focusOnOpen?(modal, el)}.
 import { escapeHTML as esc, focusKey } from "../ui/dom.js";
 import * as ui from "../ui/index.js";
+import { modalRegistrations } from "./index.js";
 
-const MODALS = {};
+let modals = null; // the registry, built on first use: index.js is still evaluating when a modal loads first
 const OPEN_CLASS = "modalOpen"; // on <html> while a modal is open: the page behind it does not scroll
 let opener = null; // the element to give focus back to when the modal closes
-export function registerModals(specs) {
-  Object.assign(MODALS, specs);
-}
-const specOf = (modal) => MODALS[modal.name] || {};
+const registry = () => (modals ??= modalRegistrations());
+const specOf = (modal) => registry()[modal.name] || {};
 // The modal's element: a dialog box with a header (title, the modal's own buttons, Close) and the content's body.
 function buildModalElement(modal, { title, body, narrow }) {
   const el = document.createElement("div");
@@ -70,8 +69,10 @@ function focusAfterRender(modal, el, previousKey) {
   if (!previousKey) ui.find("#mtitle").focus();
 }
 function modalContent(modal) {
-  const spec = MODALS[modal.name];
-  return spec ? spec.content(modal) : { title: "", body: "", narrow: false };
+  const spec = specOf(modal);
+  return spec.content
+    ? spec.content(modal)
+    : { title: "", body: "", narrow: false };
 }
 export function renderModal() {
   const modal = ui.modal;
