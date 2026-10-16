@@ -61,5 +61,6 @@ export function run(state) {
   }
 }
 export function startWalk(state, page, startName, options) {
-  if (beginWalk(state, page, startName, options)) run(state);
+  beginWalk(state, page, startName, options);
+  run(state);
 }

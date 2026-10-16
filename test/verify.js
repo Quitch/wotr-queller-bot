@@ -3204,6 +3204,32 @@ function exposedMoveFallsBackToCharacterDie() {
     "with the tracker showing no Nazgûl and no minion in play, the question is not asked",
   );
 }
+// A start point that does not exist throws (so act() rolls the action back) and leaves the walk in progress alone,
+// instead of logging and letting a battle round's prompt land on the previous walk.
+function unknownStartPointThrows() {
+  const state = phase5State({
+    dice: false,
+    cards: false,
+    tracker: false,
+    wome: false,
+  });
+  engine.startPhase(state, PHASE.P5);
+  const walkBefore = state.walk;
+  let error = null;
+  try {
+    engine.startWalk(state, "AR", "Army 9");
+  } catch (thrown) {
+    error = thrown;
+  }
+  ok(
+    /No start point “Army 9”/.test(error?.message) &&
+      state.walk === walkBefore &&
+      !walkBefore.done,
+    "an unknown start point throws and keeps the walk in progress (" +
+      error?.message +
+      ")",
+  );
+}
 // A walk started from the Jump modal with a die (no pool index) holds a matching pool die and spends it; with no
 // matching die it holds none.
 function jumpModalDieComesFromThePool() {
@@ -3340,6 +3366,7 @@ const SCENARIOS = [
   ["rings", ringSettledAtTheNextBoldBox],
   ["rings", ringChangedHeldDieIsNotRestored],
   ["migrate", ringStateFromRevision2Migrates],
+  ["draft", unknownStartPointThrows],
   ["draft", jumpModalDieComesFromThePool],
   ["draft", walkWithoutADie],
 ];
