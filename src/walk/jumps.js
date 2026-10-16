@@ -1,8 +1,9 @@
 // The grey boxes: enter another page with the die it needs, return from it, set a die aside, switch strategy, look for a ring use.
 import * as engine from "../engine/index.js";
 import { DIE_REQUIREMENT, TRAIL } from "../engine/index.js";
-import { NODE, NODE_KIND } from "../flow/index.js";
+import { NODE } from "../flow/index.js";
 import {
+  askBoardQuestion,
   doReturn,
   endWalk,
   exitJump,
@@ -14,6 +15,7 @@ import {
 import { findStart, normalizeText } from "./graph.js";
 import {
   DIE_REQUIREMENT_NAME,
+  EXPOSED_ARMY_JUMPS,
   dieWithArticle,
   jumpSpec,
 } from "./jumps-table.js";
@@ -164,20 +166,10 @@ function jumpWithDie(state, spec, label) {
     dieIndex: walk.dieIndex,
     dieViaMessenger: walk.dieViaMessenger,
   };
-  const characterDie = exposedCharacterDie(state, walk);
-  if (characterDie === PENDING) return;
-  if (characterDie !== null) {
-    enterPage(
-      state,
-      { ...spec, die: DIE_REQUIREMENT.CHARACTER },
-      label,
-      before,
-    );
-    state.walk.dieIndex = characterDie;
-    state.walk.dieViaMessenger = false;
-    return;
-  }
-  const dieResult = ensureDie(state, spec.die, label);
+  const byCharacter = exposedCharacterFallback(state, walk);
+  if (byCharacter === PENDING) return;
+  const page = byCharacter ? { ...spec, die: DIE_REQUIREMENT.CHARACTER } : spec;
+  const dieResult = ensureDie(state, page.die, label);
   if (dieResult === PENDING) return;
   if (!dieResult) {
     exitJump(state);
@@ -190,39 +182,41 @@ function jumpWithDie(state, spec, label) {
     walk.ringPending?.dieIndex === before.dieIndex;
   enterPage(
     state,
-    spec,
+    page,
     label,
     sameDie ? { die: null, dieIndex: null, dieViaMessenger: false } : before,
   );
 }
 // Rule 11: the move towards an exposed target uses an Army die, else an Army/Muster die, else a Character die with an
-// Army that contains a Nazgûl or a minion. With dice rolled by the app and no Army die to use, the threat column's
-// "Army" jump for that move asks about the Army. Returns the pool index of the Character die to use, null, or PENDING
-// (question open).
-const EXPOSED_ARMY_JUMPS = new Set(["C5.jArmyE", "M5.jArmyE"]);
-function exposedCharacterDie(state, walk) {
-  if (!state.settings.dice) return null;
-  if (!EXPOSED_ARMY_JUMPS.has(walk.page + "." + walk.node)) return null;
-  const armyDie =
-    engine.findDie(state, DIE_REQUIREMENT.ARMY) ||
-    (messengerAvailable(state) &&
-      engine.findDie(state, DIE_REQUIREMENT.MUSTER));
-  const characterDie = engine.findDie(state, DIE_REQUIREMENT.CHARACTER);
-  if (armyDie || !characterDie) return null;
-  const part = walk.page + "." + walk.node + ".exposedCharacterDie";
-  if (!(part in walk.parts)) {
-    setPrompt(state, {
-      type: PROMPT.YES_NO,
-      text: "Queller has no Army die. Does the Army that moves towards the *exposed* *target* contain a Nazgûl or a minion (then a Character die moves it, rule 11)",
-      part,
-      node: walk.node,
-      page: walk.page,
-      kind: NODE_KIND.FOLLOW_UP,
-      board: true,
-    });
-    return PENDING;
-  }
-  return walk.parts[part] ? state.dice.pool.indexOf(characterDie) : null;
+// Army that contains a Nazgûl or a minion. At the threat column's "Army" jump for that move, with no Army die (rolled,
+// or with dice off answered No) and a Character die possibly there, ask about the Army that moves. Returns true to
+// claim a Character die instead, false, or PENDING (a question is open). A Messenger Muster die is an Army die here.
+const MINIONS = ["witchKing", "mouth", "saruman"];
+function exposedCharacterFallback(state, walk) {
+  if (!EXPOSED_ARMY_JUMPS.has(walk.page + "." + walk.node)) return false;
+  if (state.settings.dice) {
+    const armyDie =
+      engine.findDie(state, DIE_REQUIREMENT.ARMY) ||
+      (messengerAvailable(state) &&
+        engine.findDie(state, DIE_REQUIREMENT.MUSTER));
+    if (armyDie || !engine.findDie(state, DIE_REQUIREMENT.CHARACTER))
+      return false;
+  } else if (
+    walk.dieAns[DIE_REQUIREMENT.ARMY] !== false ||
+    walk.dieAns[DIE_REQUIREMENT.CHARACTER] === false
+  )
+    return false;
+  if (
+    state.settings.tracker &&
+    !state.board.nazgul &&
+    !MINIONS.some((minion) => engine.minionInPlay(state, minion))
+  )
+    return false;
+  return askBoardQuestion(
+    state,
+    walk.page + "." + walk.node + ".exposedCharacterDie",
+    "Queller has no Army die. Does the Army that moves towards the *exposed* *target* contain a Nazgûl or a minion (then a Character die moves it, rule 11)",
+  );
 }
 // Make sure Queller has a die of type `req` for the step `label`. Returns true (use it), false (skipped, trail written), or PENDING (prompt open).
 export function ensureDie(state, req, label) {
@@ -317,10 +311,6 @@ function askForDie(state, walk, req, label) {
         dieWithArticle(req) +
         " die available" +
         dieQuestionNote(state, req) +
-        (req === DIE_REQUIREMENT.ARMY &&
-        EXPOSED_ARMY_JUMPS.has(walk.page + "." + walk.node)
-          ? " (for this move a Character die counts too, if the Army that moves contains a Nazgûl or a minion, rule 11)"
-          : "") +
         "?",
     });
     return PENDING;

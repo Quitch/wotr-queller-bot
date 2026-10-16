@@ -6,6 +6,7 @@ import {
   answerIfOtherDie,
   ask,
 } from "./common.js";
+import { forExposedMove } from "../jumps-table.js";
 import { decideWitchKingInPlay } from "./phase-5.js";
 
 // ---- Character
@@ -60,6 +61,18 @@ function decideArmyMusterDie(state, node, { walk, diceOn }) {
   ask(state, node);
 }
 
+// "Threat exists": a Character die brought for rule 11 makes only the move towards exposed, so the threat moves are
+// not for it.
+function decideThreatExists(state, node, { walk }) {
+  if (forExposedMove(walk))
+    return answerAuto(
+      state,
+      node,
+      false,
+      "the Character die makes only the move towards *exposed* (rule 11)",
+    );
+  ask(state, node);
+}
 // The decision boxes of the Character and Army pages, keyed by page and node id.
 export const DICE_PAGE_DECISIONS = {
   "CH.wkJoin": decideWitchKingInPlay,
@@ -68,6 +81,7 @@ export const DICE_PAGE_DECISIONS = {
   "CH.nazJoin": decideNazgulOnMap,
   "CH.mosMob": decideMouthInPlay,
   "CH.dieUsed": decideDieUsed,
+  "AR.threatEx": decideThreatExists,
   "AR.huntDice": decideHuntDiceForArmy,
   "AR.amDie": decideArmyMusterDie,
 };

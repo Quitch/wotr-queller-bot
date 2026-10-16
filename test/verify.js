@@ -2207,39 +2207,84 @@ function armyDieMovesTwoArmies() {
 // Rule 11: with no Army or Army/Muster die, the move towards an exposed target uses a Character die when the Army
 // that moves contains a Nazgûl or a minion.
 function exposedMoveFallsBackToCharacterDie() {
-  const exposedWalk = (hasNazgul) => {
+  const exposedWalk = (
+    hasNazgul,
+    settings = { dice: true },
+    setUp = () => {},
+  ) => {
     const state = phase5State(
-      { dice: true, cards: false, tracker: false, wome: false },
+      { cards: false, tracker: false, wome: false, ...settings },
       STRATEGY.MILITARY,
     );
     state.dice.pool = [die("Character")];
+    setUp(state);
     engine.startPhase(state, PHASE.P5);
     const seen = driveWalk(state, [
       [/^Shadow under \*threat\*/, true],
       [/^Can move towards \*exposed\*$/, true],
       [/contain a Nazgûl or a minion/, hasNazgul],
+      // the threat moves are not for the Character die: this Yes must never be asked
+      [/^\*Threat\* exists$/, true],
       [/^\*Exposed\* \*target\* exists$/, true],
+      [/^Does Queller have an Army die/, false],
+      [/^Does Queller have a Character die/, true],
       [/^Move nearest Army towards/, "done"],
       [/^Pass/, "no"],
       byType(PROMPT.ACTION, "no"),
     ]);
     return { state, seen };
   };
+  const characterJump = (state) =>
+    state.walk.trail.some(
+      (entry) =>
+        entry.kind === TRAIL.JUMP &&
+        entry.text === "Army" &&
+        entry.die === "Character",
+    );
   const yes = exposedWalk(true);
   ok(
     yes.seen.some((prompt) =>
       /^Move nearest Army towards/.test(prompt?.text || ""),
     ) &&
       yes.state.dice.pool[0].status === DIE_STATE.USED &&
-      yes.state.walk.result === WALK_RESULT.ACTION,
-    "with a Nazgûl or minion in the Army, the Character die makes the move",
+      yes.state.walk.result === WALK_RESULT.ACTION &&
+      !yes.seen.some((prompt) => /^\*Threat\* exists$/.test(prompt?.text)) &&
+      yes.state.walk.trail.some(
+        (entry) =>
+          /^\*Threat\* exists$/.test(entry.text) &&
+          entry.answer === "No" &&
+          /rule 11/.test(entry.why || ""),
+      ),
+    "with a Nazgûl or minion in the Army, the Character die makes the move towards exposed and none of the threat moves",
   );
   const no = exposedWalk(false);
   ok(
     !no.seen.some((prompt) =>
       /^Move nearest Army towards/.test(prompt?.text || ""),
-    ),
-    "without one, there is no die for the move",
+    ) && !characterJump(no.state),
+    "without one, the Character die is not taken for the move",
+  );
+  const diceOff = exposedWalk(true, { dice: false });
+  ok(
+    diceOff.seen.some((prompt) =>
+      /^Move nearest Army towards/.test(prompt?.text || ""),
+    ) &&
+      characterJump(diceOff.state) &&
+      diceOff.seen.some((prompt) =>
+        /^Does Queller have a Character die/.test(prompt?.text || ""),
+      ),
+    "dice off: after No to the Army die, the same question claims a Character die for the move",
+  );
+  const noNazgul = exposedWalk(true, { dice: true, tracker: true }, (state) => {
+    state.board.nazgul = 0;
+    for (const minion of ["witchKing", "mouth", "saruman"])
+      state.board.chars[minion] = MINION_STATUS.AVAILABLE;
+  });
+  ok(
+    !noNazgul.seen.some((prompt) =>
+      /contain a Nazgûl or a minion/.test(prompt?.text || ""),
+    ) && !characterJump(noNazgul.state),
+    "with the tracker showing no Nazgûl and no minion in play, the question is not asked",
   );
 }
 // A walk started from the Jump modal holds no die: "Using a Character die and …" asks only about the die and checks the
