@@ -243,6 +243,14 @@ function ensureDieFromPool(state, walk, req, label) {
   walk.dieViaMessenger = viaMessenger;
   return true;
 }
+// The rule 46 question a limited ring offer depends on, as the offer states it.
+function ringLimitText(limit) {
+  if (!limit) return "";
+  const answer = limit.answer ? "Yes" : "No";
+  return (
+    " Only if the answer to this is " + answer + ": " + limit.question + "?"
+  );
+}
 // What counts as the die, added to the dice-off question.
 const DIE_QUESTION_NOTE = {
   [DIE_REQUIREMENT.ARMY]: " (an Army/Muster die counts)",
@@ -308,13 +316,7 @@ function askForDie(state, walk, req, label) {
         "Use an Elven Ring (rule 43): change one Queller die that does not show a *preferred* result into " +
         dieWithArticle(req) +
         " result. Choose the die at random. If the step then turns out not to be possible, the app tells you to turn the die back (rule 43)." +
-        (limit
-          ? " Only if the answer to this is " +
-            (limit.answer ? "Yes" : "No") +
-            ": " +
-            limit.question +
-            "?"
-          : ""),
+        ringLimitText(limit),
     });
     return PENDING;
   }
