@@ -24,6 +24,8 @@ export {
   CARD_EFFECT,
   TRAIL,
   BASE_ACTION_DICE,
+  STEP_LIMITS,
+  DEFAULT_STEP_LIMIT,
 } from "./constants.js";
 export {
   SHADOW_NATION_START,

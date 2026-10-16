@@ -20,6 +20,14 @@ function push(list, record, limit) {
 function replaceAll(list, items) {
   list.splice(0, list.length, ...items);
 }
+// The records of a stored list, keeping only objects (a corrupt entry would break the export).
+const storedRecords = (list, limit) =>
+  (Array.isArray(list) ? list : [])
+    .filter(
+      (record) =>
+        record !== null && typeof record === "object" && !Array.isArray(record),
+    )
+    .slice(-limit);
 // Write the log to storage now.
 function flush() {
   store.pending = false;
@@ -54,9 +62,9 @@ function restore(storage) {
   try {
     const parsed = JSON.parse(storage.get() || "null");
     if (parsed) {
-      replaceAll(actions, (parsed.actions || []).slice(-LIMITS.actions));
-      replaceAll(errors, (parsed.errors || []).slice(-LIMITS.errors));
-      replaceAll(walks, (parsed.walks || []).slice(-LIMITS.walks));
+      replaceAll(actions, storedRecords(parsed.actions, LIMITS.actions));
+      replaceAll(errors, storedRecords(parsed.errors, LIMITS.errors));
+      replaceAll(walks, storedRecords(parsed.walks, LIMITS.walks));
     }
   } catch {
     // Storage unavailable or the saved log is corrupt: start with an empty log.
@@ -196,6 +204,13 @@ function finishAction(state) {
 function action(info, state) {
   begin(info, state);
   return finishAction(state);
+}
+// Something that happened during the open action (a refused autosave) goes on its record; with none open, its own.
+function note(info, state) {
+  if (!store.inflight) return action({ action: "note", ...info }, state);
+  store.inflight.notes ??= [];
+  store.inflight.notes.push(info);
+  return store.inflight;
 }
 function error(thrown, info, state) {
   const record = { time: Date.now(), ...info };
@@ -386,6 +401,7 @@ export {
   begin,
   finishAction,
   action,
+  note,
   error,
   digest,
   build,

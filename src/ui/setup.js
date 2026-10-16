@@ -1,6 +1,6 @@
 // The New game screen: the four options and the Start, Load and debug buttons.
 import * as debug from "../debug.js";
-import { loadHTML, wireLoad } from "../modals/index.js";
+import { openLoadArea } from "../modals/index.js";
 import * as engine from "../qb.js";
 import { commit } from "./actions.js";
 import { openModal } from "./ask.js";
@@ -108,12 +108,7 @@ export function wireSetup() {
     debug.finishAction(state);
     commit();
   };
-  find("#loadBtn").onclick = () => {
-    const area = find("#loadArea");
-    area.hidden = false;
-    area.innerHTML = loadHTML();
-    wireLoad(area);
-  };
+  find("#loadBtn").onclick = openLoadArea;
   find("#debugBtn").onclick = () => openModal(MODAL.DEBUG);
   onClickEach("[data-modal]", (button) => openModal(button.dataset.modal));
 }

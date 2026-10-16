@@ -37,9 +37,14 @@ const factionDie = (face) => ({
   face,
   status: DIE_STATE.AVAIL,
 });
-// The answer a scenario gives when none of its rules match: No to every question, an empty battle form, "done" otherwise.
+// The answer a scenario gives when none of its rules match: No to every question, an empty battle form, "None" (or
+// else the first option) in a choice, "done" otherwise.
 function defaultAnswer(prompt) {
   if (engine.YES_NO_PROMPTS.includes(prompt.type)) return false;
+  if (prompt.type === PROMPT.CHOICE)
+    return prompt.options.some((option) => option.value === "")
+      ? ""
+      : prompt.options[0].value;
   return prompt.type === PROMPT.BATTLE_FORM
     ? { nazLead: 0, figures: {} }
     : "done";
@@ -1233,6 +1238,291 @@ function womeDecksLeaveOutReplacedCards() {
     "migrate leaves a base game's decks alone",
   );
 }
+// SEC-01: after migrate, a save is refused when a field the page writes into its HTML as it is, or uses as an index
+// into the dice pool, the cards or the flowchart, holds anything but what the app writes there; numbers are clamped.
+const XSS = "<img src=x onerror=alert(1)>";
+const v61Save = (change = () => {}) => {
+  const save = JSON.parse(V61_ARMY_WALK);
+  change(save);
+  return save;
+};
+const refusedOnLoad = (save) => {
+  try {
+    engine.migrate(save);
+    return false;
+  } catch (error) {
+    return /not a Queller save/.test(error.message);
+  }
+};
+const HOSTILE_FIELDS = {
+  turn: (save) => (save.turn = XSS),
+  phase: (save) => (save.phase = XSS),
+  strategy: (save) => (save.strategy = XSS),
+  "die kind": (save) => (save.dice.pool[0].kind = XSS),
+  "die status": (save) => (save.dice.pool[0].status = XSS),
+  "die face": (save) => (save.dice.pool[0].face = XSS),
+  "tracker number": (save) => (save.board.rings = XSS),
+  "log turn": (save) => (save.log[0].turn = XSS),
+  "Nazgûl Leadership": (save) => (save.battle = { nazLead: XSS }),
+  "card in hand": (save) => save.cards.hand.push(XSS),
+  "card in a deck": (save) => save.cards.decks.C.push("__proto__"),
+  "trail kind": (save) => (save.walk.trail[0].kind = XSS),
+  "trail card": (save) => (save.walk.trail[0].card = XSS),
+  "prompt kind": (save) => (save.walk.prompt.kind = XSS),
+  "prompt card": (save) => (save.walk.prompt.card = XSS),
+  "chosen card": (save) => (save.walk.chosen = XSS),
+  "walk page": (save) => (save.walk.page = XSS),
+  "walk node": (save) => (save.walk.node = "__proto__"),
+  "walk without its entry": (save) => delete save.walk.entry,
+  "entry page": (save) => (save.walk.entry.page = XSS),
+  "return frame": (save) => (save.walk.stack[0].node = XSS),
+  "die index": (save) => (save.walk.dieIndex = "__proto__"),
+  "die index past the pool": (save) => (save.walk.dieIndex = 1),
+  "return frame die index": (save) => (save.walk.stack[0].dieIndex = 5),
+  "deck without its Faction pile": (save) => delete save.cards.decks.F,
+  "discard pile that is not a list": (save) => (save.cards.discards.S = {}),
+  "choice that writes another walk field": (save) =>
+    (save.walk.prompt = {
+      type: PROMPT.CHOICE,
+      text: "x",
+      set: "dieIndex",
+      options: [{ value: "1", label: "x" }],
+    }),
+  "choice option that is not text": (save) =>
+    (save.walk.prompt = {
+      type: PROMPT.CHOICE,
+      text: "x",
+      set: "minionPick",
+      options: [{ value: { toString: XSS }, label: "x" }],
+    }),
+  "roll option that is not text": (save) =>
+    (save.walk.prompt = { type: PROMPT.ROLL, text: "x", options: [[XSS]] }),
+  "node of a newer flowchart": (save) => {
+    save.walk.flowRev = engine.FLOW_REV + 1;
+    save.walk.node = "nodeOfTheNextRevision";
+  },
+};
+function hostileSavesAreRefused() {
+  const accepted = Object.entries(HOSTILE_FIELDS)
+    .filter(([, change]) => !refusedOnLoad(v61Save(change)))
+    .map(([field]) => field);
+  ok(
+    accepted.length === 0,
+    "a save with markup or a bad index in any checked field is refused" +
+      (accepted.length ? " (accepted: " + accepted.join(", ") + ")" : ""),
+  );
+  ok(!refusedOnLoad(v61Save()), "the version 61 save itself loads");
+  const clamped = engine.migrate(
+    v61Save((save) => {
+      save.turn = 3.7;
+      save.board.rings = 9;
+      save.board.fs.progress = -2;
+      save.log[0].turn = Infinity;
+      save.battle = { nazLead: 20 };
+    }),
+  );
+  ok(
+    clamped.turn === 3 &&
+      clamped.board.rings === 3 &&
+      clamped.board.fs.progress === 0 &&
+      clamped.log[0].turn === engine.DEFAULT_STEP_LIMIT[1] &&
+      clamped.battle.nazLead === engine.STEP_LIMITS.nazgul[1],
+    "numbers are made whole and clamped to their range",
+  );
+}
+// SEC-01: what the validator leaves alone is escaped where the page writes it (the phase and trail-kind fallbacks, a
+// roll's options, a save slot's turn), and a prompt type or walk result that names an Object property draws nothing.
+function hostileTextIsEscaped() {
+  const ui = fakeWindow.QB_UI;
+  const game = engine.migrate(v61Save());
+  game.phase = XSS;
+  game.walk.trail.push({ kind: XSS, text: "x" });
+  game.walk.prompt = { type: PROMPT.ROLL, text: "Roll", options: [XSS] };
+  ui.setState(game);
+  const pages = [fakeWindow.gameHTML()];
+  game.walk.prompt = { type: "constructor", text: "x", body: XSS };
+  pages.push(fakeWindow.gameHTML());
+  Object.assign(game.walk, { prompt: null, done: true, result: "constructor" });
+  game.walk.big = XSS;
+  pages.push(fakeWindow.gameHTML());
+  const store = {
+    [ui.STORAGE_KEY.SLOTS]: JSON.stringify([{ turn: XSS, when: XSS }]),
+  };
+  globalThis.localStorage = { getItem: (key) => store[key] ?? null };
+  pages.push(fakeWindow.modalRegistrations()[ui.MODAL.SAVE].content().body);
+  delete globalThis.localStorage;
+  ui.setState(null);
+  ok(
+    pages.every((html) => !html.includes("<img")),
+    "markup in the phase, a trail kind, a roll option, a prompt type, a walk result or a slot's turn is not drawn",
+  );
+}
+// A stand-in page for the scenarios that run act() or the save slots: every query finds one inert element.
+function withFakePage(run) {
+  const store = {};
+  const element = {
+    dataset: {},
+    focus() {},
+    remove() {},
+    prepend() {},
+    setAttribute() {},
+    querySelector: () => null,
+    querySelectorAll: () => [],
+  };
+  globalThis.localStorage = {
+    getItem: (key) => store[key] ?? null,
+    setItem: (key, value) => {
+      store[key] = String(value);
+    },
+  };
+  globalThis.document = {
+    body: element,
+    activeElement: null,
+    querySelector: () => element,
+    querySelectorAll: () => [],
+    getElementById: () => element,
+  };
+  try {
+    run(store);
+  } finally {
+    delete globalThis.document;
+    delete globalThis.localStorage;
+  }
+}
+// STATE-02: an action whose result cannot be drawn is rolled back before the autosave is written: the game, its Undo
+// steps and the autosave stay as they were, and the error is recorded.
+function unrenderableActionKeepsTheGame() {
+  const ui = fakeWindow.QB_UI,
+    debug = fakeWindow.QB_DEBUG;
+  withFakePage((store) => {
+    ui.setState(engine.newState({}));
+    ui.setHistory([]);
+    ui.act(() => (ui.state.turn = 2), { action: "test" });
+    const saved = store[ui.STORAGE_KEY.AUTOSAVE],
+      undoSteps = ui.history.length,
+      errorsBefore = debug.errors.length;
+    let escaped = null;
+    try {
+      ui.act(
+        () => {
+          ui.state.turn = 3;
+          ui.state.walk = { page: "nowhere" };
+        },
+        { action: "test" },
+      );
+    } catch (error) {
+      escaped = error;
+    }
+    ok(
+      !escaped &&
+        ui.state.turn === 2 &&
+        ui.state.walk === null &&
+        ui.history.length === undoSteps &&
+        JSON.parse(saved).turn === 2 &&
+        store[ui.STORAGE_KEY.AUTOSAVE] === saved &&
+        debug.errors.length === errorsBefore + 1 &&
+        debug.errors.at(-1).rolledBack,
+      "a game that cannot be drawn is rolled back with its Undo steps, and the autosave keeps the game before it" +
+        (escaped ? " (threw " + escaped.message + ")" : ""),
+    );
+    ui.setState(null);
+    ui.setHistory([]);
+  });
+}
+// STATE-03: named saves stored as anything but a list read as no saves, and saving into a slot starts a new list.
+function corruptSlotsReadAsEmpty() {
+  const ui = fakeWindow.QB_UI;
+  withFakePage((store) => {
+    const empty = ["null", '{"0":{"turn":1}}', '"slots"', "{not json"].every(
+      (text) => {
+        store[ui.STORAGE_KEY.SLOTS] = text;
+        return (
+          Array.isArray(fakeWindow.slots()) && fakeWindow.slots().length === 0
+        );
+      },
+    );
+    store[ui.STORAGE_KEY.SLOTS] = "null";
+    ui.setState(engine.newState({}));
+    let saved;
+    try {
+      saved = fakeWindow.saveToSlot(0);
+    } catch {
+      saved = false;
+    }
+    ok(
+      empty && saved && fakeWindow.slots()[0]?.turn === 1,
+      "corrupt named saves read as none, and a save into a slot starts a new list",
+    );
+    ui.setState(null);
+  });
+}
+// STATE-06: a stored debug log keeps only its object records, so a corrupt entry cannot block the export.
+// A load that fails is closed by its error record (debug.error, as act's rollback does), so a later note gets a record
+// of its own instead of joining the failed load.
+function failedLoadClosesItsRecord() {
+  const debug = fakeWindow.QB_DEBUG;
+  const state = engine.newState({});
+  debug.begin({ action: "load", title: "Load this save?" }, state);
+  const failed = debug.error(
+    new Error("cannot be drawn"),
+    { action: "loadFailed", rolledBack: true },
+    state,
+  );
+  debug.note({ storageFailed: true }, state);
+  const after = debug.actions.at(-1);
+  ok(
+    failed.during?.action === "load" &&
+      after.action === "note" &&
+      after.storageFailed &&
+      !after.notes,
+    "a failed load ends in its error record, and a later note is a record of its own",
+  );
+}
+// A refused autosave inside an action is noted on that action's record, not recorded in its place.
+function noteGoesOnTheOpenAction() {
+  const debug = fakeWindow.QB_DEBUG;
+  const state = engine.newState({});
+  debug.begin({ action: "probe", detail: 1 }, state);
+  debug.note({ storageFailed: true }, state);
+  debug.finishAction(state);
+  const record = debug.actions.at(-1);
+  debug.note({ storageFailed: true }, state);
+  const alone = debug.actions.at(-1);
+  ok(
+    record.action === "probe" &&
+      record.detail === 1 &&
+      record.notes?.[0]?.storageFailed &&
+      alone.action === "note" &&
+      alone.storageFailed,
+    "a note goes on the open action, or on a record of its own when none is open",
+  );
+}
+function corruptDebugRecordsAreDropped() {
+  const debug = fakeWindow.QB_DEBUG;
+  const stored = JSON.stringify({
+    actions: [null, 5, "x", { action: "kept" }],
+    errors: "not a list",
+    walks: [[1], { page: "M5" }],
+  });
+  debug.restore({ get: () => stored, set() {} });
+  const counts = [debug.actions, debug.errors, debug.walks].map(
+    (list) => list.length,
+  );
+  let exported;
+  try {
+    exported = JSON.parse(debug.text({}));
+  } catch {
+    exported = null;
+  }
+  ok(
+    counts.join() === "1,0,1" && exported?.actions.length === 1,
+    "a stored debug log keeps its object records only and still exports (" +
+      counts.join() +
+      ")",
+  );
+  debug.reset();
+  debug.restore(null);
+}
 // Rule 25: an empty Character or Strategy deck is not rebuilt; the Event page draws from the other one, and with both
 // empty the draw is not possible. Phase 1 draws only what is there. A Faction Event deck is rebuilt from its discards
 // (WoME rules): Servants of Sauron tops up a short Faction deck before it looks at three cards.
@@ -1923,6 +2213,47 @@ function eliminatedMinionIsNeverMusteredAgain() {
     "setting Saruman to eliminated discards Wormtongue and the Palantír",
   );
 }
+// WALK-05: a choice takes one of its options only; any other answer is refused and the choice stays open.
+function choiceAnswerMustBeAnOption() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.dice.pool = [die("Muster")];
+  state.walk = null;
+  engine.startWalk(state, "MU", "Muster 2", {
+    die: DIE_REQUIREMENT.MUSTER,
+    dieIndex: 0,
+  });
+  const rules = [
+    [/Able to recruit a minion/, true],
+    [/Will of the West/, false],
+  ];
+  for (let i = 0; i < 20 && state.walk.prompt?.type !== PROMPT.CHOICE; i++) {
+    const prompt = state.walk.prompt;
+    engine.answer(state, ruleAnswer(prompt, rules) ?? defaultAnswer(prompt));
+  }
+  const choice = state.walk.prompt;
+  let refused = false;
+  try {
+    engine.answer(state, "Gollum");
+  } catch {
+    refused = true;
+  }
+  ok(
+    choice?.type === PROMPT.CHOICE &&
+      refused &&
+      state.walk.prompt === choice &&
+      state.walk.minionPick === null,
+    "an answer that is not one of the choice's options is refused and the choice stays open",
+  );
+  const pick = choice.options[0].value;
+  engine.answer(state, pick);
+  ok(
+    state.walk.minionPick === pick,
+    "one of its options is taken (" + pick + ")",
+  );
+}
 // "A Power too Great" / "The Power of Tom Bombadil" (rule 19): Not possible on a Phase 5 action asks whether such a
 // card blocked it; if so, Queller pays one Action die (the action's own when it can), one Army Event card and one
 // Character card (chosen by the Event page discard priority, rule 16), and that is its action. A Faction Army card
@@ -2491,6 +2822,7 @@ function version61ArmyWalkResumesAndEnds() {
   onMuster.walk.node = "start3";
   const offArmy = JSON.parse(V61_ARMY_WALK);
   offArmy.walk.page = "M5";
+  offArmy.walk.node = "p5";
   offArmy.walk.stack = [];
   ok(
     engine.migrate(onMuster).walk.armyStart === "Army" &&
@@ -3768,6 +4100,13 @@ const SCENARIOS = [
   ["ui", battleDraftSurvivesRendersNotANewGame],
   ["migrate", migrateUpgradesOldSaves],
   ["migrate", womeDecksLeaveOutReplacedCards],
+  ["save", hostileSavesAreRefused],
+  ["save", hostileTextIsEscaped],
+  ["save", unrenderableActionKeepsTheGame],
+  ["save", corruptSlotsReadAsEmpty],
+  ["save", corruptDebugRecordsAreDropped],
+  ["save", noteGoesOnTheOpenAction],
+  ["save", failedLoadClosesItsRecord],
   ["decks", emptyEventDecksFallBack],
   ["decks", drawStepWithNoCardKeepsTheDie],
   ["faction", servantsOfSauronCannotDrawItself],
@@ -3785,6 +4124,7 @@ const SCENARIOS = [
   ["muster", musterChoiceCardAutoAnswered],
   ["muster", mouthOfSauronNeedsFreePeoplesAtWarOrMordor],
   ["muster", eliminatedMinionIsNeverMusteredAgain],
+  ["muster", choiceAnswerMustBeAnOption],
   ["fp", forcedDiscardPaysArmyCharacterAndActionDie],
   ["draft", discardLoopDiscardsOneCardAtATime],
   ["draft", armyMusterDieTriesMuster3First],

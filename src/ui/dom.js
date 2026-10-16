@@ -22,10 +22,14 @@ const selectorFor = (el, attr) =>
   "[" +
   attr +
   '="' +
-  el.getAttribute(attr) +
+  CSS.escape(el.getAttribute(attr)) +
   '"]' +
-  (el.dataset.d === undefined ? "" : '[data-d="' + el.dataset.d + '"]') +
-  (el.dataset.id === undefined ? "" : '[data-id="' + el.dataset.id + '"]');
+  (el.dataset.d === undefined
+    ? ""
+    : '[data-d="' + CSS.escape(el.dataset.d) + '"]') +
+  (el.dataset.id === undefined
+    ? ""
+    : '[data-id="' + CSS.escape(el.dataset.id) + '"]');
 // A selector that finds the focused control again after a re-render, or null.
 export function focusKey(el) {
   if (!el || el === el.ownerDocument?.body) return null;

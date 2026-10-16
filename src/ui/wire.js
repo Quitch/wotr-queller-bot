@@ -1,6 +1,6 @@
 // Wiring: the handlers of the game screen's controls, attached after every render.
 import * as engine from "../qb.js";
-import { PROMPT } from "../qb.js";
+import { DEFAULT_STEP_LIMIT, PROMPT, STEP_LIMITS } from "../qb.js";
 import { act, undo } from "./actions.js";
 import { askNewGame, openModal } from "./ask.js";
 import { readBattleForm } from "./battle-form.js";
@@ -14,13 +14,7 @@ import {
   trackerValue,
 } from "./handlers.js";
 import { setBattleDraft, state } from "./session.js";
-import {
-  DEFAULT_STEP_LIMIT,
-  STEP_LIMITS,
-  boardValue,
-  fellowshipDeclared,
-  trackerChange,
-} from "./tracker.js";
+import { boardValue, fellowshipDeclared, trackerChange } from "./tracker.js";
 
 // The second click of a double-click lands on whatever the first one rendered (the next prompt's button), so the
 // controls that move the game on ignore it (a modal the first click opened drops it itself, modals/framework.js). A

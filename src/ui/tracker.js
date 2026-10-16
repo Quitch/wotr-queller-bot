@@ -251,15 +251,6 @@ function setBoardValue(path, value) {
   const { object, key } = boardSlot(path);
   object[key] = value;
 }
-export const STEP_LIMITS = {
-  shadowVP: [0, 10],
-  corruption: [0, 12],
-  rings: [0, 3],
-  "fs.progress": [0, 12],
-  "fs.companions": [0, 7],
-  nazgul: [0, 8],
-};
-export const DEFAULT_STEP_LIMIT = [0, 99];
 // Run a tracker action that may trigger table cards, then ask about each card it triggered.
 function actThenAsk(fn, info, onDone) {
   let asks = [];

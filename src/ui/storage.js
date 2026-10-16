@@ -8,11 +8,13 @@ export function storageGet(key) {
     return null;
   }
 }
+// false when storage is full, blocked or unavailable: the game goes on in memory.
 export function storageSet(key, value) {
   try {
     localStorage.setItem(key, value);
+    return true;
   } catch {
-    // Storage full, blocked or unavailable: the game goes on in memory; the debug log's storage probe reports it.
+    return false;
   }
 }
 export function loadJSON(text) {

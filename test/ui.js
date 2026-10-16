@@ -141,9 +141,8 @@ function checkBoardPaths() {
 // storageGet/storageSet never throw, whatever localStorage does; loadJSON accepts only a save and migrates it.
 function checkStorage() {
   ok(
-    ui.storageGet("qb.x") === null &&
-      !throwsOn(() => ui.storageSet("qb.x", "1")),
-    "without any localStorage a read gives null and a write is a no-op",
+    ui.storageGet("qb.x") === null && ui.storageSet("qb.x", "1") === false,
+    "without any localStorage a read gives null and a write reports failure",
   );
   globalThis.localStorage = {
     getItem() {
@@ -154,9 +153,8 @@ function checkStorage() {
     },
   };
   ok(
-    ui.storageGet("qb.x") === null &&
-      !throwsOn(() => ui.storageSet("qb.x", "1")),
-    "a throwing localStorage reads as null and swallows the write",
+    ui.storageGet("qb.x") === null && ui.storageSet("qb.x", "1") === false,
+    "a throwing localStorage reads as null and reports the write as failed",
   );
   const store = {};
   globalThis.localStorage = {
@@ -165,8 +163,10 @@ function checkStorage() {
       store[key] = String(value);
     },
   };
-  ui.storageSet("qb.x", "2");
-  ok(ui.storageGet("qb.x") === "2", "a working localStorage round-trips");
+  ok(
+    ui.storageSet("qb.x", "2") === true && ui.storageGet("qb.x") === "2",
+    "a working localStorage round-trips",
+  );
   delete globalThis.localStorage;
   ok(
     ["{not json", "null", '{"settings":{}}', '{"board":{}}', "[]"].every(
@@ -325,8 +325,12 @@ const fakeElement = ({ id = "", attrs = {}, dataset = {} } = {}) => ({
   getAttribute: (name) => attrs[name],
 });
 // The focus key finds a control again after a re-render: by id, else by the first identifying attribute plus its
-// data-d / data-id qualifiers; nothing for the body or an anonymous element.
+// data-d / data-id qualifiers, CSS-escaped; nothing for the body or an anonymous element. Node has no CSS global: the
+// stand-in escapes the quote and the backslash as the browser's CSS.escape does.
 function checkFocusKeys() {
+  globalThis.CSS = {
+    escape: (value) => String(value).replace(/["\\]/g, "\\$&"),
+  };
   const { focusKey } = ui;
   const body = {};
   body.ownerDocument = { body };
@@ -381,6 +385,16 @@ function checkFocusKeys() {
     focusKey(fakeElement({ attrs: { class: "x" } })) === null,
     "an element with no id and no identifying attribute has no key",
   );
+  ok(
+    focusKey(
+      fakeElement({
+        attrs: { "data-ans": 'a"]' },
+        dataset: { ans: 'a"]', d: '"', id: "\\" },
+      }),
+    ) === '[data-ans="a\\"]"][data-d="\\""][data-id="\\\\"]',
+    "the values in a focus key are CSS-escaped",
+  );
+  delete globalThis.CSS;
 }
 // The render bookkeeping: <details> open states survive a re-render of the same thing (by data-key) and scroll
 // positions of the trail and log are put back, run over stand-in roots.
@@ -893,6 +907,8 @@ function trackerFakeDocument() {
 function checkTrackerAsks() {
   const fake = trackerFakeDocument();
   globalThis.document = fake.doc;
+  // a working localStorage: a refused autosave would raise the storage notice, which this document cannot show
+  globalThis.localStorage = { getItem: () => null, setItem() {} };
   const state = engine.newState({
     dice: true,
     cards: true,
@@ -991,6 +1007,7 @@ function checkTrackerAsks() {
   ui.setState(null);
   ui.setHistory([]);
   delete globalThis.document;
+  delete globalThis.localStorage;
 }
 async function main() {
   checkTextHelpers();
