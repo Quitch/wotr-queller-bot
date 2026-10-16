@@ -93,22 +93,24 @@ function decideMinionOrMuster2(state, node, { trackerOn, walk, wome }) {
     why,
   });
 }
+const MORDOR_TRACK = "Fellowship on the Mordor Track";
 function decideMordorWin(state, node, { trackerOn, board, walk }) {
+  if (!trackerOn) return askDecision(state, node);
   const { ring, plain } = listParts(state, node);
   if (walk.sub === 0) {
-    if (trackerOn && board.fs.mordor)
+    if (board.fs.mordor)
       return recordDecision(state, {
         text: partText(ring),
         ringCondition: true,
         answer: true,
         auto: true,
-        why: "Fellowship on the Mordor Track",
+        why: MORDOR_TRACK,
       });
-    // without the tracker the Mordor half is unknown, so the question keeps it
+    // the tracker says the Mordor half is No: ask the rest of the bold part
     return ask(
       state,
       node,
-      trackerOn ? "*Target* would win the game" : partText(ring),
+      partText(ring.filter((item) => item.text !== MORDOR_TRACK)),
       { sub: 1, bold: true },
     );
   }
