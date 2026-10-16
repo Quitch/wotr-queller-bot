@@ -154,7 +154,7 @@ const JUMP_KIND = {
 // Grey box naming a page: enter it with the die it needs (or the die already held), or skip it.
 function jumpWithDie(state, spec, label) {
   const walk = state.walk;
-  if (spec.held || engine.dieSatisfies(walk.die, spec.die)) {
+  if ((spec.held && walk.die) || engine.dieSatisfies(walk.die, spec.die)) {
     enterPage(state, spec, label);
     return;
   }

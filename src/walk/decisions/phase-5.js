@@ -14,6 +14,7 @@ import {
   characterHand,
   recordDecision,
   strategyHand,
+  decidePlayableCharacterCard,
 } from "./common.js";
 
 // ---- Phase 5
@@ -109,17 +110,6 @@ function decideMordorWin(state, node, { trackerOn, board, walk }) {
     });
   }
   ask(state, node, partText(plain), { sub: 2 });
-}
-function decidePlayableCharacterCard(state, node, { cardsOn }) {
-  if (cardsOn)
-    return answerByPlayableCount(
-      state,
-      node,
-      characterHand(state),
-      "event",
-      "playable Character card",
-    );
-  ask(state, node);
 }
 function decideAllFactionsInPlay(state, node, { factionsKnown }) {
   if (factionsKnown)
