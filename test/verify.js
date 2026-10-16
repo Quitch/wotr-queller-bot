@@ -1378,6 +1378,27 @@ function corruptSlotsReadAsEmpty() {
   });
 }
 // STATE-06: a stored debug log keeps only its object records, so a corrupt entry cannot block the export.
+// A load that fails is closed by its error record (debug.error, as act's rollback does), so a later note gets a record
+// of its own instead of joining the failed load.
+function failedLoadClosesItsRecord() {
+  const debug = fakeWindow.QB_DEBUG;
+  const state = engine.newState({});
+  debug.begin({ action: "load", title: "Load this save?" }, state);
+  const failed = debug.error(
+    new Error("cannot be drawn"),
+    { action: "loadFailed", rolledBack: true },
+    state,
+  );
+  debug.note({ storageFailed: true }, state);
+  const after = debug.actions.at(-1);
+  ok(
+    failed.during?.action === "load" &&
+      after.action === "note" &&
+      after.storageFailed &&
+      !after.notes,
+    "a failed load ends in its error record, and a later note is a record of its own",
+  );
+}
 // A refused autosave inside an action is noted on that action's record, not recorded in its place.
 function noteGoesOnTheOpenAction() {
   const debug = fakeWindow.QB_DEBUG;
@@ -3890,6 +3911,7 @@ const SCENARIOS = [
   ["save", corruptSlotsReadAsEmpty],
   ["save", corruptDebugRecordsAreDropped],
   ["save", noteGoesOnTheOpenAction],
+  ["save", failedLoadClosesItsRecord],
   ["decks", emptyEventDecksFallBack],
   ["decks", drawStepWithNoCardKeepsTheDie],
   ["faction", servantsOfSauronCannotDrawItself],

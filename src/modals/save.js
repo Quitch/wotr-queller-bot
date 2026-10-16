@@ -47,12 +47,22 @@ function saveHTML() {
   html += "<h3>Load</h3>" + loadHTML() + "</div>";
   return html;
 }
-export function loadHTML() {
+function loadHTML() {
   return '<p class="notice" style="margin:0 0 6px">Paste a save code, or choose a save file.</p><label for="loadTxt" class="notice">Save code</label><textarea id="loadTxt" placeholder="Paste the save code here"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="loadTxtBtn">Load from code</button><label class="btn filebtn">Save file <input type="file" id="loadFile" accept=".json,.txt,application/json,text/plain"></label></div><div id="loadErr" class="notice" role="alert" style="color:var(--bad)"></div>';
+}
+// The New game screen's Load area, opened (its Load a saved game button, and after a load that failed there).
+export function openLoadArea() {
+  const area = ui.find("#loadArea");
+  if (!area) return null;
+  area.hidden = false;
+  area.innerHTML = loadHTML();
+  wireLoad(area);
+  return area;
 }
 // Replace the game with a parsed save. A save that cannot be drawn throws (ui.commit builds the page before the
 // autosave): the game in progress, its Undo steps and its battle form draft come back, are saved and drawn again (in
-// case only wiring the page failed after the autosave was written), and so does the save modal it was loaded from.
+// case only wiring the page failed after the autosave was written), and so does the Load area it was loaded from: the
+// save modal, or the New game screen's, so the reason has somewhere to show.
 function replaceGame(save, title) {
   const previous = {
     state: ui.state,
@@ -79,6 +89,7 @@ function replaceGame(save, title) {
     );
     ui.render();
     if (previous.state) ui.openModal(MODAL.SAVE);
+    else openLoadArea()?.querySelector("#loadTxt")?.focus();
     throw error;
   }
   debug.finishAction(save);
@@ -184,7 +195,7 @@ function confirmOverwrite(index, slot) {
     },
   });
 }
-export function wireLoad(root) {
+function wireLoad(root) {
   const doLoad = (text) => loadText(text, "Load this save?");
   const loadBtn = root.querySelector("#loadTxtBtn");
   if (loadBtn)

@@ -607,6 +607,48 @@ const unrenderableAutosave = () =>
       prompt: { type: "yesno", text: 5 },
     },
   });
+// From the New game screen, a save that passes the checks but cannot be drawn: the screen stays, its Load area comes
+// back with the reason and focus in the code box, and the debug log closes the load into its error.
+async function checkSetupLoadThatCannotBeDrawn(page) {
+  await page.click(SEL.NEW_GAME);
+  await page.click(SEL.ASK_OK);
+  await page.click("#loadBtn");
+  await page.fill("#loadTxt", await page.evaluate(unrenderableAutosave));
+  await page.click("#loadTxtBtn");
+  const shown = await page.evaluate(() => ({
+    setup: !!window.document.querySelector("#start"),
+    message: window.document.querySelector("#loadErr")?.textContent || "",
+    focus: window.document.activeElement?.id || "",
+    state: window.QBUI.state,
+  }));
+  await page.click(SEL.DEBUG_BUTTON);
+  const log = await debugLog(page);
+  await page.click(SEL.MODAL_CLOSE);
+  const failed = log.errors.at(-1);
+  console.log(
+    "setup load that cannot be drawn: setup",
+    shown.setup,
+    "message:",
+    shown.message.slice(0, 60),
+    "focus:",
+    shown.focus,
+    "error:",
+    failed?.action,
+    "during",
+    failed?.during?.action,
+  );
+  if (
+    !shown.setup ||
+    shown.state !== null ||
+    !/could not be shown/.test(shown.message) ||
+    shown.focus !== "loadTxt" ||
+    failed?.action !== "loadFailed" ||
+    failed?.during?.action !== "load"
+  )
+    debugFailures.push(
+      "a setup-screen load that cannot be drawn is not reported",
+    );
+}
 // A broken autosave, one that is not a Queller save (refused when it loads) and one that cannot be drawn (refused when
 // it renders): the app falls back to the setup screen, keeps the save and offers the log.
 async function checkBrokenAutosave(page) {
@@ -763,6 +805,7 @@ async function main() {
   await checkStorageNotice(page);
   await checkReloadKeepsHistory(page, actionsBefore);
   await checkBrokenAutosave(page);
+  await checkSetupLoadThatCannotBeDrawn(page);
   await page.screenshot({
     path: path.join(import.meta.dirname, "smoke.png"),
     fullPage: true,

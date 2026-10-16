@@ -29,5 +29,5 @@ export const modalRegistrations = () => ({
 });
 
 export { renderModal, closeModal } from "./framework.js";
-export { loadHTML, wireLoad } from "./save.js";
+export { openLoadArea } from "./save.js";
 export { svgPage } from "./flow/svg.js";
