@@ -71,6 +71,10 @@ function answerYesNo(state, prompt, value) {
   });
 }
 function answerChoice(state, prompt, value) {
+  if (!prompt.options.some((option) => option.value === (value ?? ""))) {
+    state.walk.prompt = prompt;
+    throw new Error("Not an option of this prompt: " + value);
+  }
   state.walk[prompt.set] = value || null;
   trail(state, {
     kind: TRAIL.PRIORITY,
@@ -357,7 +361,7 @@ export function answer(state, value) {
   if (!walk?.prompt) return;
   const prompt = walk.prompt;
   walk.prompt = null;
-  const handler = ANSWER_HANDLERS[prompt.type];
-  if (handler) handler(state, prompt, value);
+  if (Object.hasOwn(ANSWER_HANDLERS, prompt.type))
+    ANSWER_HANDLERS[prompt.type](state, prompt, value);
   run(state);
 }

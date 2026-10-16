@@ -75,7 +75,7 @@ const SEL = {
   option: (id) => "#opt-" + id,
   flowTab: (key) => '#modal [data-fp="' + key + '"]',
 };
-// An autosave the app cannot render (no dice), so a reload falls back to the New game screen.
+// An autosave that is not a Queller save (no dice, no phase), so a reload falls back to the New game screen.
 const brokenAutosave = () =>
   JSON.stringify({
     settings: { dice: true, cards: true, tracker: true, wome: true },

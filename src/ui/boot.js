@@ -139,8 +139,8 @@ export function boot() {
   installDebugFlush();
   renderOrFallback(storageGet(STORAGE_KEY.AUTOSAVE));
 }
-// A bar above the app after an error: the game carries on (a failed action was rolled back) and a debug log is one tap away.
-export function showErrBar() {
+// The bar above the app (#errbar, role="alert"), created on first use.
+function errBarElement() {
   let bar = document.getElementById("errbar");
   if (!bar) {
     bar = document.createElement("div");
@@ -148,6 +148,13 @@ export function showErrBar() {
     bar.setAttribute("role", "alert");
     document.body.prepend(bar);
   }
+  return bar;
+}
+const DISMISS_BUTTON =
+  '<button type="button" class="btn small ghost" id="errbarClose" aria-label="Dismiss this message">Dismiss</button>';
+// A bar above the app after an error: the game carries on (a failed action was rolled back) and a debug log is one tap away.
+export function showErrBar() {
+  const bar = errBarElement();
   const count = debug.errors.length,
     last = debug.errors[count - 1];
   bar.innerHTML =
@@ -157,7 +164,22 @@ export function showErrBar() {
       ? ". Your last action was undone; the game continues."
       : ".") +
     " Please export a debug log and send it with a description of what you were doing.</span>" +
-    '<span class="eb"><button type="button" class="btn small" id="errbarLog">Export debug log</button><button type="button" class="btn small ghost" id="errbarClose" aria-label="Dismiss this message">Dismiss</button></span></div>';
+    '<span class="eb"><button type="button" class="btn small" id="errbarLog">Export debug log</button>' +
+    DISMISS_BUTTON +
+    "</span></div>";
   document.getElementById("errbarLog").onclick = () => openModal(MODAL.DEBUG);
+  document.getElementById("errbarClose").onclick = () => bar.remove();
+}
+// The first time in a page load that the browser refuses to store the game, the same bar says so once.
+let storageNoticeShown = false;
+export function showStorageNotice() {
+  if (storageNoticeShown) return;
+  storageNoticeShown = true;
+  debug.action({ action: "storageFailed" }, state);
+  const bar = errBarElement();
+  bar.innerHTML =
+    '<div class="wrap"><span class="msg"><b>This browser is not saving the game</b> — its storage is full or blocked, so this game may not be here when the page is opened again. To keep it, open Save / Load and download the save file or copy the save code.</span><span class="eb">' +
+    DISMISS_BUTTON +
+    "</span></div>";
   document.getElementById("errbarClose").onclick = () => bar.remove();
 }

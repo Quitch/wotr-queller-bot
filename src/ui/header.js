@@ -1,6 +1,7 @@
 // The game header: turn, phase and strategy chips, the tool buttons.
 import { PHASE, strategyName } from "../qb.js";
 import { MODAL } from "./constants.js";
+import { escapeHTML } from "./dom.js";
 import { history, state } from "./session.js";
 
 const PHASE_LABEL = {
@@ -27,7 +28,7 @@ export const TOOL_BUTTONS = [
   [MODAL.SETTINGS, "Settings", "ghost"],
 ];
 export function headerHTML() {
-  const phaseLabel = PHASE_LABEL[state.phase] || state.phase;
+  const phaseLabel = PHASE_LABEL[state.phase] || escapeHTML(state.phase);
   return (
     '<header class="top"><div class="brand"><h1>Queller Bot Runner</h1><span class="sub">Shadow player</span></div>' +
     '<div class="status"><span class="chip">Turn <b>' +

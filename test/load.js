@@ -21,11 +21,8 @@ export { setupHTML } from "../src/ui/setup.js";
 export { resultHTML, trailHTML } from "../src/ui/trail.js";
 export { PHASE_BY_LABEL } from "../src/ui/header.js";
 export { PHASE_ACTION } from "../src/ui/walkthrough.js";
-export {
-  DEFAULT_STEP_LIMIT,
-  STEP_LIMITS,
-  boardValue,
-} from "../src/ui/tracker.js";
+export { boardValue } from "../src/ui/tracker.js";
+export { DEFAULT_STEP_LIMIT, STEP_LIMITS } from "../src/engine/constants.js";
 export { trackerValue } from "../src/ui/handlers.js";
 export { modalRegistrations, svgPage } from "../src/modals/index.js";
 export { armyValue } from "../src/modals/calc.js";

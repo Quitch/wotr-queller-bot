@@ -131,3 +131,16 @@ export const LOG_CAP = 400; // log entries kept in the game state
 export const SERVANTS_DRAW = 3; // Faction Event cards Servants of Sauron looks at
 export const LIDLESS_EYE_DICE = 3; // dice The Lidless Eye turns to Eyes
 export const DISCARD_GUARD = 10; // at most this many discards in one hand-limit check
+// The range of each number on the board tracker (keyed by its path under state.board), and of any other count.
+export const STEP_LIMITS = {
+  shadowVP: [0, 10],
+  corruption: [0, 12],
+  rings: [0, 3],
+  "fs.progress": [0, 12],
+  "fs.companions": [0, 7],
+  nazgul: [0, 8],
+  "nations.sauron": [0, 3],
+  "nations.isengard": [0, 3],
+  "nations.se": [0, 3],
+};
+export const DEFAULT_STEP_LIMIT = [0, 99];

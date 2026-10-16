@@ -13,8 +13,10 @@ const saveContent = () => ({
   narrow: true,
 });
 // Save and load.
-export const slots = () =>
-  ui.parseJSONOr(ui.storageGet(ui.STORAGE_KEY.SLOTS) || "[]", []);
+export function slots() {
+  const slotList = ui.parseJSONOr(ui.storageGet(ui.STORAGE_KEY.SLOTS), []);
+  return Array.isArray(slotList) ? slotList : [];
+}
 function saveHTML() {
   const slotList = slots();
   let html =
@@ -27,7 +29,9 @@ function saveHTML() {
         return (
           '<div class="slot"><span class="t">Slot ' +
           (i + 1) +
-          (slot ? ": turn " + slot.turn + ", " + esc(slot.when) : ": empty") +
+          (slot
+            ? ": turn " + esc(slot.turn) + ", " + esc(slot.when)
+            : ": empty") +
           '</span><button class="btn small" data-save="' +
           i +
           '">Save here</button>' +
@@ -46,17 +50,40 @@ function saveHTML() {
 export function loadHTML() {
   return '<p class="notice" style="margin:0 0 6px">Paste a save code, or choose a save file.</p><label for="loadTxt" class="notice">Save code</label><textarea id="loadTxt" placeholder="Paste the save code here"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="loadTxtBtn">Load from code</button><label class="btn filebtn">Save file <input type="file" id="loadFile" accept=".json,.txt,application/json,text/plain"></label></div><div id="loadErr" class="notice" role="alert" style="color:var(--bad)"></div>';
 }
-// Replace the game with a parsed save.
+// Replace the game with a parsed save. A save that cannot be drawn throws before the autosave is written (ui.commit):
+// the game in progress and its Undo steps come back, and so does the save modal it was loaded from.
 function replaceGame(save, title) {
+  const previous = { state: ui.state, history: ui.history };
   debug.begin(
     { action: "load", title, turn: save.turn, version: save.appVersion },
     ui.state,
   );
   ui.setHistory([]);
   ui.setState(save);
-  debug.finishAction(save);
   closeModal();
-  ui.commit();
+  try {
+    ui.commit();
+  } catch (error) {
+    ui.setState(previous.state);
+    ui.setHistory(previous.history);
+    debug.error(error, { action: "loadFailed", rolledBack: true }, save);
+    if (previous.state) ui.openModal(MODAL.SAVE);
+    throw error;
+  }
+  debug.finishAction(save);
+}
+function showLoadError(error) {
+  const errorEl = ui.find("#loadErr");
+  if (errorEl)
+    errorEl.textContent = "That is not a Queller save: " + error.message;
+}
+// Parse a save and load it; what goes wrong is said in the Load area.
+function loadText(text, title) {
+  try {
+    loadGame(ui.loadJSON(text), title);
+  } catch (error) {
+    showLoadError(error);
+  }
 }
 // Ask before replacing a game in progress; No returns to the save modal.
 function confirmReplace(save, title) {
@@ -68,8 +95,15 @@ function confirmReplace(save, title) {
       { v: "no", label: "Cancel" },
     ],
     onPick: (choice) => {
-      if (choice === "ok") replaceGame(save, title);
-      else ui.openModal(MODAL.SAVE);
+      if (choice !== "ok") {
+        ui.openModal(MODAL.SAVE);
+        return;
+      }
+      try {
+        replaceGame(save, title);
+      } catch (error) {
+        showLoadError(error);
+      }
     },
   });
 }
@@ -77,7 +111,8 @@ function loadGame(save, title) {
   if (ui.state) confirmReplace(save, title);
   else replaceGame(save, title);
 }
-// Write the game into a slot (slots and saveToSlot are exported for test/ui.js).
+// Write the game into a slot; false when the browser would not store it (slots and saveToSlot are exported for the
+// tests).
 export function saveToSlot(index) {
   debug.action({ action: "saveSlot", slot: index }, ui.state);
   const slotList = slots();
@@ -86,7 +121,19 @@ export function saveToSlot(index) {
     when: new Date().toLocaleString(),
     data: JSON.stringify(ui.state),
   };
-  ui.storageSet(ui.STORAGE_KEY.SLOTS, JSON.stringify(slotList));
+  if (ui.storageSet(ui.STORAGE_KEY.SLOTS, JSON.stringify(slotList)))
+    return true;
+  ui.showStorageNotice();
+  return false;
+}
+// After the save modal is drawn again: say so when the slot was not stored.
+function reportSlotSave(saved, index) {
+  const note = ui.find("#dlNote");
+  if (!saved && note)
+    note.textContent =
+      "Slot " +
+      (index + 1) +
+      " was not saved: this browser’s storage is full or blocked.";
 }
 // Ask before overwriting an occupied slot (there is no undo for it); either answer returns to the save modal.
 function confirmOverwrite(index, slot) {
@@ -105,21 +152,14 @@ function confirmOverwrite(index, slot) {
       { v: "no", label: "Cancel" },
     ],
     onPick: (choice) => {
-      if (choice === "ok") saveToSlot(index);
+      const saved = choice !== "ok" || saveToSlot(index);
       ui.openModal(MODAL.SAVE);
+      reportSlotSave(saved, index);
     },
   });
 }
 export function wireLoad(root) {
-  const doLoad = (text) => {
-    try {
-      loadGame(ui.loadJSON(text), "Load this save?");
-    } catch (error) {
-      const errorEl = root.querySelector("#loadErr");
-      if (errorEl)
-        errorEl.textContent = "That is not a Queller save: " + error.message;
-    }
-  };
+  const doLoad = (text) => loadText(text, "Load this save?");
   const loadBtn = root.querySelector("#loadTxtBtn");
   if (loadBtn)
     loadBtn.onclick = () => doLoad(root.querySelector("#loadTxt").value.trim());
@@ -139,8 +179,9 @@ function wireSaveModal(modal, el) {
       const slot = slots()[index];
       if (slot) confirmOverwrite(index, slot);
       else {
-        saveToSlot(index);
+        const saved = saveToSlot(index);
         renderModal();
+        reportSlotSave(saved, index);
       }
     },
     el,
@@ -150,10 +191,7 @@ function wireSaveModal(modal, el) {
     (button) => {
       const slot = slots()[+button.dataset.load];
       if (slot)
-        loadGame(
-          ui.loadJSON(slot.data),
-          "Load slot " + (+button.dataset.load + 1) + "?",
-        );
+        loadText(slot.data, "Load slot " + (+button.dataset.load + 1) + "?");
     },
     el,
   );

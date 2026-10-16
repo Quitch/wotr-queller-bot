@@ -415,6 +415,33 @@ async function checkFailedActionAndUncaughtError(page) {
   console.log("error bar dismissed:", !(await page.$(SEL.ERROR_BAR)));
   return log.actions.length;
 }
+// Storage that refuses every write: the first autosave that fails says so in the bar, once per page load.
+async function checkStorageNotice(page) {
+  const first = await page.evaluate(() => {
+    window.smokeSetItem = Storage.prototype.setItem;
+    Storage.prototype.setItem = () => {
+      throw new Error("smoke: storage full");
+    };
+    window.QBUI.act(() => {}, { action: "smokeStorage" });
+    return window.document.getElementById("errbar")?.textContent || "";
+  });
+  await axeCheck(page, "storage notice");
+  const shownAgain = await page.evaluate(() => {
+    window.document.getElementById("errbarClose").click();
+    window.QBUI.act(() => {}, { action: "smokeStorage" });
+    Storage.prototype.setItem = window.smokeSetItem;
+    window.QBUI.act(() => {}, { action: "smokeStorage" });
+    return !!window.document.getElementById("errbar");
+  });
+  console.log(
+    "storage notice:",
+    first.slice(0, 60),
+    "shown again:",
+    shownAgain,
+  );
+  if (!/not saving the game/.test(first) || shownAgain)
+    debugFailures.push("storage notice not shown once");
+}
 // Reload from the autosave; the action history survives the reload and a new game clears the game.
 async function checkReloadKeepsHistory(page, actionsBefore) {
   await page.reload({ waitUntil: "load" });
@@ -440,11 +467,35 @@ async function checkReloadKeepsHistory(page, actionsBefore) {
     debugFailures.push("action history did not survive the reload");
   await page.click(SEL.MODAL_CLOSE);
 }
-// An autosave that cannot be rendered: the app falls back to the setup screen, keeps the save and offers the log.
+// A game on turn 3 that loads (it passes migrate's checks) but whose open prompt cannot be drawn.
+const unrenderableAutosave = () =>
+  JSON.stringify({
+    ...window.QB.newState({}),
+    turn: 3,
+    walk: {
+      flowRev: window.QB.FLOW_REV,
+      page: "M14",
+      node: "p1",
+      entry: { page: "M14", start: "Phase 1" },
+      stack: [],
+      trail: [],
+      prompt: { type: "yesno", text: 5 },
+    },
+  });
+// A broken autosave, one that is not a Queller save (refused when it loads) and one that cannot be drawn (refused when
+// it renders): the app falls back to the setup screen, keeps the save and offers the log.
 async function checkBrokenAutosave(page) {
+  await checkBrokenAutosaveFallback(page, brokenAutosave(), "boot-load");
+  await checkBrokenAutosaveFallback(
+    page,
+    await page.evaluate(unrenderableAutosave),
+    "boot-render",
+  );
+}
+async function checkBrokenAutosaveFallback(page, save, bootAction) {
   await page.evaluate(
-    (save) => localStorage.setItem(window.QBUI.STORAGE_KEY.AUTOSAVE, save),
-    brokenAutosave(),
+    (text) => localStorage.setItem(window.QBUI.STORAGE_KEY.AUTOSAVE, text),
+    save,
   );
   await page.reload({ waitUntil: "load" });
   console.log(
@@ -460,14 +511,14 @@ async function checkBrokenAutosave(page) {
   console.log(
     "broken save in log: turn",
     log.brokenAutosave?.turn,
-    "boot error:",
-    log.errors.find((record) => record.action === "boot-render")?.message,
+    bootAction + ":",
+    log.errors.find((record) => record.action === bootAction)?.message,
   );
   if (
     log.brokenAutosave?.turn !== 3 ||
-    !log.errors.some((record) => record.action === "boot-render")
+    !log.errors.some((record) => record.action === bootAction)
   )
-    debugFailures.push("broken autosave not captured");
+    debugFailures.push("broken autosave not captured (" + bootAction + ")");
   await page.click(SEL.MODAL_CLOSE);
   await page.click(SEL.START);
   console.log(
@@ -584,6 +635,7 @@ async function main() {
   await checkMinimalTracker(page);
   await checkDebugLogExport(page);
   const actionsBefore = await checkFailedActionAndUncaughtError(page);
+  await checkStorageNotice(page);
   await checkReloadKeepsHistory(page, actionsBefore);
   await checkBrokenAutosave(page);
   await page.screenshot({

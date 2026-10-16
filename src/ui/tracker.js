@@ -243,15 +243,6 @@ function setBoardValue(path, value) {
   const { object, key } = boardSlot(path);
   object[key] = value;
 }
-export const STEP_LIMITS = {
-  shadowVP: [0, 10],
-  corruption: [0, 12],
-  rings: [0, 3],
-  "fs.progress": [0, 12],
-  "fs.companions": [0, 7],
-  nazgul: [0, 8],
-};
-export const DEFAULT_STEP_LIMIT = [0, 99];
 // A tracker change: apply it and forget the cached card checks it may affect; returns the table cards whose discard
 // condition the app cannot judge itself (the questions to ask).
 function applyTrackerChange(path, value) {

@@ -1,5 +1,6 @@
 // Random games across every setting combination (the driver is test/play.js): exceptions, walks left without a prompt,
-// runaway walks and card-count conservation are reported; a seed reproduces a run. Exit 1 on any problem.
+// runaway walks, card-count conservation and a game that would not load back from its save are reported; a seed
+// reproduces a run. Exit 1 on any problem.
 import crypto from "node:crypto";
 import { QB as engine } from "./load.js";
 import {
@@ -76,20 +77,51 @@ function checkCardConservation(state, tag, prompt) {
         .join(" / "),
   );
 }
+// The game as saved at a prompt must load back unchanged: migrate (and its validator) accept what the app writes.
+// Checked at every SAVE_CHECK_EVERY-th prompt (a counter, not the game's random numbers) and at the end of each game:
+// at every prompt it multiplies the run time.
+const SAVE_CHECK_EVERY = 7;
+let promptsSeen = 0;
+function checkSaveLoads(state, tag) {
+  const saved = JSON.stringify(state);
+  let loaded;
+  try {
+    loaded = JSON.stringify(engine.migrate(JSON.parse(saved)));
+  } catch (error) {
+    loaded = error.message;
+  }
+  if (loaded === saved) return true;
+  recordProblem(
+    "SAVE DOES NOT LOAD BACK",
+    tag +
+      " " +
+      state.walk?.page +
+      "." +
+      state.walk?.node +
+      " " +
+      loaded.slice(0, 80),
+  );
+  return false;
+}
 // The invariants, checked around every answer of every walk.
 const INVARIANTS = {
   onWalkStart: (state) => {
     expectedTotals = cardTotals(state);
   },
-  onPrompt: checkPromptPresent,
+  onPrompt: (state, tag) =>
+    checkPromptPresent(state, tag) &&
+    (++promptsSeen % SAVE_CHECK_EVERY !== 0 || checkSaveLoads(state, tag)),
   afterAnswer: checkCardConservation,
 };
 function main() {
   let gameNumber = 0;
   for (let bits = 0; bits < SETTING_COMBINATIONS; bits++) {
     const settings = settingsFromBits(bits);
-    for (let i = 0; i < GAMES_PER_SETTING; i++)
-      digest.update(JSON.stringify(game(settings, gameNumber++, INVARIANTS)));
+    for (let i = 0; i < GAMES_PER_SETTING; i++) {
+      const state = game(settings, gameNumber++, INVARIANTS);
+      digest.update(JSON.stringify(state));
+      checkSaveLoads(state, "end of game");
+    }
   }
   console.log("games:", gameNumber);
   if (wantDigest) console.log("digest:", digest.digest("hex"));

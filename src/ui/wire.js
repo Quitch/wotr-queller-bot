@@ -1,6 +1,6 @@
 // Wiring: the handlers of the game screen's controls, attached after every render.
 import * as engine from "../qb.js";
-import { PROMPT } from "../qb.js";
+import { DEFAULT_STEP_LIMIT, PROMPT, STEP_LIMITS } from "../qb.js";
 import { act, undo } from "./actions.js";
 import { askNewGame, openModal } from "./ask.js";
 import { readBattleForm } from "./battle-form.js";
@@ -14,12 +14,7 @@ import {
   trackerValue,
 } from "./handlers.js";
 import { state } from "./session.js";
-import {
-  DEFAULT_STEP_LIMIT,
-  STEP_LIMITS,
-  boardValue,
-  trackerChange,
-} from "./tracker.js";
+import { boardValue, trackerChange } from "./tracker.js";
 
 // Wiring: the handlers of the game screen's controls, attached after every render.
 function wireHeader() {
