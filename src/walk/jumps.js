@@ -190,10 +190,17 @@ export function ensureDie(state, req, label) {
   return askForDie(state, walk, req, label);
 }
 // What else counts as the die asked about, without dice rolled by the app.
+// What counts as the die, added to the dice-off question.
 const DIE_QUESTION_NOTE = {
   [DIE_REQUIREMENT.ARMY]:
     " (an Army/Muster die counts; so does a Muster die once per turn with Messenger of the Dark Tower when the Mouth of Sauron is in play, rule 30)",
   [DIE_REQUIREMENT.MUSTER]: " (an Army/Muster die counts)",
+  [DIE_REQUIREMENT.FACTION_RECRUIT]:
+    " (a Wild result on the Faction die counts, rule 31)",
+  [DIE_REQUIREMENT.FACTION_PLAY]:
+    " (a Wild result on the Faction die counts, rule 31)",
+  [DIE_REQUIREMENT.FACTION_DRAW]:
+    " (a Wild result on the Faction die counts, rule 31)",
 };
 // Messenger of the Dark Tower (rule 30): with the Mouth of Sauron in play, once per turn, a Muster die may act as an
 // Army die when Queller has no Army or Army/Muster die.
