@@ -220,8 +220,13 @@ function answerAction(state, prompt, value) {
     text: prompt.text,
     answer: ACTION_DONE_ANSWERS[value],
   });
-  if (value === "done" && prompt.armyMove && !walk.armyMoves)
-    return secondArmyMove(state, walk, prompt);
+  if (
+    value === "done" &&
+    prompt.armyMove &&
+    !walk.armyMoves &&
+    secondArmyMove(state, walk, prompt)
+  )
+    return;
   if (prompt.pass) {
     endWalk(state, WALK_RESULT.PASS, "Queller passes.");
     engine.log(state, "Queller passes.");
@@ -233,8 +238,17 @@ function answerAction(state, prompt, value) {
   endWalk(state, WALK_RESULT.ACTION, prompt.text);
 }
 // Rule 9: after the first move of an Army die, walk the Army page again from the same start point for the second move,
-// by another Army.
+// by another Army. Returns false when the start point is not known, so the move ends the walk and spends the die.
 function secondArmyMove(state, walk, prompt) {
+  const start =
+    typeof walk.armyStart === "string" && findStart("AR", walk.armyStart);
+  if (!start) {
+    engine.log(
+      state,
+      "The Army page's start point is not known, so no second Army move is walked (rule 9).",
+    );
+    return false;
+  }
   walk.armyMoves = 1;
   // the die has acted: it can no longer pay to remove a Free Peoples card (rule 19)
   walk.dieUsed = true;
@@ -251,8 +265,9 @@ function secondArmyMove(state, walk, prompt) {
   });
   walk.cands = null;
   walk.chosen = null;
-  goto(state, "AR", findStart("AR", walk.armyStart));
+  goto(state, "AR", start);
   follow(state, null);
+  return true;
 }
 function answerPlayCard(state, prompt) {
   const walk = state.walk;
