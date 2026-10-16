@@ -28,9 +28,13 @@ export const YES_NO_PROMPTS = [
 ];
 // The prompts the player can answer with Not possible (rule 36): an action the app does not perform itself, a move, or
 // a draw step (both decks empty, rule 25).
-export const offersNotPossible = (prompt) =>
+export const offersNotPossible = (prompt, walk) =>
   (prompt.type === PROMPT.ACTION && !prompt.auto) ||
-  (prompt.type === PROMPT.STEP && (!!prompt.move || !!prompt.draw));
+  (prompt.type === PROMPT.STEP && (!!prompt.move || isDrawStep(prompt, walk)));
+// The draw steps before "Above full hand", known by their box so a saved prompt needs no flag.
+const DRAW_STEPS = new Set(["EV.drawPrefT", "FA.drawT"]);
+export const isDrawStep = (prompt, walk) =>
+  prompt.type === PROMPT.STEP && DRAW_STEPS.has(walk.page + "." + prompt.node);
 // How a walk ended (walk.result); a walk that reached another start point ends with phaseResult(name).
 export const WALK_RESULT = {
   ACTION: "action",

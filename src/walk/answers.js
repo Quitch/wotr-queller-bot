@@ -23,7 +23,7 @@ import {
   fpCardByKey,
   payForcedDiscard,
 } from "./forced.js";
-import { PROMPT, WALK_RESULT } from "./prompt.js";
+import { PROMPT, WALK_RESULT, isDrawStep } from "./prompt.js";
 import { ringDeclined, ringUsed } from "./rings.js";
 import { run } from "./run.js";
 
@@ -278,7 +278,7 @@ function answerPlayCard(state, prompt) {
 }
 function answerStep(state, prompt, value) {
   if (prompt.move && value === "no") return notPossible(state, prompt);
-  if (prompt.draw && value === "no") {
+  if (isDrawStep(prompt, state.walk) && value === "no") {
     trail(state, {
       kind: TRAIL.STEP,
       text: prompt.text,

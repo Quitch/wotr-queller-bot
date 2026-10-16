@@ -259,6 +259,47 @@ function reservedDieIsNotSpentAsArmyDie() {
     diceOff.log.some((entry) => /^Queller used an Army die/.test(entry.text)),
     "dice off: the log says “an Army die”",
   );
+  // Dice on, and a page between C5 and the Muster page also holds the die (its frame is added by hand: today only C5
+  // and M5 jump to the Muster boxes that set a die aside). The player turns dice off after the Muster page returns.
+  const toggled = phase5State({
+    dice: true,
+    cards: false,
+    tracker: true,
+    wome: false,
+  });
+  toggled.board.nations.isengard = 0;
+  toggled.dice.pool = [die("Army/Muster")];
+  engine.startPhase(toggled, PHASE.P5);
+  let guard = 0;
+  while (
+    !/Will of the West/.test(toggled.walk.prompt?.text || "") &&
+    guard++ < 40
+  ) {
+    const prompt = toggled.walk.prompt;
+    engine.answer(toggled, ruleAnswer(prompt, rules) ?? defaultAnswer(prompt));
+  }
+  toggled.walk.stack.push({
+    page: "AR",
+    node: "jMuster3",
+    die: DIE_REQUIREMENT.ARMY,
+    dieIndex: 0,
+    dieViaMessenger: false,
+    dieUsed: false,
+  });
+  engine.answer(toggled, true);
+  toggled.settings.dice = false;
+  const toggledSeen = driveWalk(toggled, [
+    [/^Does Queller have an Army die/, false],
+    ...rules,
+  ]);
+  ok(
+    toggled.minionReserved &&
+      toggledSeen.some((prompt) => /have an Army die/.test(prompt?.text)) &&
+      !toggled.log.some((entry) =>
+        /^Queller used an Army die/.test(entry.text),
+      ),
+    "dice turned off after the reserve: no page returned to still holds the die set aside",
+  );
 }
 // dice on, tracker off: no ring without one in the minimal tracker; one ring used once
 function ringUsedOnceOnlyWhenHeld() {
@@ -749,6 +790,33 @@ function callToBattleCardsIgnoreInitiative() {
   );
 }
 // battleOpen is reset each turn (7.4); the run guard ends a walk that never reaches a prompt (7.3)
+// Between two combat rounds, a walk from the Jump modal (a card's choice, rule 16) leaves the battle open; Queller's
+// next Phase 5 walk closes it.
+function sideWalkKeepsTheBattleOpen() {
+  const ui = fakeWindow.QB_UI;
+  const state = phase5State({
+    dice: false,
+    cards: false,
+    tracker: false,
+    wome: false,
+  });
+  state.battleOpen = true;
+  ui.setState(state);
+  engine.startWalk(state, "EV", "Event card discard");
+  driveWalk(state, []);
+  ui.afterWalk();
+  const sideWalk = state.walk.result,
+    keptOpen = state.battleOpen;
+  engine.startPhase(state, PHASE.P5);
+  driveWalk(state, []);
+  ui.afterWalk();
+  ok(
+    !!sideWalk && keptOpen && state.walk.done && !state.battleOpen,
+    "a Jump-modal walk (" +
+      sideWalk +
+      ") keeps the battle open; the Phase 5 walk closes it",
+  );
+}
 function battleOpenResetAndRunGuard() {
   const turnState = phase5State({
     dice: false,
@@ -1013,17 +1081,39 @@ function drawStepWithNoCardKeepsTheDie() {
     const step = cardsOff.seen.find((prompt) => prompt?.node === to);
     ok(
       !!step &&
-        engine.offersNotPossible(step) &&
+        engine.offersNotPossible(step, cardsOff.state.walk) &&
+        /draw (is )?not possible/.test(step.help) &&
         cardsOff.state.dice.pool[0].status === DIE_STATE.AVAIL &&
         cardsOff.state.walk.done,
       page +
         "." +
         to +
-        ": with cards off the draw step offers Not possible, which keeps the die (" +
+        ": with cards off the draw step explains and offers Not possible, which keeps the die (" +
         cardsOff.state.dice.pool[0].status +
         ")",
     );
   }
+  // a prompt saved by version 61 carries only its type, text, node and help
+  const saved = drawStep(
+    "EV",
+    "Event",
+    "start",
+    "drawPrefT",
+    DIE_REQUIREMENT.EVENT,
+    "Event",
+    false,
+  );
+  ok(
+    engine.offersNotPossible(
+      {
+        type: PROMPT.STEP,
+        text: "Draw a *preferred* Event card",
+        node: "drawPrefT",
+      },
+      saved.state.walk,
+    ),
+    "a saved draw-step prompt with no flag still offers Not possible",
+  );
 }
 // The tracker's table triggers: Worn with Sorrow and Toil asks like Flocks of Crebain; Wormtongue leaves when Saruman does.
 function wornWithSorrowAsksAndWormtongueOnSaruman() {
@@ -2750,7 +2840,9 @@ function jumpModalDieComesFromThePool() {
   ok(
     noMatch.walk.die === null &&
       noMatch.walk.dieIndex === null &&
-      noMatch.log.some((entry) => /no Army die available/.test(entry.text)),
+      noMatch.log.some((entry) =>
+        /no Army die in the pool: the walk starts without one/.test(entry.text),
+      ),
     "with no matching die in the pool the walk starts without one, and the log says so",
   );
 }
@@ -2812,6 +2904,7 @@ const SCENARIOS = [
   ["6.6", tableTriggersDiscardOrAsk],
   ["6.7", callToBattleCardsIgnoreInitiative],
   ["7.3/7.4", battleOpenResetAndRunGuard],
+  ["7.3/7.4", sideWalkKeepsTheBattleOpen],
   ["migrate", migrateUpgradesOldSaves],
   ["decks", emptyEventDecksFallBack],
   ["decks", drawStepWithNoCardKeepsTheDie],

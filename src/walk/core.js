@@ -81,7 +81,7 @@ function dieOptions(state, options) {
     state,
     "Queller has no " +
       DIE_REQUIREMENT_NAME[options.die] +
-      " die available: the walk uses no die.",
+      " die in the pool: the walk starts without one.",
   );
   return { ...options, die: null };
 }
@@ -219,7 +219,7 @@ export function doReturn(state) {
   walk.dieIndex = frame.dieIndex;
   walk.dieViaMessenger = !!frame.dieViaMessenger;
   walk.dieUsed = frame.dieUsed;
-  // the page returned from may have set that very die aside for a minion (rule 34)
+  // the player may have marked that die used by hand since (a die set aside for a minion is cleared from the frames)
   if (heldDieGone(state)) releaseCurrentDie(state);
   settleRing(state);
   walk.cands = null;
@@ -265,7 +265,11 @@ export function heldDieGone(state) {
 }
 // The walk no longer holds a die (spent, or given up unspent).
 export function releaseCurrentDie(state) {
-  state.walk.die = null;
-  state.walk.dieIndex = null;
-  state.walk.dieViaMessenger = false;
+  Object.assign(state.walk, noDieHeld());
 }
+// The die fields of a walk, or of a page it will return to, that holds no die.
+export const noDieHeld = () => ({
+  die: null,
+  dieIndex: null,
+  dieViaMessenger: false,
+});

@@ -37,6 +37,8 @@ function namedDeck(state, key) {
 }
 const EMPTY_DECK_HELP =
   "If that deck is empty, draw from the other Event deck (Character or Strategy); if both are empty, the draw is not possible (rule 25).";
+const EMPTY_FACTION_DECK_HELP =
+  "If the Faction Event deck is empty, shuffle its discards into a new deck; only if there are none is the draw not possible (WoME rules, rule 25).";
 export function drawStep(state, node) {
   const walk = state.walk,
     key = walk.page + "." + walk.node,
@@ -47,8 +49,7 @@ export function drawStep(state, node) {
       type: isStep ? PROMPT.STEP : PROMPT.ACTION,
       text: label,
       node: walk.node,
-      help: isFactionDraw(key) ? undefined : EMPTY_DECK_HELP,
-      ...(isStep && { draw: true }),
+      help: isFactionDraw(key) ? EMPTY_FACTION_DECK_HELP : EMPTY_DECK_HELP,
     });
   const named = namedDeck(state, key);
   const deckKey =
