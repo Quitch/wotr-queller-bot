@@ -12,6 +12,7 @@ import {
   trail,
 } from "./core.js";
 import { findStart, normalizeText } from "./graph.js";
+import { forExposedMove } from "./jumps-table.js";
 import { ensureDie } from "./jumps.js";
 import { SHADOW_NATION_KEY } from "./nations.js";
 import { letGoOtherRingDie } from "./rings.js";
@@ -347,6 +348,14 @@ export function handleAction(state, node) {
     if (result !== FALL_THROUGH) return result;
   }
   if (isEndBox(label)) return endAction(state, walk);
+  if (forExposedMove(walk) && walk.node !== "moveExposed") {
+    trail(state, {
+      kind: TRAIL.SKIP,
+      text: label,
+      why: "the Character die makes only the move towards exposed (rule 11)",
+    });
+    return exitAction(state);
+  }
   if (walk.page === "AR" && walk.armyMoves && label === "Attack") {
     trail(state, {
       kind: TRAIL.SKIP,

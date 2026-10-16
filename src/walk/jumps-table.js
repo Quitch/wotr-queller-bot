@@ -148,6 +148,18 @@ export function dieWithArticle(requirement) {
   const name = DIE_REQUIREMENT_NAME[requirement] || requirement;
   return (/^[AEIOU]/.test(name) ? "an " : "a ") + name;
 }
+// Rule 11: the threat column's "Army" jump for the move towards an exposed target. A Character die it claims makes
+// that move only.
+export const EXPOSED_ARMY_JUMPS = new Set(["C5.jArmyE", "M5.jArmyE"]);
+export function forExposedMove(walk) {
+  const frame = walk.stack[walk.stack.length - 1];
+  return (
+    walk.page === "AR" &&
+    walk.die === DIE_REQUIREMENT.CHARACTER &&
+    !!frame &&
+    EXPOSED_ARMY_JUMPS.has(frame.page + "." + frame.node)
+  );
+}
 export function jumpSpec(boxText) {
   const label = normalizeText(boxText);
   for (const [pattern, spec] of JUMPS) if (pattern.test(label)) return spec;
