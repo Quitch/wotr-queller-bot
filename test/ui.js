@@ -1,6 +1,6 @@
 // Unit tests for the UI's pure logic (src/ui/, no DOM): the text helpers and glossary markup, the tracker's board
 // paths, tracker values, the storage wrappers and save loading, the row widgets, the phase tables, the trail and
-// result renderers and the card faces. Exit 1 on any failure.
+// result renderers, the card faces and the transfer helpers. Exit 1 on any failure.
 import * as fakeWindow from "./load.js";
 const engine = fakeWindow.QB,
   ui = fakeWindow.QB_UI,
@@ -443,7 +443,312 @@ function checkSlotSave() {
   ui.setState(null);
   delete globalThis.localStorage;
 }
-function main() {
+// The transfer helpers with a stubbed host, document and navigator: the viewer's refusals stop the download, any
+// other host refusal falls through to the Blob link, and the share sheet's outcomes reach the note.
+async function checkTransfer() {
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "navigator",
+  );
+  const setNavigator = (value) =>
+    Object.defineProperty(globalThis, "navigator", {
+      value,
+      configurable: true,
+    });
+  const clicks = [];
+  globalThis.document = {
+    createElement: () => ({
+      click() {
+        clicks.push(this.download);
+      },
+    }),
+  };
+  const host = (save) => {
+    globalThis.window = { claude: { use: async () => ({ save }) } };
+  };
+  const download = async () => {
+    const noteEl = { textContent: "" };
+    const outcome = await fakeWindow.downloadText({
+      fileName: "log.json",
+      data: "{}",
+      noteEl,
+      fallbackLabel: "Copy",
+    });
+    return { outcome, note: noteEl.textContent };
+  };
+  const refuse = (code) => () => Promise.reject({ code, message: "m" });
+
+  host(async () => ({ status: "saved" }));
+  let result = await download();
+  ok(
+    result.outcome === "saved" &&
+      result.note === "File saved." &&
+      !clicks.length,
+    "a host save needs no link",
+  );
+  host(refuse("declined"));
+  result = await download();
+  ok(
+    result.outcome === "declined" &&
+      result.note === "Download cancelled." &&
+      !clicks.length,
+    "a declined host save stops without a link",
+  );
+  host(refuse("rate_limited"));
+  result = await download();
+  ok(
+    result.outcome === "busy" &&
+      /already open/.test(result.note) &&
+      !clicks.length,
+    "a rate-limited host save stops without a link",
+  );
+  for (const code of [
+    "unavailable",
+    "not_granted",
+    "too_large",
+    "odd_new_code",
+  ]) {
+    clicks.length = 0;
+    host(refuse(code));
+    result = await download();
+    ok(
+      result.outcome === "link" &&
+        clicks[0] === "log.json" &&
+        result.note.includes("(" + code + ")") &&
+        result.note.endsWith("use Copy."),
+      "a host refusal of " + code + " falls through to the Blob link",
+    );
+  }
+  clicks.length = 0;
+  globalThis.window = {
+    claude: {
+      use: async () => {
+        throw new Error("no host");
+      },
+    },
+  };
+  result = await download();
+  ok(
+    result.outcome === "link" &&
+      clicks.length === 1 &&
+      result.note === "If nothing downloaded, use Copy.",
+    "a throwing use() counts as no host",
+  );
+  globalThis.document = {
+    createElement: () => {
+      throw new Error("blocked");
+    },
+  };
+  result = await download();
+  ok(
+    result.outcome === "blocked" && /not available here/.test(result.note),
+    "a blocked link points at the fallback",
+  );
+
+  // The share sheet through wireShare, with a fake button; canShare(types) accepts the listed MIME types only.
+  const share = async (
+    shareImpl,
+    types = ["application/json", "text/plain"],
+  ) => {
+    setNavigator({
+      canShare: (data) => types.includes(data.files[0].type),
+      share: shareImpl,
+    });
+    const button = {};
+    const noteEl = { textContent: "" };
+    let outcome;
+    const settled = new Promise((resolve) => {
+      fakeWindow.wireShare(button, {
+        fileName: () => "log.json",
+        data: () => "{}",
+        noteEl,
+        fallbackLabel: "Copy",
+        done: (value) => resolve((outcome = value)),
+      });
+    });
+    if (!button.hidden) {
+      button.onclick();
+      await settled;
+    }
+    return { outcome, note: noteEl.textContent, hidden: button.hidden };
+  };
+  let shared;
+  const keep = async (data) => {
+    shared = data.files[0];
+  };
+  result = await share(keep);
+  ok(
+    !result.hidden &&
+      result.outcome === "shared" &&
+      shared.name === "log.json" &&
+      shared.type === "application/json" &&
+      (await shared.text()) === "{}" &&
+      result.note === "Shared log.json.",
+    "share hands the sheet the JSON file",
+  );
+  result = await share(keep, ["text/plain"]);
+  ok(
+    result.outcome === "shared" &&
+      shared.name === "log.txt" &&
+      shared.type === "text/plain" &&
+      (await shared.text()) === "{}" &&
+      result.note === "Shared log.txt.",
+    "a share list without JSON gets the same text as a .txt file",
+  );
+  result = await share(keep, []);
+  ok(result.hidden, "the Share button is hidden where no file can be shared");
+  const named = (name) => async () => {
+    const error = new Error(name);
+    error.name = name;
+    throw error;
+  };
+  result = await share(named("AbortError"));
+  ok(
+    result.outcome === "cancelled" && result.note === "Share cancelled.",
+    "a dismissed share sheet says so",
+  );
+  result = await share(named("NotAllowedError"));
+  ok(
+    result.outcome === "NotAllowedError" && result.note.endsWith("use Copy."),
+    "a refused share points at the fallback",
+  );
+  for (const navigatorValue of [
+    {},
+    {
+      canShare: () => {
+        throw new Error("x");
+      },
+    },
+  ]) {
+    setNavigator(navigatorValue);
+    const button = {};
+    fakeWindow.wireShare(button, {
+      fileName: () => "log.json",
+      data: () => "{}",
+      noteEl: {},
+      fallbackLabel: "Copy",
+    });
+    ok(button.hidden, "no canShare, or a throwing one, hides the Share button");
+  }
+
+  Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+  delete globalThis.window;
+  delete globalThis.document;
+}
+// The Debug log and Save windows' transfer buttons wired onto fake elements: no DOM, so the debug log cannot be
+// built and the text box holds the build error, which is still a log to export.
+async function checkTransferWiring() {
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "navigator",
+  );
+  const shared = [];
+  Object.defineProperty(globalThis, "navigator", {
+    value: {
+      canShare: (data) => data.files[0].type === "text/plain",
+      share: async (data) => {
+        shared.push(data.files[0].name);
+      },
+    },
+    configurable: true,
+  });
+  const clicks = [];
+  globalThis.document = {
+    createElement: () => ({
+      click() {
+        clicks.push(this.download);
+      },
+    }),
+  };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const store = {};
+  globalThis.localStorage = {
+    getItem: (key) => (key in store ? store[key] : null),
+    setItem: (key, value) => {
+      store[key] = String(value);
+    },
+    removeItem: (key) => delete store[key],
+  };
+  const fakeEl = (ids) => {
+    const nodes = Object.fromEntries(ids.map((id) => [id, { id }]));
+    return {
+      nodes,
+      querySelector: (selector) => nodes[selector.slice(1)],
+      querySelectorAll: () => [],
+    };
+  };
+  const state = engine.newState({ dice: true });
+  state.turn = 3;
+  ui.setState(state);
+  fakeWindow.QB_DEBUG.reset();
+
+  const debugEl = fakeEl([
+    "dbgTxt",
+    "dbgReport",
+    "dbgNote",
+    "dbgShare",
+    "dbgDl",
+    "dbgCopy",
+  ]);
+  fakeWindow.MODAL_REGISTRATIONS.debug.wire(null, debugEl);
+  const { dbgShare, dbgDl, dbgNote, dbgTxt } = debugEl.nodes;
+  ok(
+    dbgShare.hidden === false && /could not be built/.test(dbgTxt.value),
+    "the Debug log window shows Share where a file can be shared",
+  );
+  dbgDl.onclick();
+  await settle();
+  ok(
+    clicks.at(-1).startsWith("queller-debug-turn3-") &&
+      dbgNote.textContent ===
+        "If nothing downloaded, use Share debug log file or Copy debug log.",
+    "Download debug log names Share and Copy as the fallback",
+  );
+  dbgShare.onclick();
+  await settle();
+  ok(
+    /^queller-debug-turn3-.*\.txt$/.test(shared.at(-1)) &&
+      dbgNote.textContent === "Shared " + shared.at(-1) + ".",
+    "Share debug log file shares the log",
+  );
+  const exports = fakeWindow.QB_DEBUG.build()
+    .actions.filter((entry) => /^debugExport/.test(entry.action))
+    .map(
+      (entry) => entry.action + ":" + entry.how + ":" + (entry.outcome ?? ""),
+    );
+  ok(
+    exports.join(" ") ===
+      "debugExport:download: debugExportResult:download:link debugExport:share: debugExportResult:share:shared",
+    "each export records its click and then its outcome",
+  );
+
+  const saveEl = fakeEl(["shareBtn", "dlBtn", "copyBtn", "dlNote"]);
+  fakeWindow.MODAL_REGISTRATIONS.save.wire(null, saveEl);
+  const { shareBtn, dlBtn, dlNote } = saveEl.nodes;
+  ok(shareBtn.hidden === false, "the Save window shows Share too");
+  dlBtn.onclick();
+  await settle();
+  ok(
+    clicks.at(-1) === "queller-turn3.json" &&
+      dlNote.textContent ===
+        "If nothing downloaded, use Share save file or Copy save code.",
+    "Download save file names Share and Copy as the fallback",
+  );
+  shareBtn.onclick();
+  await settle();
+  ok(
+    shared.at(-1) === "queller-turn3.txt" &&
+      dlNote.textContent === "Shared queller-turn3.txt.",
+    "Share save file shares the game",
+  );
+
+  Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+  fakeWindow.QB_DEBUG.reset();
+  delete globalThis.document;
+  delete globalThis.localStorage;
+  ui.setState(null);
+}
+async function main() {
   checkTextHelpers();
   checkBoardPaths();
   checkStorage();
@@ -454,6 +759,8 @@ function main() {
   checkPhaseTables();
   checkTrailAndResult();
   checkCardFaces();
+  await checkTransfer();
+  await checkTransferWiring();
   console.log(fails ? fails + " failure(s)" : "all UI checks passed");
   process.exit(fails ? 1 : 0);
 }

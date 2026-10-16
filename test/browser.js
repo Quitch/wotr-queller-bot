@@ -40,6 +40,7 @@ const SEL = {
   DEBUG_REPORT: "#dbgReport",
   DEBUG_COPY: "#dbgCopy",
   DEBUG_DOWNLOAD: "#dbgDl",
+  DEBUG_SHARE: "#dbgShare",
   DEBUG_NOTE: "#dbgNote",
   ERROR_BAR: "#errbar",
   ERROR_BAR_LOG: "#errbarLog",

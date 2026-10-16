@@ -2,6 +2,7 @@
 // exercises the tracker triggers, the table-card list, the die tap, undo and every modal, then a 360px touch screen
 // (the Tools menu, no sideways scroll). axe-core runs on every screen and modal. Fails on any page error or a serious
 // axe violation.
+import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { AxeBuilder } from "@axe-core/playwright";
 import {
@@ -287,8 +288,70 @@ async function checkDebugLogExport(page) {
   console.log("report in log:", log.report);
   await page.click(SEL.DEBUG_COPY);
   console.log("copy note:", await page.textContent(SEL.DEBUG_NOTE));
-  await page.click(SEL.DEBUG_DOWNLOAD);
-  console.log("download note:", await page.textContent(SEL.DEBUG_NOTE));
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    page.click(SEL.DEBUG_DOWNLOAD),
+  ]);
+  const body = await readFile(await download.path(), "utf8");
+  console.log(
+    "download:",
+    download.suggestedFilename(),
+    body.length,
+    "bytes, note:",
+    await page.textContent(SEL.DEBUG_NOTE),
+  );
+  if (!/^queller-debug-.*\.json$/.test(download.suggestedFilename()))
+    debugFailures.push("download named " + download.suggestedFilename());
+  if (body !== (await page.inputValue(SEL.DEBUG_TEXT)))
+    debugFailures.push("downloaded file differs from the log in the box");
+  const canShare = await page.evaluate(() =>
+    ["application/json", "text/plain"].some(
+      (type) =>
+        !!navigator.canShare?.({ files: [new File([""], "x", { type })] }),
+    ),
+  );
+  const shareShown = await page.isVisible(SEL.DEBUG_SHARE);
+  console.log("canShare files:", canShare, "share button shown:", shareShown);
+  if (shareShown !== canShare)
+    debugFailures.push(
+      "share button shown " + shareShown + ", canShare " + canShare,
+    );
+  await page.click(SEL.MODAL_CLOSE);
+  await checkDebugLogShare(page);
+}
+// Headless Chromium shares no files, so a stubbed share sheet shows the Share button for axe and a click. It takes
+// plain text only, as a share list without JSON would, so the log goes as a .txt file.
+async function checkDebugLogShare(page) {
+  await page.evaluate(() => {
+    window.sharedFiles = [];
+    Object.defineProperty(navigator, "canShare", {
+      value: (data) => data.files[0].type === "text/plain",
+      configurable: true,
+    });
+    Object.defineProperty(navigator, "share", {
+      value: async (data) => {
+        window.sharedFiles.push(data.files[0].name);
+      },
+      configurable: true,
+    });
+  });
+  await page.click(SEL.modal("settings"));
+  await page.click(SEL.DEBUG_OPEN);
+  await axeCheck(page, "debug modal with share");
+  await page.click(SEL.DEBUG_SHARE);
+  await page.waitForFunction(() => window.sharedFiles.length === 1);
+  const note = await page.textContent(SEL.DEBUG_NOTE);
+  const shared = await page.evaluate(() => window.sharedFiles[0]);
+  console.log("shared:", shared, "note:", note);
+  if (
+    !/^queller-debug-.*\.txt$/.test(shared) ||
+    note !== "Shared " + shared + "."
+  )
+    debugFailures.push("share sent " + shared + ", note " + note);
+  await page.evaluate(() => {
+    delete navigator.canShare;
+    delete navigator.share;
+  });
   await page.click(SEL.MODAL_CLOSE);
 }
 // A failing action is rolled back and the error bar offers the log; an uncaught error is recorded too. Returns the
