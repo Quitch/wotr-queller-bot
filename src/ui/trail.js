@@ -31,7 +31,7 @@ const RESULT_TEXT = {
 export function resultHTML(walk) {
   const result = walk.result || "";
   const describe =
-    RESULT_TEXT[result] ||
+    (Object.hasOwn(RESULT_TEXT, result) && RESULT_TEXT[result]) ||
     (phaseFromResult(result)
       ? (ended) => ({ big: lastTrailText(ended) })
       : () => ({}));
@@ -63,7 +63,7 @@ const TRAIL_LABEL = {
 };
 function trailEntryHTML(entry) {
   const kind = entry.kind;
-  let label = TRAIL_LABEL[kind] || kind;
+  let label = TRAIL_LABEL[kind] || escapeHTML(kind);
   if (kind === TRAIL.QUESTION && entry.auto) label = "Auto";
   let text = (entry.ring ? ringIcon() + " " : "") + formatText(entry.text);
   if (entry.die)
@@ -79,7 +79,7 @@ function trailEntryHTML(entry) {
     text += ' <span class="why">→ ' + escapeHTML(entry.choice) + "</span>";
   return (
     '<li class="t-' +
-    kind +
+    escapeHTML(kind) +
     (entry.auto ? " auto" : "") +
     '"><span class="k">' +
     label +

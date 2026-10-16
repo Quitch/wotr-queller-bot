@@ -27,12 +27,11 @@ export { resultHTML, trailHTML } from "../src/ui/trail.js";
 export { PHASE_BY_LABEL } from "../src/ui/header.js";
 export { PHASE_ACTION } from "../src/ui/walkthrough.js";
 export {
-  DEFAULT_STEP_LIMIT,
-  STEP_LIMITS,
   boardValue,
   fellowshipDeclared,
   trackerChange,
 } from "../src/ui/tracker.js";
+export { DEFAULT_STEP_LIMIT, STEP_LIMITS } from "../src/engine/constants.js";
 export { onPhase, trackerValue } from "../src/ui/handlers.js";
 export { undo } from "../src/ui/actions.js";
 export { closeModal } from "../src/modals/framework.js";

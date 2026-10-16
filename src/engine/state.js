@@ -17,6 +17,7 @@ import {
   FLOW_REV_1_MOVED_STEPS,
 } from "./constants.js";
 import { shuffle } from "./random.js";
+import { validateSave } from "./validate.js";
 
 // Every part of a new game, before the decks are built.
 const defaultSettings = (settings) => ({
@@ -248,5 +249,5 @@ export function migrate(save) {
   }
   delete save.shownCard;
   delete save.lastAction;
-  return save;
+  return validateSave(save);
 }

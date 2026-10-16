@@ -71,7 +71,8 @@ function announceLastLogLine() {
   announced = last.text;
   live.textContent = last.text;
 }
-export function render() {
+// html: the game screen already built from this state (commit builds it before the autosave), or built here.
+export function render(html) {
   const root = find("#app");
   hideTip();
   const focus = captureFocus();
@@ -83,7 +84,7 @@ export function render() {
     wireSetup();
     return;
   }
-  root.innerHTML = gameHTML();
+  root.innerHTML = html ?? gameHTML();
   wire();
   restoreDetails(root, details);
   restoreScroll(root, scroll);

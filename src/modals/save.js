@@ -13,8 +13,10 @@ const saveContent = () => ({
   narrow: true,
 });
 // Save and load.
-export const slots = () =>
-  ui.parseJSONOr(ui.storageGet(ui.STORAGE_KEY.SLOTS) || "[]", []);
+export function slots() {
+  const slotList = ui.parseJSONOr(ui.storageGet(ui.STORAGE_KEY.SLOTS), []);
+  return Array.isArray(slotList) ? slotList : [];
+}
 function saveHTML() {
   const slotList = slots();
   let html =
@@ -27,7 +29,9 @@ function saveHTML() {
         return (
           '<div class="slot"><span class="t">Slot ' +
           (i + 1) +
-          (slot ? ": turn " + slot.turn + ", " + esc(slot.when) : ": empty") +
+          (slot
+            ? ": turn " + esc(slot.turn) + ", " + esc(slot.when)
+            : ": empty") +
           '</span><button class="btn small" data-save="' +
           i +
           '">Save here</button>' +
@@ -43,20 +47,80 @@ function saveHTML() {
   html += "<h3>Load</h3>" + loadHTML() + "</div>";
   return html;
 }
-export function loadHTML() {
+function loadHTML() {
   return '<p class="notice" style="margin:0 0 6px">Paste a save code, or choose a save file.</p><label for="loadTxt" class="notice">Save code</label><textarea id="loadTxt" placeholder="Paste the save code here"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="loadTxtBtn">Load from code</button><label class="btn filebtn">Save file <input type="file" id="loadFile" accept=".json,.txt,application/json,text/plain"></label></div><div id="loadErr" class="notice" role="alert" style="color:var(--bad)"></div>';
 }
-// Replace the game with a parsed save.
+// The New game screen's Load area, opened (its Load a saved game button, and after a load that failed there).
+export function openLoadArea() {
+  const area = ui.find("#loadArea");
+  if (!area) return null;
+  area.hidden = false;
+  area.innerHTML = loadHTML();
+  wireLoad(area);
+  return area;
+}
+// Replace the game with a parsed save. A save that cannot be drawn throws (ui.commit builds the page before the
+// autosave): the game in progress, its Undo steps and its battle form draft come back, are saved and drawn again (in
+// case only wiring the page failed after the autosave was written), and so does the Load area it was loaded from: the
+// save modal, or the New game screen's, so the reason has somewhere to show.
 function replaceGame(save, title) {
+  const previous = {
+    state: ui.state,
+    history: ui.history,
+    battleDraft: ui.battleDraft,
+  };
   debug.begin(
     { action: "load", title, turn: save.turn, version: save.appVersion },
     ui.state,
   );
   ui.setHistory([]);
   ui.setState(save);
-  debug.finishAction(save);
   closeModal();
-  ui.commit();
+  try {
+    ui.commit();
+  } catch (error) {
+    ui.restoreState(previous.state);
+    ui.setHistory(previous.history);
+    ui.setBattleDraft(previous.battleDraft);
+    debug.error(error, { action: "loadFailed", rolledBack: true }, save);
+    ui.storageSet(
+      ui.STORAGE_KEY.AUTOSAVE,
+      previous.state ? JSON.stringify(previous.state) : "",
+    );
+    ui.render();
+    if (previous.state) ui.openModal(MODAL.SAVE);
+    else openLoadArea()?.querySelector("#loadTxt")?.focus();
+    throw error;
+  }
+  debug.finishAction(save);
+}
+function showLoadError(text) {
+  const errorEl = ui.find("#loadErr");
+  if (errorEl) errorEl.textContent = text;
+}
+// A save refused by loadJSON (not JSON, or migrate's checks: "not a Queller save (field)"), and one that loaded but
+// could not be drawn.
+const refusedText = (error) =>
+  error.message.startsWith("not a Queller save")
+    ? "That is " + error.message + "."
+    : "That is not a Queller save: " + error.message;
+const notDrawnText = (error) =>
+  "That save loaded but could not be shown, so it was not used: " +
+  error.message;
+// Parse a save and load it; what goes wrong is said in the Load area.
+function loadText(text, title) {
+  let save;
+  try {
+    save = ui.loadJSON(text);
+  } catch (error) {
+    showLoadError(refusedText(error));
+    return;
+  }
+  try {
+    loadGame(save, title);
+  } catch (error) {
+    showLoadError(notDrawnText(error));
+  }
 }
 // Ask before replacing a game in progress; No returns to the save modal.
 function confirmReplace(save, title) {
@@ -68,8 +132,15 @@ function confirmReplace(save, title) {
       { v: "no", label: "Cancel" },
     ],
     onPick: (choice) => {
-      if (choice === "ok") replaceGame(save, title);
-      else ui.openModal(MODAL.SAVE);
+      if (choice !== "ok") {
+        ui.openModal(MODAL.SAVE);
+        return;
+      }
+      try {
+        replaceGame(save, title);
+      } catch (error) {
+        showLoadError(notDrawnText(error));
+      }
     },
   });
 }
@@ -77,7 +148,8 @@ function loadGame(save, title) {
   if (ui.state) confirmReplace(save, title);
   else replaceGame(save, title);
 }
-// Write the game into a slot (slots and saveToSlot are exported for test/ui.js).
+// Write the game into a slot; false when the browser would not store it (slots and saveToSlot are exported for the
+// tests).
 export function saveToSlot(index) {
   debug.action({ action: "saveSlot", slot: index }, ui.state);
   const slotList = slots();
@@ -86,7 +158,19 @@ export function saveToSlot(index) {
     when: new Date().toLocaleString(),
     data: JSON.stringify(ui.state),
   };
-  ui.storageSet(ui.STORAGE_KEY.SLOTS, JSON.stringify(slotList));
+  if (ui.storageSet(ui.STORAGE_KEY.SLOTS, JSON.stringify(slotList)))
+    return true;
+  ui.showStorageNotice();
+  return false;
+}
+// After the save modal is drawn again: say so when the slot was not stored.
+function reportSlotSave(saved, index) {
+  const note = ui.find("#dlNote");
+  if (!saved && note)
+    note.textContent =
+      "Slot " +
+      (index + 1) +
+      " was not saved: this browser’s storage is full or blocked.";
 }
 // Ask before overwriting an occupied slot (there is no undo for it); either answer returns to the save modal.
 function confirmOverwrite(index, slot) {
@@ -105,21 +189,14 @@ function confirmOverwrite(index, slot) {
       { v: "no", label: "Cancel" },
     ],
     onPick: (choice) => {
-      if (choice === "ok") saveToSlot(index);
+      const saved = choice !== "ok" || saveToSlot(index);
       ui.openModal(MODAL.SAVE);
+      reportSlotSave(saved, index);
     },
   });
 }
-export function wireLoad(root) {
-  const doLoad = (text) => {
-    try {
-      loadGame(ui.loadJSON(text), "Load this save?");
-    } catch (error) {
-      const errorEl = root.querySelector("#loadErr");
-      if (errorEl)
-        errorEl.textContent = "That is not a Queller save: " + error.message;
-    }
-  };
+function wireLoad(root) {
+  const doLoad = (text) => loadText(text, "Load this save?");
   const loadBtn = root.querySelector("#loadTxtBtn");
   if (loadBtn)
     loadBtn.onclick = () => doLoad(root.querySelector("#loadTxt").value.trim());
@@ -139,8 +216,9 @@ function wireSaveModal(modal, el) {
       const slot = slots()[index];
       if (slot) confirmOverwrite(index, slot);
       else {
-        saveToSlot(index);
+        const saved = saveToSlot(index);
         renderModal();
+        reportSlotSave(saved, index);
       }
     },
     el,
@@ -150,10 +228,7 @@ function wireSaveModal(modal, el) {
     (button) => {
       const slot = slots()[+button.dataset.load];
       if (slot)
-        loadGame(
-          ui.loadJSON(slot.data),
-          "Load slot " + (+button.dataset.load + 1) + "?",
-        );
+        loadText(slot.data, "Load slot " + (+button.dataset.load + 1) + "?");
     },
     el,
   );

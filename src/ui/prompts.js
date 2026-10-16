@@ -225,9 +225,9 @@ function renderRollPrompt(prompt) {
       .map(
         (option) =>
           '<button class="btn" data-ans="' +
-          option +
+          escapeHTML(option) +
           '">' +
-          option +
+          escapeHTML(option) +
           "</button>",
       )
       .join(""),
@@ -281,7 +281,9 @@ export function promptHTML(walk) {
     page = FLOW[walk.page],
     node = page.nodes[walk.node] || [NODE_KIND.DECISION];
   const kind = prompt.kind || NODE.kind(node) || NODE_KIND.DECISION;
-  const renderer = PROMPT_RENDERERS[prompt.type];
+  const renderer = Object.hasOwn(PROMPT_RENDERERS, prompt.type)
+    ? PROMPT_RENDERERS[prompt.type]
+    : null;
   const { body, answers } = renderer
     ? renderer(prompt, walk, node)
     : { body: "", answers: "" };
