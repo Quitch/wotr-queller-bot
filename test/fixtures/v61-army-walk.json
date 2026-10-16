@@ -1,0 +1,214 @@
+{
+  "appVersion": 61,
+  "createdVersion": 61,
+  "settings": { "dice": true, "cards": false, "tracker": true, "wome": false },
+  "turn": 1,
+  "strategy": "military",
+  "phase": "p5",
+  "dice": {
+    "pool": [{ "kind": "A", "face": "Army", "status": "avail" }],
+    "base": 7,
+    "hunt": 0,
+    "factionDie": false
+  },
+  "cards": {
+    "decks": {
+      "C": [
+        "sa043",
+        "sa016",
+        "sa051",
+        "sa001b2",
+        "sa034",
+        "sa011",
+        "sa037",
+        "sa003",
+        "sa045",
+        "sa010",
+        "sa005",
+        "sa017",
+        "sa009",
+        "sa020",
+        "sa044",
+        "sa022",
+        "sa052",
+        "sa008",
+        "sa024",
+        "sa047",
+        "sa046",
+        "sa025",
+        "sa012",
+        "sa036"
+      ],
+      "S": [
+        "sa002",
+        "sa032",
+        "sa048",
+        "sa042",
+        "sa026",
+        "sa018",
+        "sa014",
+        "sa007",
+        "sa028b2",
+        "sa029",
+        "sa027",
+        "sa049",
+        "sa035",
+        "sa015",
+        "sa033",
+        "sa013",
+        "sa030",
+        "sa039",
+        "sa021",
+        "sa038b2",
+        "sa040",
+        "sa050",
+        "sa019",
+        "sa023"
+      ],
+      "F": []
+    },
+    "discards": { "C": [], "S": [], "F": [] },
+    "hand": [],
+    "factionHand": [],
+    "table": [],
+    "factionTable": []
+  },
+  "board": {
+    "fs": {
+      "progress": 0,
+      "revealed": false,
+      "mordor": false,
+      "inFPSettlement": true,
+      "inStrongholdOrSea": true,
+      "atStart": true,
+      "guideGollum": false,
+      "companions": 7
+    },
+    "chars": {
+      "saruman": "available",
+      "witchKing": "available",
+      "mouth": "available",
+      "gandalfWhite": false,
+      "aragorn": false
+    },
+    "nations": {
+      "sauron": 1,
+      "isengard": 1,
+      "se": 2,
+      "gondor": "passive",
+      "rohan": "passive",
+      "north": "passive",
+      "dwarves": "passive",
+      "elves": "active"
+    },
+    "factions": {
+      "corsairs": false,
+      "dunlendings": false,
+      "spiders": false,
+      "ents": false,
+      "eagles": false,
+      "deadmen": false
+    },
+    "nazgul": 4,
+    "shadowVP": 0,
+    "corruption": 0,
+    "rings": 0
+  },
+  "ringUsedThisTurn": false,
+  "situational": {},
+  "playable": {},
+  "battle": null,
+  "battleOpen": false,
+  "minionReserved": false,
+  "walk": {
+    "page": "AR",
+    "node": "threatEx",
+    "entry": { "page": "M5", "start": "Phase 5" },
+    "stack": [
+      {
+        "page": "M5",
+        "node": "jArmyT",
+        "die": null,
+        "dieIndex": 0,
+        "dieUsed": false
+      }
+    ],
+    "trail": [
+      { "kind": "start", "text": "Phase 5", "page": "M5", "node": "p5" },
+      {
+        "kind": "q",
+        "text": "Shadow under *threat* or Free People *exposed*",
+        "answer": "Yes",
+        "auto": false,
+        "ring": true,
+        "page": "M5",
+        "node": "threat"
+      },
+      {
+        "kind": "q",
+        "text": "*Mobile* army adjacent to *threat*",
+        "answer": "No",
+        "auto": false,
+        "ring": false,
+        "page": "M5",
+        "node": "mobAdjThreat"
+      },
+      {
+        "kind": "q",
+        "text": "Move can create *mobile* army adjacent to *threat*",
+        "answer": "Yes",
+        "auto": false,
+        "ring": false,
+        "page": "M5",
+        "node": "createMob"
+      },
+      {
+        "kind": "skip",
+        "text": "Move using character die",
+        "why": "no Character die available",
+        "page": "M5",
+        "node": "moveChar"
+      },
+      {
+        "kind": "jump",
+        "text": "Army",
+        "die": "Army",
+        "page": "M5",
+        "node": "jArmyT"
+      }
+    ],
+    "prompt": {
+      "type": "yesno",
+      "text": "*Threat* exists",
+      "node": "threatEx",
+      "page": "AR",
+      "kind": "D"
+    },
+    "done": false,
+    "result": null,
+    "mode": null,
+    "battleRound": null,
+    "die": "Army",
+    "dieIndex": 0,
+    "dieAns": {},
+    "dieUsed": false,
+    "pendingDie": null,
+    "fromReserve": false,
+    "reservedDieIndex": null,
+    "ringArmed": false,
+    "ringAsked": false,
+    "cands": null,
+    "chosen": null,
+    "steps": null,
+    "ctb": null,
+    "discards": null,
+    "nationChoice": null,
+    "factionChoice": null,
+    "minionPick": null,
+    "sub": 0,
+    "parts": {}
+  },
+  "log": [
+    { "text": "Walk: Military Strategy Phase 5 from “Phase 5”.", "turn": 1 }
+  ]
+}
