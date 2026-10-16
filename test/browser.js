@@ -28,6 +28,7 @@ const SEL = {
   MODAL_CLOSE: "#mclose",
   TOOLS_BUTTON: "#toolsBtn",
   TOOLS_MENU: "#modal .toolmenu",
+  SETUP_TOOLS: ".setupTools",
   ASK_OK: '#modal [data-ask="ok"]',
   ASK_NO: '#modal [data-ask="no"]',
   FLOW_TOGGLE: "#flowToggle",
