@@ -4,22 +4,29 @@ import { DECK } from "./constants.js";
 import { log } from "./log.js";
 import { shuffle } from "./random.js";
 
-// Draw the top card of a deck. An empty Faction Event deck is rebuilt from its discards first (WoME rules); an empty
+// The WoME rules reshuffle an empty Faction Event deck from its discards at once. Returns whether it did.
+function reshuffleEmptyFactionDeck(state) {
+  const cards = state.cards;
+  if (cards.decks[DECK.FACTION].length || !cards.discards[DECK.FACTION].length)
+    return false;
+  cards.decks[DECK.FACTION] = shuffle(cards.discards[DECK.FACTION]);
+  cards.discards[DECK.FACTION] = [];
+  log(
+    state,
+    "Reshuffled the " + deckName(DECK.FACTION) + " discards into a new deck.",
+  );
+  return true;
+}
+// Draw the top card of a deck. An empty Faction Event deck is rebuilt from its discards (WoME rules), after the draw
+// that empties it and, for a deck that ran out while its discard pile was empty, before the next draw; an empty
 // Character or Strategy deck gives nothing (rule 25). Returns the card, or null.
 export function drawCard(state, deckKey) {
-  const deck = state.cards.decks[deckKey];
-  if (!deck.length) {
-    const discards = state.cards.discards[deckKey];
-    if (deckKey !== DECK.FACTION || !discards.length) {
-      log(state, "The " + deckName(deckKey) + " deck is empty.");
-      return null;
-    }
-    state.cards.decks[deckKey] = shuffle(discards);
-    state.cards.discards[deckKey] = [];
-    log(
-      state,
-      "Reshuffled the " + deckName(deckKey) + " discards into a new deck.",
-    );
+  if (
+    !state.cards.decks[deckKey].length &&
+    !(deckKey === DECK.FACTION && reshuffleEmptyFactionDeck(state))
+  ) {
+    log(state, "The " + deckName(deckKey) + " deck is empty.");
+    return null;
   }
   const id = state.cards.decks[deckKey].shift();
   if (deckKey === DECK.FACTION) state.cards.factionHand.push(id);
@@ -34,6 +41,7 @@ export function drawCard(state, deckKey) {
         : state.cards.hand.length) +
       " in hand).",
   );
+  if (deckKey === DECK.FACTION) reshuffleEmptyFactionDeck(state);
   return id;
 }
 // The Event deck to draw from when `named` is Character or Strategy: `named`, or the other one when it is empty

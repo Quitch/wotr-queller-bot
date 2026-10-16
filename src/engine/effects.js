@@ -19,14 +19,16 @@ import { shuffle } from "./random.js";
 
 const FACTION_PICK = ["Preferred card", "Faction in play"]; // rule 3 breaks the tie
 const FACTION_PICK_ITEMS = FACTION_PICK.concat("Otherwise at random (rule 3)");
-// Servants of Sauron: draw three Faction Event cards, keep one by the priority list, shuffle the rest back with the discards.
-function resolveServantsOfSauron(state) {
+// Servants of Sauron: draw three Faction Event cards, keep one by the priority list, shuffle the rest back with the
+// discards. A short deck is topped up from the discards first, without the played card: it goes back only after the draw.
+function resolveServantsOfSauron(state, card) {
   const cards = state.cards;
   const deck = cards.decks[DECK.FACTION],
     discards = cards.discards[DECK.FACTION];
-  if (deck.length < SERVANTS_DRAW && discards.length) {
-    cards.decks[DECK.FACTION] = deck.concat(shuffle(discards));
-    cards.discards[DECK.FACTION] = [];
+  const others = discards.filter((id) => id !== card.id);
+  if (deck.length < SERVANTS_DRAW && others.length) {
+    cards.decks[DECK.FACTION] = deck.concat(shuffle(others));
+    cards.discards[DECK.FACTION] = discards.filter((id) => id === card.id);
   }
   const drawn = cards.decks[DECK.FACTION].splice(0, SERVANTS_DRAW);
   const picked = applyPriority(state, drawn, FACTION_PICK);
@@ -120,21 +122,26 @@ function resolveTheLidlessEye(state) {
   log(state, "The Lidless Eye: " + logText);
   return [{ kind: TRAIL.NOTE, text: "The Lidless Eye: " + noteText }];
 }
-// A Faction Event card that brings its faction into play: the tracker follows.
+// A Faction Event card that recruits figures or adds them to the starting setup. It never brings the faction into play
+// (WoME rules): with the faction out of play, the recruited figures go on its Faction card.
 function resolveRecruitFaction(state, card) {
-  const factionKey = card.faction.toLowerCase();
-  if (state.board.factions[factionKey]) return [];
-  state.board.factions[factionKey] = true;
-  state.playable = {};
+  if (state.board.factions[card.faction.toLowerCase()]) return [];
   log(
     state,
-    card.faction +
-      " are now in play (tracker updated; the Faction die joins the pool next turn).",
+    "“" +
+      card.title +
+      "”: the " +
+      card.faction +
+      " are not in play, so the recruited figures go on the " +
+      card.faction +
+      " Faction card, to enter with the starting setup when the Faction comes into play.",
   );
   return [
     {
       kind: TRAIL.NOTE,
-      text: card.faction + " enter play — tracker updated",
+      text:
+        card.faction +
+        " not in play: the recruited figures go on the Faction card (starting setup)",
     },
   ];
 }
@@ -145,14 +152,10 @@ export const CARD_EFFECTS = {
   [CARD_EFFECT.LIDLESS_EYE]: resolveTheLidlessEye,
   [CARD_EFFECT.RECRUIT_FACTION]: resolveRecruitFaction,
 };
-// The Palantír of Orthanc: after an Event die plays an Event card, draw another card (a preferred one: Character under the corruption strategy, Strategy under military).
+// The Palantír of Orthanc: after an Event die plays an Event card (a Faction Event card counts, WoME rules), draw another
+// card (a preferred one: Character under the corruption strategy, Strategy under military).
 function resolvePalantirDraw(state, card, play) {
-  if (
-    play?.die !== DIE_REQUIREMENT.EVENT ||
-    (card.deck !== DECK.CHARACTER && card.deck !== DECK.STRATEGY) ||
-    !play.palantirBefore
-  )
-    return [];
+  if (play?.die !== DIE_REQUIREMENT.EVENT || !play.palantirBefore) return [];
   // either deck, the preferred one first (rule 25: an empty deck gives way to the other)
   const deckKey = eventDeckToDraw(
     state,
