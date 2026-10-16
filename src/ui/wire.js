@@ -18,6 +18,7 @@ import {
   DEFAULT_STEP_LIMIT,
   STEP_LIMITS,
   boardValue,
+  fellowshipDeclared,
   trackerChange,
 } from "./tracker.js";
 
@@ -76,6 +77,8 @@ function wireTracker() {
   document.querySelectorAll(".tracker [data-t]").forEach((el) => {
     el.onchange = () => trackerChange(el.dataset.t, trackerValue(el));
   });
+  const declaredBtn = find("#t-fs-declared");
+  if (declaredBtn) declaredBtn.onclick = fellowshipDeclared;
 }
 function wireSteppers() {
   onClickEach("[data-step]", (button) => {

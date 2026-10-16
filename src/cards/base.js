@@ -132,7 +132,7 @@ export const BASE_CARDS = [
     onTable: true,
     cpre: "nazLead1",
     reminder:
-      "Discard it before a Hunt roll to add 1 to all dice on that roll (including re-rolls). The app asks whether to discard it when the tracker shows the Fellowship revealed in a Free Peoples settlement.",
+      "Discard it before a Hunt roll to add 1 to all dice on that roll (including re-rolls). With the board tracker on, press Declared under Fellowship when the Fellowship is declared in a Free Peoples City or Stronghold, and the app asks whether to discard it.",
   },
   {
     id: "sa010",
@@ -820,6 +820,6 @@ export const BASE_CARDS = [
     onTable: true,
     cpre: "nazInBattle",
     reminder:
-      "When a Companion in the Fellowship is taken as a casualty, discard one Free Peoples Character Event card (random from the hand, or from the table). The app asks whether to discard it when the tracker shows the Fellowship revealed in a Free Peoples settlement.",
+      "When a Companion in the Fellowship is taken as a casualty, discard one Free Peoples Character Event card (random from the hand, or from the table). With the board tracker on, press Declared under Fellowship when the Fellowship is declared in a Free Peoples City or Stronghold, and the app asks whether to discard it.",
   },
 ];

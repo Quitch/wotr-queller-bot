@@ -110,7 +110,7 @@ async function playBattle(page) {
   await answerAll(page);
 }
 // Put Saruman in play with Wormtongue + Palantír on the table, set him to eliminated → auto-discards; Gondor to war →
-// ask dialog for Threats and Promises; the Fellowship revealed → ask dialog for Flocks of Crebain.
+// ask dialog for Threats and Promises; the Declared button → ask dialog for Flocks of Crebain (a failure if it is missing).
 async function exerciseTrackerTriggers(page) {
   await page.evaluate(() => {
     const engine = window.QB;
@@ -145,12 +145,16 @@ async function exerciseTrackerTriggers(page) {
   if (askDialog) await page.click(SEL.ASK_OK);
   state = await readState(page);
   console.log("after answer: table", JSON.stringify(state.cards.table));
-  await page.check(SEL.TRACKER_REVEALED);
+  await page.click(SEL.TRACKER_DECLARED);
   const flocksDialog = await page.$(SEL.MODAL);
-  console.log(
-    "Flocks ask:",
-    flocksDialog ? await page.textContent(SEL.MODAL_TITLE) : "none",
-  );
+  const flocksTitle = flocksDialog
+    ? await page.textContent(SEL.MODAL_TITLE)
+    : "none";
+  console.log("Flocks ask:", flocksTitle);
+  if (!/Flocks of Crebain/.test(flocksTitle))
+    debugFailures.push(
+      "the Declared button did not ask about Flocks of Crebain",
+    );
   if (flocksDialog) await page.click(SEL.ASK_NO);
 }
 // Table card details and reminder, the die tap, undo, every modal, and a walk from another start point.

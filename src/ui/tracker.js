@@ -163,6 +163,11 @@ const trackerNoticeHTML = () =>
   state.settings.cards
     ? '<p class="notice" style="margin:0 0 8px">A change here may ask whether a card on the table is discarded.</p>'
     : "";
+// A one-shot event, not a board field (the Progress counter stays Hidden): only the table cards it discards need it.
+const declaredRowHTML = () =>
+  state.settings.cards
+    ? '<div class="row"><span id="t-fs-declared-what">Fellowship declared in a Free Peoples City or Stronghold</span><button class="btn small" id="t-fs-declared" aria-describedby="t-fs-declared-what">Declared</button></div>'
+    : "";
 const scoreSectionHTML = () =>
   "<h3>Score</h3>" +
   trackerNumber("shadowVP", "Shadow victory points") +
@@ -173,6 +178,7 @@ const fellowshipSectionHTML = () =>
   trackerNumber("fs.progress", "Progress counter") +
   trackerNumber("fs.companions", "Companions in the Fellowship") +
   trackerCheckbox("fs.revealed", "Revealed") +
+  declaredRowHTML() +
   trackerCheckbox("fs.mordor", "On the Mordor Track") +
   trackerCheckbox("fs.atStart", "Figure in Rivendell") +
   trackerCheckbox(
@@ -299,4 +305,14 @@ function askAboutTriggeredCards(asks) {
 }
 export function trackerChange(path, value) {
   askAboutTriggeredCards(applyTrackerChange(path, value));
+}
+export function fellowshipDeclared() {
+  let asks = [];
+  act(
+    () => {
+      asks = engine.fellowshipDeclared(state);
+    },
+    { action: "fellowshipDeclared" },
+  );
+  askAboutTriggeredCards(asks);
 }

@@ -7,10 +7,13 @@ import {
   MINION_STATUS,
 } from "./constants.js";
 import { discardCard } from "./hand.js";
+import { log } from "./log.js";
 
 const FP_NATION_KEY = new RegExp(
   String.raw`^nations\.(${FP_NATIONS.join("|")})$`,
 ); // a tracker change key for a Free Peoples nation
+// A declaration is an event, not a board field: the counter stays Hidden, so "Revealed" cannot stand in for it.
+const FS_DECLARED = "fs.declared";
 // Table cards whose discard condition the board tracker can see. `outcome(state, change)` returns {discard: reason} (discard now),
 // {ask: question} (the player must decide) or null (nothing happens).
 // Only "eliminated" counts: moving Saruman back to "available" is a correction and discards nothing.
@@ -42,8 +45,7 @@ const TABLE_TRIGGERS = [
       if (FP_STANCE_RANK[change.to] <= FP_STANCE_RANK[change.from]) return null;
       if (change.from === FP_STANCE.PASSIVE)
         return {
-          discard:
-            "a Free Peoples Nation advanced from passive (only an attack, a Companion or a Fellowship declaration can do that while the card is in play)",
+          ask: "Threats and Promises: was the Nation activated by an attack or a Companion’s special ability (not by a Fellowship declaration or an enemy Army entering it)?",
         };
       return {
         ask: "Threats and Promises: did the Nation go to war because of an attack or a Companion’s special ability (not a Muster die)?",
@@ -53,7 +55,7 @@ const TABLE_TRIGGERS = [
   {
     id: CARD.FLOCKS_OF_CREBAIN,
     outcome: (state, change) =>
-      fsDeclaredInFP(state, change)
+      change.key === FS_DECLARED
         ? {
             ask: "Flocks of Crebain: was the Fellowship declared in an unconquered Free Peoples City or Stronghold?",
           }
@@ -62,20 +64,20 @@ const TABLE_TRIGGERS = [
   {
     id: CARD.WORN_WITH_SORROW,
     outcome: (state, change) =>
-      fsDeclaredInFP(state, change)
+      change.key === FS_DECLARED
         ? {
             ask: "Worn with Sorrow and Toil: was the Fellowship declared in an unconquered Free Peoples City or Stronghold?",
           }
         : null,
   },
 ];
-function fsDeclaredInFP(state, change) {
-  return (
-    (change.key === "fs.revealed" || change.key === "fs.inFPSettlement") &&
-    !!change.to &&
-    state.board.fs.revealed &&
-    state.board.fs.inFPSettlement
+// The tracker's "declared" button: logs the declaration and returns the table cards to ask about.
+export function fellowshipDeclared(state) {
+  log(
+    state,
+    "The Fellowship was declared in a Free Peoples City or Stronghold.",
   );
+  return tableTriggers(state, { key: FS_DECLARED, from: false, to: true });
 }
 // After a tracker change {key, from, to}: discards the table cards whose condition is now met; returns the questions the app cannot answer itself.
 export function tableTriggers(state, change) {
