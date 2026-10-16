@@ -1,7 +1,6 @@
 // Decision handlers for the Phase 5 pages: (state, node, facts), each answering a box from the state or asking the player.
 import * as engine from "../../engine/index.js";
 import { TRAIL, cardById } from "../../engine/index.js";
-import { NODE } from "../../flow/index.js";
 import { trail } from "../core.js";
 import { PENDING } from "../prompt.js";
 import {
@@ -10,9 +9,12 @@ import {
   ask,
   askDecision,
   boardFactYesNo,
+  listParts,
+  partText,
   characterHand,
   recordDecision,
   strategyHand,
+  decidePlayableCharacterCard,
 } from "./common.js";
 
 // ---- Phase 5
@@ -26,7 +28,7 @@ function decideCharacterCardsWithFellowshipOut(
   const onMordorOrRevealed = boardFactYesNo(
     state,
     "mordor",
-    "Is the Fellowship on the Mordor track or revealed?",
+    "Is the Fellowship on the Mordor Track or revealed?",
     board.fs.mordor || board.fs.revealed,
   );
   if (onMordorOrRevealed === PENDING) return PENDING;
@@ -35,7 +37,7 @@ function decideCharacterCardsWithFellowshipOut(
       state,
       node,
       false,
-      "Fellowship not on the Mordor track or revealed",
+      "Fellowship not on the Mordor Track or revealed",
     );
   if (cardsOn)
     return answerAuto(
@@ -47,22 +49,23 @@ function decideCharacterCardsWithFellowshipOut(
   ask(
     state,
     node,
-    "Character cards > 0? (the Fellowship is on the Mordor track or revealed)",
+    "Character cards > 0? (the Fellowship is on the Mordor Track or revealed)",
   );
 }
 export function decideWitchKingInPlay(state, node, { trackerOn }) {
   if (trackerOn && !engine.minionInPlay(state, "witchKing"))
-    return answerAuto(state, node, false, "Witch King not in play");
+    return answerAuto(state, node, false, "Witch-king not in play");
   ask(state, node);
 }
-// Two-part decision: bold part, a minion can be mustered; plain part, Muster 2 can still advance a nation or recruit a faction.
+// Two-part decision: ring part, a minion can be mustered; plain part, Muster 2 can still advance a nation or recruit a faction.
 function decideMinionOrMuster2(state, node, { trackerOn, walk, wome }) {
   if (!trackerOn) return askDecision(state, node);
+  const { ring, plain } = listParts(state, node);
   if (walk.sub === 0) {
     const minions = engine.minionsAvailable(state);
     if (minions.length)
       return recordDecision(state, {
-        text: NODE.text(node),
+        text: partText(ring),
         ringCondition: true,
         answer: true,
         auto: true,
@@ -70,7 +73,7 @@ function decideMinionOrMuster2(state, node, { trackerOn, walk, wome }) {
       });
     trail(state, {
       kind: TRAIL.QUESTION,
-      text: NODE.text(node),
+      text: partText(ring),
       answer: "No",
       auto: true,
       why: "no minion can be mustered (tracker)",
@@ -79,11 +82,11 @@ function decideMinionOrMuster2(state, node, { trackerOn, walk, wome }) {
   }
   const seNotAtWar = !engine.shadowNationAtWar(state, "se"),
     noFactionInPlay = wome && !engine.shadowFactionInPlay(state);
-  let why = "S&E at war" + (wome ? ", a faction is in play" : "");
-  if (seNotAtWar) why = "Southrons & Easterlings not at war";
+  let why = "S&E At War" + (wome ? ", a faction is in play" : "");
+  if (seNotAtWar) why = "Southrons & Easterlings not At War";
   else if (noFactionInPlay) why = "no faction recruited";
   recordDecision(state, {
-    text: NODE.extra(node).t2,
+    text: partText(plain),
     ringCondition: false,
     answer: seNotAtWar || noFactionInPlay,
     auto: true,
@@ -91,32 +94,22 @@ function decideMinionOrMuster2(state, node, { trackerOn, walk, wome }) {
   });
 }
 function decideMordorWin(state, node, { trackerOn, board, walk }) {
+  const { ring, plain } = listParts(state, node);
   if (walk.sub === 0) {
     if (trackerOn && board.fs.mordor)
       return recordDecision(state, {
-        text: NODE.text(node),
+        text: partText(ring),
         ringCondition: true,
         answer: true,
         auto: true,
-        why: "Fellowship on the Mordor track",
+        why: "Fellowship on the Mordor Track",
       });
     return ask(state, node, "*Target* would win the game", {
       sub: 1,
       bold: true,
     });
   }
-  ask(state, node, NODE.extra(node).t2, { sub: 2 });
-}
-function decidePlayableCharacterCard(state, node, { cardsOn }) {
-  if (cardsOn)
-    return answerByPlayableCount(
-      state,
-      node,
-      characterHand(state),
-      "event",
-      "playable Character card",
-    );
-  ask(state, node);
+  ask(state, node, partText(plain), { sub: 2 });
 }
 function decideAllFactionsInPlay(state, node, { factionsKnown }) {
   if (factionsKnown)
@@ -151,12 +144,10 @@ export function decidePlayableMusterCard(state, node, { cardsOn }) {
     );
   ask(state, node);
 }
-export const askAnyOf = (state, node) =>
-  ask(state, node, null, { items: NODE.extra(node).items, any: true });
 function decideAnyConditionOrMordor(state, node, { trackerOn, board }) {
   if (trackerOn && board.fs.mordor)
     return answerAuto(state, node, true, "Fellowship is in Mordor");
-  askAnyOf(state, node);
+  askDecision(state, node);
 }
 
 // The decision boxes of the Phase 5 pages (both strategies), keyed by page and node id.

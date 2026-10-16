@@ -3,8 +3,12 @@ import * as engine from "../../engine/index.js";
 import { DECK, STRATEGY, cardById } from "../../engine/index.js";
 import { evalPlayable } from "../playable.js";
 import { PENDING } from "../prompt.js";
-import { answerAuto, answerByPlayableCount, ask } from "./common.js";
-import { askAnyOf } from "./phase-5.js";
+import {
+  answerAuto,
+  answerByPlayableCount,
+  ask,
+  askDecision,
+} from "./common.js";
 
 // ---- Battle
 function decideUsableCharacterCombatCard(state, node, { cardsOn }) {
@@ -24,8 +28,8 @@ function decideWitchKingFirstRound(state, node, { trackerOn, walk }) {
   if (walk.battleRound !== 1)
     return answerAuto(state, node, false, "not the first round");
   if (trackerOn && !engine.minionInPlay(state, "witchKing"))
-    return answerAuto(state, node, false, "Witch King not in play");
-  ask(state, node, "Army includes the Witch King (this is the first round)");
+    return answerAuto(state, node, false, "Witch-king not in play");
+  ask(state, node, "Army includes the Witch-king (this is the first round)");
 }
 function decideHandOver4(state, node, { cardsOn, handCount }) {
   if (cardsOn)
@@ -57,18 +61,23 @@ function decideFirstRound(state, node, { walk }) {
 }
 function decideFieldBattleOrMilitary(state, node, { trackerOn, board }) {
   if (state.strategy === STRATEGY.MILITARY)
-    return answerAuto(state, node, true, "military strategy");
+    return answerAuto(state, node, true, "Military strategy");
   if (trackerOn && board.fs.mordor)
-    return answerAuto(state, node, true, "Fellowship on the Mordor track");
+    return answerAuto(state, node, true, "Fellowship on the Mordor Track");
   ask(
     state,
     node,
-    "Field battle? (not military strategy; Fellowship not on the Mordor track)",
+    "Field battle? (not Military strategy; Fellowship not on the Mordor Track)",
   );
+}
+// The second "Shadow Army attacking" (after casualties): the round already established who attacks.
+function decideAttackingThisRound(state, node, { walk }) {
+  if (walk.attacking === null) return ask(state, node);
+  answerAuto(state, node, walk.attacking, "answered earlier this round");
 }
 function decideAggressiveContinue(state, node, { trackerOn, board }) {
   if (trackerOn && board.fs.mordor)
-    return answerAuto(state, node, true, "Fellowship on the Mordor track");
+    return answerAuto(state, node, true, "Fellowship on the Mordor Track");
   ask(state, node);
 }
 
@@ -81,5 +90,6 @@ export const BATTLE_DECISIONS = {
   "BA.round1": decideFirstRound,
   "BA.fieldOrMil": decideFieldBattleOrMilitary,
   "BA.aggrCont": decideAggressiveContinue,
-  "BA.anyCond": askAnyOf,
+  "BA.anyCond": askDecision,
+  "BA.attacking2": decideAttackingThisRound,
 };

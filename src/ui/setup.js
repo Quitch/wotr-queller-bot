@@ -28,7 +28,7 @@ export function setupHTML() {
     optionHTML("dice", {
       title: "Roll and track Queller’s dice",
       description:
-        "Rolls the Shadow Action dice (and the Faction die) and keeps the Hunt box.",
+        "Rolls the Shadow Action dice (and the Faction die) and keeps the Hunt Box.",
       whenOn:
         "the walkthrough takes or skips options by the dice Queller actually has.",
       whenOff:
@@ -49,7 +49,7 @@ export function setupHTML() {
       title: "Track board state in the app",
       description: "A trade-off. The app always walks the flowcharts.",
       whenOn:
-        "you keep a board tracker up to date (Fellowship, characters, Political Track, nations, factions) and the app answers every board question from it.",
+        "you keep a board tracker up to date (Fellowship, characters, Political Track, Nations, factions) and the app answers every board question from it.",
       whenOff:
         "no tracker to maintain, but every question about the board is put to you.",
       checked: settings.tracker,

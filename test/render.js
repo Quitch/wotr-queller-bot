@@ -338,8 +338,33 @@ function checkBlockedQuestionHidesHand() {
     "no question when the player holds Queller's cards",
   );
 }
+// A condition list the player answers (here MU.notWar without the tracker) is a bulleted list under its header,
+// with no question mark after the header's colon; WoME items are left out without WoME.
+function checkConditionListPrompt() {
+  const state = engine.newState({
+    dice: false,
+    cards: false,
+    tracker: false,
+    wome: false,
+  });
+  state.phase = engine.PHASE.P5;
+  engine.startWalk(state, "MU", "Muster 2", {
+    die: engine.DIE_REQUIREMENT.MUSTER,
+  });
+  for (let guard = 0; guard < 10 && state.walk.node !== "notWar"; guard++)
+    engine.answer(state, false);
+  ui.setState(state);
+  const html = fakeWindow.promptHTML(state.walk);
+  ok(
+    state.walk.node === "notWar" &&
+      html.includes("ANY condition true:</p><ul><li>") &&
+      !html.includes("No faction is in play"),
+    "a condition list is asked as a bulleted list, without a question mark after the colon or the WoME item",
+  );
+}
 function main() {
   playGames();
+  checkConditionListPrompt();
   checkBlockedQuestionHidesHand();
   checkPromptTypesRendered();
   renderStatelessModals();

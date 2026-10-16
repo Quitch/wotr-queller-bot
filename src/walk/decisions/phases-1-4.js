@@ -80,7 +80,7 @@ function decideWinOrSevenDice(state, node, { diceOn }) {
   ask(
     state,
     node,
-    "*Mobile* army adjacent to *target* which would win the game" +
+    "*Mobile* Army *adjacent* to *target* which would win the game" +
       (diceOn ? "" : " or Shadow only has 7 dice"),
   );
 }

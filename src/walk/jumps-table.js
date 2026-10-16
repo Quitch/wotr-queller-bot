@@ -27,10 +27,20 @@ const JUMPS = [
   [/^Army 3$/, { page: "AR", start: "Army 3", die: DIE_REQUIREMENT.ARMY }],
   [/^Army 4$/, { page: "AR", start: "Army 4", die: DIE_REQUIREMENT.ARMY }],
   [
-    /^Army 4 \((use )?character die\)$/,
+    /^Army 4 \((use )?Character die\)$/,
     { page: "AR", start: "Army 4", die: DIE_REQUIREMENT.CHARACTER },
   ],
   [/^Muster$/, { page: "MU", start: "Muster", die: DIE_REQUIREMENT.MUSTER }],
+  // on the Army page with an Army/Muster die: the die Queller holds is used as a Muster die
+  [
+    /^Muster 3$/,
+    {
+      page: "MU",
+      start: "Muster 3/Muster Event card",
+      die: DIE_REQUIREMENT.MUSTER,
+      held: true,
+    },
+  ],
   [
     /^Muster 2$/,
     { page: "MU", start: "Muster 2", die: DIE_REQUIREMENT.MUSTER },
@@ -52,21 +62,21 @@ const JUMPS = [
     { page: "CH", start: "Character 2", die: DIE_REQUIREMENT.CHARACTER },
   ],
   [
-    /^Character 3 \/ Muster Witch King$/,
+    /^Character 3 \/ Muster Witch-king$/,
     {
       page: "CH",
-      start: "Character 3 / Muster Witch King",
+      start: "Character 3 / Muster Witch-king",
       die: DIE_REQUIREMENT.CHAR_OR_MUSTER,
     },
   ],
   [/^Event$/, { page: "EV", start: "Event", die: DIE_REQUIREMENT.EVENT }],
   [
-    /^Event \(use character die\)$/,
+    /^Event \(use Character die\)$/,
     { page: "EV", start: "Event", die: DIE_REQUIREMENT.CHARACTER },
   ],
   [/^Event 2$/, { page: "EV", start: "Event 2", die: DIE_REQUIREMENT.EVENT }],
   [
-    /^Event 2 \(use character die\)$/,
+    /^Event 2 \(use Character die\)$/,
     { page: "EV", start: "Event 2", die: DIE_REQUIREMENT.CHARACTER },
   ],
   [
@@ -97,15 +107,15 @@ const JUMPS = [
     },
   ],
   [/^Phase 5 - continue/, { kind: "return" }],
-  [/^Phase 5 \(use a ring/, { kind: "ringAny" }],
+  [/^Phase 5 \(use an Elven Ring/, { kind: "ringAny" }],
   [/^Save muster/, { kind: "reserve" }],
   [
-    /^Switch to military/,
+    /^Switch to Military/,
     {
       kind: "switch",
       strategy: STRATEGY.MILITARY,
       endWalk: "Phase 3",
-      text: "Queller switches to the military strategy. Continue at “Phase 3” on the Military flowchart.",
+      text: "Queller switches to the Military strategy. Continue at “Phase 3” on the Military flowchart.",
     },
   ],
   [
@@ -119,6 +129,10 @@ const JUMPS = [
   ],
   [/Strategy Phase 5$/, { kind: "endPhase4" }],
   [/^Battle \(next round\)$/, { kind: "battleNext" }],
+  [
+    /^Battle \(advance\)$/,
+    { kind: "sameWalk", page: "BA", start: "Battle (advance)" },
+  ],
 ];
 export const DIE_REQUIREMENT_NAME = {
   [DIE_REQUIREMENT.ARMY]: "Army",

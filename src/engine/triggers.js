@@ -43,10 +43,10 @@ const TABLE_TRIGGERS = [
       if (change.from === FP_STANCE.PASSIVE)
         return {
           discard:
-            "a Free Peoples nation advanced from passive (only an attack, a Companion or a Fellowship declaration can do that while the card is in play)",
+            "a Free Peoples Nation advanced from passive (only an attack, a Companion or a Fellowship declaration can do that while the card is in play)",
         };
       return {
-        ask: "Threats and Promises: did the nation go to war because of an attack or a Companion’s special ability (not a Muster die)?",
+        ask: "Threats and Promises: did the Nation go to war because of an attack or a Companion’s special ability (not a Muster die)?",
       };
     },
   },

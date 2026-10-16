@@ -1,7 +1,7 @@
 // Free Peoples table cards that stop a Shadow Army moving into or attacking certain regions until the Shadow pays to
 // remove them: one Action die, one Army Event card and one Character card (A Power too Great, The Power of Tom
-// Bombadil). Rule 15: when a card in play prevents a Queller action, Queller does what is necessary to remove it, and
-// only when it tries that action. Rule 12: the Event page chooses discards ("Event card discard" priority). With the
+// Bombadil). Rule 19: when a card in play prevents a Queller action, Queller does what is necessary to remove it, and
+// only when it tries that action. Rule 16: the Event page chooses discards ("Event card discard" priority). With the
 // app holding Queller's cards, the walk asks after Not possible whether one of these cards blocked the action; if so,
 // Queller pays when it can, and the removal is that action.
 import * as engine from "../engine/index.js";
@@ -65,7 +65,7 @@ function matchingActionDie(state, req) {
   return null;
 }
 // The die that pays, as {die, claimed}: the action's own die, else an Action die matching its requirement, else any
-// Action die not showing a preferred result (rule 23); null when Queller has none. claimed: the walk's own die pays,
+// Action die not showing a preferred result (rule 29); null when Queller has none. claimed: the walk's own die pays,
 // so spending it releases the walk's die. With dice off the player's die pays: {die: null}, claimed unless the action
 // held a Faction die.
 function payingDie(state) {
@@ -119,7 +119,7 @@ export function payForcedDiscard(state, key, prompt) {
     WALK_RESULT.ACTION,
     "Queller removes “" +
       fpCard.title +
-      "” (rule 15): it discards “" +
+      "” (rule 19): it discards “" +
       cardById[army].title +
       "” and “" +
       cardById[character].title +

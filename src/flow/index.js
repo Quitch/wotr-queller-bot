@@ -1,9 +1,12 @@
 // Queller Bot flowcharts — transcribed from War_of_the_Ring.drawio (10 pages).
 // Node kinds: S start (green ellipse), A action (red ellipse), D decision (yellow), d follow-up decision (blue),
 // J jump (grey box), P priority list (purple), T step (orange), N note/title.
-// Node: [kind, x, y, width, height, text, extra]. extra: {items: [...], any: true (the items are alternatives),
-//   bold: true (Elven Ring condition), t2: "non-bold part", wome: true (WoME only), die: "Army" (the die an action
-//   box uses), name: "..." (a jump box's start point when it differs from its text)}.
+// Node: [kind, x, y, width, height, text, extra]. extra: {items: [...], any: true / all: true (the items are a condition
+//   list: ANY or ALL of them; the text is the list's header), plainHeader: true (the header is not bold), bold: true (the
+//   whole box is an Elven Ring condition), wome: true (WoME only), die: "Army" (the die an action box uses), help: "..."
+//   (a line of help under an action), name: "..." (a jump box's start point when it differs from its text)}. An item of
+//   a condition list is its text, or {text, bold: true (an Elven Ring condition), wome: true (WoME only)}: read those
+//   through NODE.items. A priority list's items are plain text (card criteria and prompt lines read them as strings).
 // Edge: [from, to, label, waypoints, anchors {ex, en}, style ("elbow"), hideLabel]; slots 3-6 are filled from
 //   anchors.json (generated from the draw.io file by scripts/sync-anchors.js: exact exit/entry anchors and waypoints per edge).
 //   A decision edge with no label is the answer the other edge lacks.
@@ -37,6 +40,13 @@ export const NODE = {
   kind: (node) => node[NODE_SLOT.KIND],
   text: (node) => node[NODE_SLOT.TEXT],
   extra: (node) => node[NODE_SLOT.EXTRA] || {},
+  items: (node) =>
+    (NODE.extra(node).items || []).map((item) =>
+      typeof item === "string" ? { text: item } : item,
+    ),
+  // the box, or one of its items, is an Elven Ring condition
+  isRing: (node) =>
+    !!NODE.extra(node).bold || NODE.items(node).some((item) => item.bold),
   box: (node) => ({
     x: node[NODE_SLOT.X],
     y: node[NODE_SLOT.Y],

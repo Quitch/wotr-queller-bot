@@ -46,7 +46,13 @@ const byType = (type, answer) => ({
 function ruleAnswer(prompt, rules) {
   for (const rule of rules) {
     const [test, answer] = Array.isArray(rule)
-      ? [(candidate) => rule[0].test(candidate.text || ""), rule[1]]
+      ? [
+          (candidate) =>
+            rule[0].test(
+              [candidate.text || "", ...(candidate.items || [])].join(" "),
+            ),
+          rule[1],
+        ]
       : [rule.test, rule.answer];
     if (test(prompt))
       return typeof answer === "function" ? answer(prompt) : answer;
@@ -275,9 +281,10 @@ function balrogOnTableOfferedAsDurinsBane() {
   const seen = driveWalk(balrogState, [
     byType(PROMPT.BATTLE_FORM, { nazLead: 0, figures: {}, nearMoria: true }),
     byType(PROMPT.CONFIRM, true),
-    [/Shadow army attacking/, true],
+    [/has retreated/, false],
+    [/^Shadow Army attacking$/, true],
     [/sortie/, false],
-    [/Witch King/, false],
+    [/Witch-king/, false],
     [/laying siege/, true],
   ]);
   const playCardPrompt = seen.find(
@@ -293,7 +300,7 @@ function balrogOnTableOfferedAsDurinsBane() {
     "Balrog discarded from the table after combat use",
   );
 }
-// "Bring faction into play" and "Mustered Witch King" update the tracker
+// "Bring faction into play" and "Mustered Witch-king" update the tracker
 function actionsUpdateTheTracker() {
   const corsairsState = phase5State({
     dice: true,
@@ -318,13 +325,13 @@ function actionsUpdateTheTracker() {
     wome: false,
   });
   witchKingState.walk = null;
-  engine.startWalk(witchKingState, "CH", "Character 3 / Muster Witch King", {
+  engine.startWalk(witchKingState, "CH", "Character 3 / Muster Witch-king", {
     die: DIE_REQUIREMENT.MUSTER,
   });
-  driveWalk(witchKingState, [[/Mustered Witch King/, true]]);
+  driveWalk(witchKingState, [[/Mustered Witch-king/, true]]);
   ok(
     witchKingState.board.chars.witchKing === MINION_STATUS.IN_PLAY,
-    'Witch King in play after "Mustered Witch King"',
+    'Witch-king in play after "Mustered Witch-king"',
   );
   const hillmenState = phase5State({
     dice: true,
@@ -486,7 +493,7 @@ function tableTriggersDiscardOrAsk() {
     "Flocks of Crebain asked about when revealed in a Free Peoples settlement",
   );
 }
-// rule 19: Call to Battle cards ignore initiative
+// rule 24: Call to Battle cards ignore initiative
 function callToBattleCardsIgnoreInitiative() {
   const callToBattleState = phase5State({
     dice: true,
@@ -686,7 +693,7 @@ function wornWithSorrowAsksAndWormtongueOnSaruman() {
     "Wormtongue discarded when Saruman is eliminated",
   );
 }
-// A Muster die brought back from "set aside for a minion" cannot be set aside again (Rulings): the grey box is skipped
+// A Muster die brought back from "set aside for a minion" cannot be set aside again (rule 34): the grey box is skipped
 // and the die, unused, is spent. The box is reached directly, since a walk that came from the reserve answers the
 // Will of the West check No and never gets there by its arrows.
 function reservedDieCannotBeReservedAgain() {
@@ -912,7 +919,7 @@ function eliminatedMinionIsNeverMusteredAgain() {
       /not eliminated/.test(choice.text) &&
       !labels.some((label) => /Saruman/.test(label)) &&
       labels.some((label) =>
-        /Mouth of Sauron \(all Free Peoples nations At War, or the Fellowship on the Mordor track\)/.test(
+        /Mouth of Sauron \(all Free Peoples Nations At War, or the Fellowship on the Mordor Track\)/.test(
           label,
         ),
       ),
@@ -947,9 +954,9 @@ function eliminatedMinionIsNeverMusteredAgain() {
     "setting Saruman to eliminated discards Wormtongue and the Palantír",
   );
 }
-// "A Power too Great" / "The Power of Tom Bombadil" (rule 15): Not possible on a Phase 5 action asks whether such a
+// "A Power too Great" / "The Power of Tom Bombadil" (rule 19): Not possible on a Phase 5 action asks whether such a
 // card blocked it; if so, Queller pays one Action die (the action's own when it can), one Army Event card and one
-// Character card (chosen by the Event page discard priority, rule 12), and that is its action. A Faction Army card
+// Character card (chosen by the Event page discard priority, rule 16), and that is its action. A Faction Army card
 // does not count; when Queller cannot pay, the action is not possible and nothing is spent.
 const FORCE_SETTINGS = { dice: true, cards: true, tracker: true, wome: true };
 // A military Phase 5 walk stopped at "Attack using character die", holding the Character die (index 2).
@@ -1118,6 +1125,369 @@ function forcedDiscardPaysArmyCharacterAndActionDie() {
     "with dice off the cards are discarded and the walk ends; the player sets aside the die",
   );
 }
+// Draft flowchart: the Phases 1-4 discard list picks one card and "Discard one card" discards it, then the walk
+// checks the hand again, so the hand comes down one card at a time.
+function discardLoopDiscardsOneCardAtATime() {
+  const state = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  state.strategy = STRATEGY.CORRUPTION;
+  state.cards.hand = state.cards.decks[engine.DECK.CHARACTER]
+    .splice(0, 5)
+    .concat(state.cards.decks[engine.DECK.STRATEGY].splice(0, 2));
+  engine.startPhase(state, PHASE.P1);
+  driveWalk(state, []);
+  const discards = state.walk.trail.filter(
+    (entry) => entry.text === "Discard one card",
+  );
+  ok(
+    state.cards.hand.length === 6 && discards.length === 3,
+    "nine cards come down to six in three passes (" +
+      discards.length +
+      " discards, hand " +
+      state.cards.hand.length +
+      ")",
+  );
+}
+// Draft flowchart: on the Army page an Army/Muster die tries "Muster 3" before the last-resort move; an Army die does not.
+function armyMusterDieTriesMuster3First() {
+  const walkArmy4 = (face) => {
+    const state = phase5State(
+      { dice: true, cards: false, tracker: true, wome: false },
+      STRATEGY.MILITARY,
+    );
+    state.dice.pool = [die(face)];
+    engine.startWalk(state, "AR", "Army 4", {
+      die: DIE_REQUIREMENT.ARMY,
+      dieIndex: 0,
+    });
+    driveWalk(state, []);
+    return state.walk;
+  };
+  const armyMuster = walkArmy4("Army/Muster");
+  ok(
+    trailQuestion({ walk: armyMuster }, /Using an Army\/Muster die/)?.answer ===
+      "Yes" &&
+      armyMuster.trail.some(
+        (entry) => entry.kind === TRAIL.JUMP && entry.text === "Muster 3",
+      ) &&
+      trailQuestion({ walk: armyMuster }, /^An Army can move/),
+    "an Army/Muster die walks Muster 3, then comes back to the last-resort move",
+  );
+  const withCard = phase5State(
+    { dice: true, cards: true, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  const musterCard = withCard.cards.decks[engine.DECK.STRATEGY].find(
+    (id) => engine.cardById[id].type === "Muster",
+  );
+  withCard.cards.hand = [musterCard];
+  withCard.dice.pool = [die("Army/Muster")];
+  engine.startWalk(withCard, "AR", "Army 4", {
+    die: DIE_REQUIREMENT.ARMY,
+    dieIndex: 0,
+  });
+  const cardPrompts = driveWalk(withCard, [byType(PROMPT.CONFIRM, true)]);
+  ok(
+    !cardPrompts.some((prompt) => prompt?.type === PROMPT.PLAY_CARD) &&
+      /cannot play an Event card/.test(
+        trailQuestion(withCard, /Muster card/)?.why || "",
+      ),
+    "Muster 3 with an Army/Muster die plays no Muster card",
+  );
+  const army = walkArmy4("Army");
+  ok(
+    trailQuestion({ walk: army }, /Using an Army\/Muster die/)?.answer ===
+      "No" && !army.trail.some((entry) => entry.text === "Muster 3"),
+    "an Army die goes straight to the last-resort move",
+  );
+}
+// Draft flowchart: a defender that retreated ends the battle; Queller goes to "Battle (advance)".
+function retreatedDefenderSendsQuellerToAdvance() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  engine.startBattle(state, 2);
+  const seen = driveWalk(state, [[/has retreated/, true]]);
+  ok(
+    state.walk.trail.some(
+      (entry) => entry.kind === TRAIL.JUMP && entry.text === "Battle (advance)",
+    ) &&
+      seen.some(
+        (prompt) =>
+          prompt?.node === "anyCond" &&
+          prompt.items?.includes("Enemy retreated into its Stronghold"),
+      ),
+    "the retreat question leads to the advance box, which lists the retreat into the Stronghold",
+  );
+}
+// Draft flowchart: the second "Shadow Army attacking" (after casualties) takes the round's earlier answer.
+function secondAttackingQuestionReusesTheRound() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  engine.startBattle(state, 2);
+  const seen = driveWalk(state, [[/^Shadow Army attacking$/, true]]);
+  const asked = seen.filter(
+    (prompt) => prompt?.text === "Shadow Army attacking",
+  ).length;
+  const second = state.walk.trail.filter(
+    (entry) => entry.text === "Shadow Army attacking",
+  )[1];
+  ok(
+    asked === 1 && second?.auto && second.answer === "Yes",
+    "asked once; the second box answers Yes by itself",
+  );
+}
+// Draft flowchart: with no die set aside, "Use Muster die set aside for minion" follows its arrow to
+// "Discard unplayable die".
+function noSetAsideDieFallsThroughToDiscard() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.dice.pool = [die("Character")];
+  engine.startWalk(state, "M5", "Phase 5");
+  state.walk.node = "minionDie";
+  state.walk.prompt = null;
+  engine.run(state);
+  ok(
+    state.walk.result === WALK_RESULT.ACTION &&
+      state.dice.pool[0].status === DIE_STATE.USED &&
+      state.walk.trail.some(
+        (entry) =>
+          entry.kind === TRAIL.SKIP &&
+          /no Muster die set aside/.test(entry.why),
+      ),
+    "the walk goes on to discard the unplayable die",
+  );
+}
+// Draft flowchart: on the Event page a Character die plays any playable Character card, and "Draw a Character
+// Event card" needs an Event die.
+function eventPageChecksTheDie() {
+  const event2 = phase5State(
+    { dice: true, cards: true, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  event2.dice.pool = [die("Character")];
+  event2.walk = null;
+  engine.startWalk(event2, "EV", "Event 2", {
+    die: DIE_REQUIREMENT.CHARACTER,
+    dieIndex: 0,
+  });
+  driveWalk(event2, []);
+  const less4 = trailQuestion(event2, /^Using an Event die and holding less/);
+  ok(
+    less4?.auto && less4.answer === "No" && /Character/.test(less4.why),
+    "with a Character die, Event 2 does not draw a Character Event card",
+  );
+  const military = phase5State(
+    { dice: true, cards: true, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  const characterCard = military.cards.decks[engine.DECK.CHARACTER].find(
+    (id) => !engine.cardById[id].pre,
+  );
+  military.cards.hand = [characterCard];
+  military.dice.pool = [die("Character")];
+  military.walk = null;
+  engine.startWalk(military, "EV", "Event", {
+    die: DIE_REQUIREMENT.CHARACTER,
+    dieIndex: 0,
+  });
+  const seen = driveWalk(military, [byType(PROMPT.CONFIRM, true)]);
+  ok(
+    seen.some(
+      (prompt) =>
+        prompt?.type === PROMPT.PLAY_CARD && prompt.card === characterCard,
+    ),
+    "a Military Character die plays a playable Character card that is not preferred",
+  );
+  // the Jump modal can start the page holding no die: the die boxes are then the player's to answer
+  const noDie = phase5State(
+    { dice: true, cards: true, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  noDie.cards.hand = [characterCard];
+  noDie.walk = null;
+  engine.startWalk(noDie, "EV", "Event");
+  const asked = driveWalk(noDie, [byType(PROMPT.CONFIRM, true)]);
+  ok(
+    asked.some(
+      (prompt) => prompt?.type === PROMPT.YES_NO && prompt.node === "charCard",
+    ),
+    "holding no die, the Character-card box is asked, not answered from the hand",
+  );
+}
+// A walk saved on the released flowchart resumes on load on the new graph; a finished one and a current one are kept.
+function savedWalkFromReleasedFlowchartResumes() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  engine.startBattle(state, 2);
+  state.battleOpen = true;
+  const current = engine.migrate(JSON.parse(JSON.stringify(state)));
+  ok(
+    current.walk?.flowRev === engine.FLOW_REV && current.battleOpen,
+    "a walk on this flowchart survives migrate",
+  );
+  const old = JSON.parse(JSON.stringify(state));
+  delete old.walk.flowRev;
+  delete old.walk.attacking;
+  const resumed = engine.migrate(old);
+  ok(
+    resumed.walk?.node === "downgrade" &&
+      resumed.walk.flowRev === engine.FLOW_REV &&
+      resumed.walk.attacking === null &&
+      resumed.battleOpen,
+    "an unfinished walk from the released flowchart resumes where it stood, so nothing it did is done twice",
+  );
+  const redrawn = JSON.parse(JSON.stringify(state));
+  delete redrawn.walk.flowRev;
+  redrawn.walk.page = "C14";
+  redrawn.walk.node = "disc14";
+  redrawn.walk.prompt = {
+    type: PROMPT.STEP,
+    text: "Discard priority:",
+    node: "disc14",
+  };
+  const moved = engine.migrate(redrawn).walk;
+  ok(
+    moved.node === "discOne14" && moved.prompt.node === "discOne14",
+    "a walk paused at a step that became a priority list moves, with its open prompt, to the step drawn after it",
+  );
+  const reserved = JSON.parse(JSON.stringify(state));
+  delete reserved.walk.flowRev;
+  reserved.walk.stack = [
+    {
+      page: "M5",
+      node: "minionDie",
+      die: null,
+      dieIndex: null,
+      dieUsed: false,
+    },
+  ];
+  reserved.walk.minionPick = "Witch King";
+  reserved.walk.prompt = {
+    type: PROMPT.YES_NO,
+    text: "ANY condition true:",
+    items: ["a", "b"],
+    any: true,
+    options: [{ value: "Witch King", label: "Witch King" }],
+  };
+  const fixed = engine.migrate(reserved).walk;
+  ok(
+    fixed.stack.length === 0 &&
+      fixed.minionPick === "Witch-king" &&
+      fixed.prompt.conditions &&
+      fixed.prompt.options[0].value === "Witch-king",
+    "a resumed walk loses the set-aside die's return frame, and takes the new Witch-king spelling and list markup",
+  );
+  const finished = JSON.parse(JSON.stringify(state));
+  delete finished.walk.flowRev;
+  finished.walk.done = true;
+  ok(
+    engine.migrate(finished).walk?.done === true,
+    "a finished walk from the released flowchart is kept",
+  );
+}
+// Draft flowchart: "Use Muster die set aside for minion" now comes before "Discard unplayable die". When Muster 2
+// finds nothing for the die brought back, that die is spent (rule 34); "Discard unplayable die" does not pick another.
+function reservedDieSpentBeforeDiscardingAnother() {
+  // "Discard unplayable die" picks at random, so a wrong pick shows only in some walks: run enough of them
+  let wrong = 0;
+  for (let trial = 0; trial < RANDOM_PICK_TRIALS; trial++) {
+    const state = phase5State(
+      { dice: true, cards: false, tracker: true, wome: false },
+      STRATEGY.MILITARY,
+    );
+    state.board.nations.isengard = 0;
+    state.dice.pool = [die("Muster", DIE_STATE.RESERVED), die("Character")];
+    state.minionReserved = true;
+    engine.startPhase(state, PHASE.P5);
+    driveWalk(state, [[/^Pass/, "no"], byType(PROMPT.ACTION, "no")]);
+    if (
+      state.dice.pool[0].status !== DIE_STATE.USED ||
+      state.dice.pool[1].status !== DIE_STATE.AVAIL ||
+      state.minionReserved
+    )
+      wrong++;
+  }
+  ok(
+    wrong === 0,
+    "the set-aside Muster die is spent and the Character die is left, in every walk (" +
+      wrong +
+      " of " +
+      RANDOM_PICK_TRIALS +
+      " wrong)",
+  );
+}
+// The army value calculator counts a Captain of the West once: he adds a combat die, not a point of his own.
+function captainOfTheWestCountsOnce() {
+  const inputs = (extra) => ({
+    reg: 3,
+    elite: 0,
+    lead: 1,
+    cotw: 0,
+    fort: false,
+    strong: false,
+    sortie: false,
+    ...extra,
+  });
+  ok(
+    fakeWindow.armyValue(inputs({})).value === 7 &&
+      fakeWindow.armyValue(inputs({ cotw: 1 })).value === 8 &&
+      fakeWindow.armyValue(inputs({ reg: 5, lead: 0, cotw: 1 })).value === 10,
+    "3 Regulars and 1 Leadership: 7, 8 with a Captain; 5 Regulars and a Captain: 10 (combat dice capped at 5)",
+  );
+}
+// A walk started from the Jump modal holds no die: "Using a Character die and …" asks only about the die and checks the
+// cards from the hand, and "Muster 3" claims a Muster die from the pool instead of carrying a die it does not hold.
+function walkWithoutADie() {
+  const event = phase5State(
+    { dice: true, cards: true, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  engine.startWalk(event, "EV", "Event", {});
+  const asked = driveWalk(event, [
+    [/^Is Queller using a Character die$/, true],
+  ]).map((prompt) => prompt?.text || "");
+  ok(
+    asked.includes("Is Queller using a Character die") &&
+      !asked.some((text) =>
+        /holding a \*playable\* Character card/.test(text),
+      ) &&
+      event.walk.trail.some(
+        (entry) =>
+          /^Using a Character die and holding/.test(entry.text) &&
+          entry.answer === "No",
+      ),
+    "the Event page asks only whether Queller uses a Character die, and answers the card part from the empty hand",
+  );
+  const army = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  army.dice.pool = [die("Muster")];
+  engine.startWalk(army, "AR", "Army", {});
+  driveWalk(army, [
+    [/^Using an Army\/Muster die$/, true],
+    [/^Shadow is able to muster$/, true],
+  ]);
+  ok(
+    army.walk.result === WALK_RESULT.ACTION &&
+      army.dice.pool[0].status === DIE_STATE.USED,
+    "“Muster 3” with no die held claims and spends the pool's Muster die (" +
+      army.dice.pool[0].status +
+      ")",
+  );
+}
 // The scenarios, with the section of the change log each one guards.
 const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
@@ -1140,6 +1510,16 @@ const SCENARIOS = [
   ["muster", mouthOfSauronNeedsFreePeoplesAtWarOrMordor],
   ["muster", eliminatedMinionIsNeverMusteredAgain],
   ["fp", forcedDiscardPaysArmyCharacterAndActionDie],
+  ["draft", discardLoopDiscardsOneCardAtATime],
+  ["draft", armyMusterDieTriesMuster3First],
+  ["draft", retreatedDefenderSendsQuellerToAdvance],
+  ["draft", secondAttackingQuestionReusesTheRound],
+  ["draft", noSetAsideDieFallsThroughToDiscard],
+  ["draft", eventPageChecksTheDie],
+  ["migrate", savedWalkFromReleasedFlowchartResumes],
+  ["draft", reservedDieSpentBeforeDiscardingAnother],
+  ["calc", captainOfTheWestCountsOnce],
+  ["draft", walkWithoutADie],
 ];
 function main() {
   for (const [number, scenario] of SCENARIOS) {

@@ -11,6 +11,8 @@ import {
   SHADOW_NATIONS,
   STARTING_COMPANIONS,
   VERSION,
+  FLOW_REV,
+  FLOW_REV_1_MOVED_STEPS,
 } from "./constants.js";
 import { shuffle } from "./random.js";
 
@@ -142,6 +144,25 @@ function migrateMinions(chars) {
     else if (!statuses.has(chars[key])) chars[key] = MINION_STATUS.AVAILABLE;
   }
 }
+// An unfinished walk from the released flowchart resumes on the new graph, so nothing it already did is done twice.
+function migrateWalk(walk) {
+  walk.flowRev = FLOW_REV;
+  walk.attacking ??= null;
+  const moved = FLOW_REV_1_MOVED_STEPS[walk.page + "." + walk.node];
+  if (moved) {
+    walk.node = moved;
+    if (walk.prompt) walk.prompt.node = moved;
+  }
+  // the released flowchart returned to "Use Muster die set aside for minion" and stopped there; the new graph goes on
+  // to "Discard unplayable die", so without that frame doReturn spends the die instead (rule 34)
+  walk.stack = (walk.stack || []).filter((frame) => frame.node !== "minionDie");
+  if (walk.minionPick === "Witch King") walk.minionPick = "Witch-king";
+  const prompt = walk.prompt;
+  if (!prompt) return;
+  if (prompt.any) prompt.conditions = true;
+  for (const option of prompt.options || [])
+    if (option.value === "Witch King") option.value = "Witch-king";
+}
 export function migrate(save) {
   if (save.settings && save.settings.tracker === undefined) {
     save.settings.tracker = save.settings.walk !== false;
@@ -150,6 +171,8 @@ export function migrate(save) {
   if (save.board?.nations) migrateNations(save.board.nations);
   if (save.board?.chars) migrateMinions(save.board.chars);
   if (save.board && save.board.rings === undefined) save.board.rings = 0;
+  if (save.walk && !save.walk.done && save.walk.flowRev !== FLOW_REV)
+    migrateWalk(save.walk);
   delete save.shownCard;
   delete save.lastAction;
   return save;

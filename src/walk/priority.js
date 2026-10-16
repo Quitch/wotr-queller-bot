@@ -119,6 +119,17 @@ const discardByPriority = (hands) =>
         : ["Nothing to discard"],
     });
   };
+// "Discard priority" on the Phases 1-4 pages: pick the one card the next step discards.
+const chooseDiscard = (hand) =>
+  function chooseDiscardCard(state, node, { walk, cardsOn }) {
+    if (!cardsOn) return FALL_THROUGH;
+    return chooseAmong(
+      state,
+      node,
+      walk,
+      engine.handCards(state, hand).slice(),
+    );
+  };
 const SHADOW_FACTION_NAMES = ["Corsairs", "Dunlendings", "Spiders"];
 const factionsNotInPlay = (state) =>
   SHADOW_FACTION_NAMES.filter(
@@ -229,7 +240,7 @@ function chooseNationToAdvance(state, node, facts) {
       "Political Track — " + trackPositions,
       eligible.length
         ? "Eligible: " + eligible.join(", ")
-        : "Every Shadow nation is at war",
+        : "Every Shadow Nation is At War",
     ],
     choice: walk.nationChoice || "none",
   });
@@ -246,14 +257,14 @@ function askMinionChoice(state, node) {
     options.push({ value: "Saruman", label: "Saruman (Isengard At War)" });
   if (offered("witchKing"))
     options.push({
-      value: "Witch King",
-      label: "Witch King (Sauron At War and a Free Peoples nation At War)",
+      value: "Witch-king",
+      label: "Witch-king (Sauron At War and a Free Peoples Nation At War)",
     });
   if (offered("mouth"))
     options.push({
       value: "Mouth of Sauron",
       label:
-        "Mouth of Sauron (all Free Peoples nations At War, or the Fellowship on the Mordor track)",
+        "Mouth of Sauron (all Free Peoples Nations At War, or the Fellowship on the Mordor Track)",
     });
   options.push({ value: "", label: "None can be mustered" });
   promptChoice(
@@ -285,6 +296,11 @@ const PRIORITY_HANDLERS = {
   "BA.wkPri": chooseCombatCardByPriority(false),
   "BA.atkPri": chooseCombatCardByPriority(true),
   "BA.defPri": chooseCombatCardByPriority(false),
+  "C14.disc14": chooseDiscard(HAND.EVENT),
+  "C14.disc18": chooseDiscard(HAND.EVENT),
+  "M14.disc": chooseDiscard(HAND.EVENT),
+  "C14.discF": chooseDiscard(HAND.FACTION),
+  "M14.discF": chooseDiscard(HAND.FACTION),
   "EV.discPri": discardByPriority([
     [HAND.EVENT, null],
     [HAND.FACTION, "FA.discPri"],

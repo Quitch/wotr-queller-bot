@@ -1,6 +1,7 @@
 // The engine's public surface: game state, dice, cards, playability and priorities (window.QB together with the walker).
 export {
   VERSION,
+  FLOW_REV,
   STRATEGY,
   PHASE,
   DECK,
@@ -85,6 +86,7 @@ export {
   chooseByRank,
   criterionTest,
   autoDiscard,
+  handCards,
 } from "./priority.js";
 export { CARD_EFFECTS, resolveCardEffects } from "./effects.js";
 export { tableTriggers } from "./triggers.js";

@@ -17,7 +17,7 @@ export function battleFormHTML(prompt) {
   html +=
     numberRowHTML(
       "bf-nazLead",
-      "Nazgûl leadership in the battle",
+      "Nazgûl Leadership in the battle",
       nazgulLeadership,
       'data-bs="1"',
     ) +
@@ -41,27 +41,27 @@ export function battleFormHTML(prompt) {
   );
   html += checkbox(
     "defInFs",
-    "The defending army is in the Fellowship region",
+    "The defending Army is in the Fellowship region",
     battle.defInFs,
   );
   html += checkbox(
     "nearMoria",
-    "The defending army is within two regions of Moria",
+    "The defending Army is within two regions of Moria",
     battle.nearMoria,
   );
   if (state.settings.wome) {
     html +=
       checkbox(
         "underSiege",
-        "The Shadow army is under siege",
+        "The Shadow Army is under siege",
         battle.underSiege,
       ) +
       checkbox(
         "attackingSiege",
-        "The Shadow army is attacking in a siege",
+        "The Shadow Army is attacking in a siege",
         battle.attackingSiege,
       ) +
-      '<h3 class="full">Faction figures with the Shadow army</h3>' +
+      '<h3 class="full">Faction figures with the Shadow Army</h3>' +
       checkbox("f-corsairs", "Corsairs", figures.corsairs) +
       checkbox("f-dunlendings", "Dunlendings", figures.dunlendings) +
       checkbox("f-spiders", "Spiders", figures.spiders);

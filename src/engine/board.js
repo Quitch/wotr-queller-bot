@@ -52,7 +52,7 @@ export function ringAvailable(state) {
     !state.ringUsedThisTurn && (!ringsKnown(state) || state.board.rings > 0)
   );
 }
-// Hunt box maximum (rulebook: the number of Companions, but always at least one) — rule 34 caps the flowchart allocations at it.
+// Hunt box maximum (rulebook: the number of Companions, but always at least one) — rule 41 caps the flowchart allocations at it.
 export function huntCap(state) {
   return Math.max(1, state.board.fs.companions ?? 0);
 }
@@ -63,16 +63,16 @@ export function minionsAvailable(state) {
     out = [];
   const available = (key) => chars[key] === MINION_STATUS.AVAILABLE;
   if (available("saruman") && shadowNationAtWar(state, "isengard"))
-    out.push({ name: "Saruman", key: "saruman", why: "Isengard at war" });
+    out.push({ name: "Saruman", key: "saruman", why: "Isengard At War" });
   if (
     available("witchKing") &&
     shadowNationAtWar(state, "sauron") &&
     fpNationAtWar(state)
   )
     out.push({
-      name: "Witch King",
+      name: "Witch-king",
       key: "witchKing",
-      why: "Sauron at war and a Free Peoples nation at war",
+      why: "Sauron At War and a Free Peoples Nation At War",
     });
   // The Mouth of Sauron (second edition card): all Free Peoples nations At War, or the Fellowship on the Mordor track.
   if (available("mouth")) {
@@ -80,13 +80,13 @@ export function minionsAvailable(state) {
       out.push({
         name: "Mouth of Sauron",
         key: "mouth",
-        why: "the Fellowship is on the Mordor track",
+        why: "the Fellowship is on the Mordor Track",
       });
     else if (allFPNationsAtWar(state))
       out.push({
         name: "Mouth of Sauron",
         key: "mouth",
-        why: "all Free Peoples nations at war",
+        why: "all Free Peoples Nations At War",
       });
   }
   return out;

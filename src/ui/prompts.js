@@ -27,6 +27,11 @@ const orderedListHTML = (items) =>
       items.map((item) => "<li>" + formatText(item) + "</li>").join("") +
       "</ol>"
     : "";
+// A condition list (ANY/ALL) is a bulleted list, as the diagram draws it; a priority list is numbered.
+const conditionListHTML = (items) =>
+  "<ul>" +
+  items.map((item) => "<li>" + formatText(item) + "</li>").join("") +
+  "</ul>";
 const stepsHTML = (steps) =>
   steps?.length
     ? '<ol class="steps">' +
@@ -46,7 +51,7 @@ function promptEyebrowHTML(walk, page, kind) {
     (walk.die
       ? " · " + escapeHTML(engine.DIE_REQUIREMENT_NAME[walk.die]) + " die"
       : "") +
-    (walk.mode === "ringAny" ? " · ring search" : "") +
+    (walk.mode === "ringAny" ? " · Elven Ring search" : "") +
     "</div>"
   );
 }
@@ -58,11 +63,14 @@ function renderYesNoPrompt(prompt, walk, node) {
       '<p class="q">' +
       (isRing ? ringIcon() + " " : "") +
       formatText(prompt.text) +
-      "?</p>" +
+      (prompt.text.endsWith(":") ? "" : "?") +
+      "</p>" +
       (isRing
-        ? '<div class="bold-note">Elven Ring condition: if it is true and Queller lacks the die the next step needs, it uses an Elven Ring (rule 36).</div>'
+        ? '<div class="bold-note">Elven Ring condition: if it is true and Queller lacks the die the next step needs, it uses an Elven Ring (rule 43).</div>'
         : "") +
-      orderedListHTML(prompt.items),
+      (prompt.conditions
+        ? conditionListHTML(prompt.items)
+        : orderedListHTML(prompt.items)),
     answers: YES_NO_BUTTONS,
   };
 }
@@ -100,7 +108,7 @@ function renderConfirmPrompt(prompt) {
     body:
       '<div class="eyebrow">' +
       (combat ? "Combat card" : "Card") +
-      ' check — the condition on this card is met</div><p class="q">Is this card *playable* now? Every paragraph must be usable and have an effect (rule 17).</p>' +
+      ' check — the condition on this card is met</div><p class="q">Is this card *playable* now? Every paragraph must be usable and have an effect (rule 21).</p>' +
       cardHTML(
         cardById[prompt.card],
         combat ? CARD_HALF.COMBAT : CARD_HALF.EVENT,
@@ -123,7 +131,7 @@ function renderRingPrompt(prompt) {
   return {
     body: questionHTML(prompt.text),
     answers:
-      '<button class="btn yes" data-ans="yes">Ring used</button><button class="btn no" data-ans="no">No ring available</button>',
+      '<button class="btn yes" data-ans="yes">Elven Ring used</button><button class="btn no" data-ans="no">No Elven Ring available</button>',
   };
 }
 function renderActionPrompt(prompt, walk) {
@@ -139,7 +147,7 @@ function renderActionPrompt(prompt, walk) {
     answers:
       DONE_BUTTON +
       (engine.offersNotPossible(prompt)
-        ? '<button class="btn no" data-ans="no">Not possible (rule 29)</button>'
+        ? '<button class="btn no" data-ans="no">Not possible (rule 36)</button>'
         : ""),
   };
 }
@@ -151,7 +159,7 @@ function renderPlayCardPrompt(prompt, walk) {
       ":</p>" +
       cardHTML(cardById[prompt.card]) +
       stepsHTML(walk.steps) +
-      '<div class="help">Resolve it with the matching decision page (rule 12). ' +
+      '<div class="help">Resolve it with the matching decision page (rule 16). ' +
       (engine.staysOnTable(prompt.card) && !prompt.combat
         ? "It stays on the table until discarded."
         : "") +
@@ -168,7 +176,7 @@ function renderStepPrompt(prompt) {
       : '<button class="btn yes" data-ans="done">Continue</button>',
   };
 }
-// After Not possible: was it a Free Peoples card on the table that blocked it? (Rule 15.) Asked whatever Queller holds.
+// After Not possible: was it a Free Peoples card on the table that blocked it? (Rule 19.) Asked whatever Queller holds.
 function renderBlockedPrompt(prompt) {
   const original = prompt.original;
   return {
@@ -182,7 +190,7 @@ function renderBlockedPrompt(prompt) {
       (original.help
         ? '<div class="help">' + formatText(original.help) + "</div>"
         : "") +
-      '<div class="help">If so, Queller must remove the card (rule 15): it uses one Action die and discards one Army Event card and one Character card, chosen by the Event page discard priority, and that is its action. If Queller cannot pay, the action is not possible.</div>',
+      '<div class="help">If so, Queller must remove the card (rule 19): it uses one Action die and discards one Army Event card and one Character card, chosen by the Event page discard priority, and that is its action. If Queller cannot pay, the action is not possible.</div>',
     answers:
       engine.FP_PROTECTION_CARDS.map(
         (fpCard) =>
@@ -227,7 +235,7 @@ function renderPriorityPrompt(prompt, walk) {
         ? "<p><b>Result:</b> " + escapeHTML(prompt.choice) + "</p>"
         : "") +
       (!prompt.steps && !prompt.card
-        ? '<div class="help">Apply the list as filters (rule 30), then continue.</div>'
+        ? '<div class="help">Apply the list as filters (rule 37), then continue.</div>'
         : ""),
     answers: '<button class="btn yes" data-ans="ok">Continue</button>',
   };

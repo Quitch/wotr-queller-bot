@@ -9,7 +9,13 @@ import {
   dieWithArticle,
   jumpSpec,
 } from "./jumps-table.js";
-import { PENDING, PROMPT, WALK_RESULT, phaseResult } from "./prompt.js";
+import {
+  PENDING,
+  PROMPT,
+  WALK_RESULT,
+  phaseResult,
+  strategyName,
+} from "./prompt.js";
 import { startWalk } from "./run.js";
 
 export function handleJump(state, node) {
@@ -30,10 +36,13 @@ export function handleJump(state, node) {
   if (handler) handler(state, walk, spec, label);
   else jumpWithDie(state, spec, label);
 }
-// "Switch to military/Corruption": change strategy and either end the walk or restart it on the other strategy's page (rule 40).
+// "Switch to Military/Corruption": change strategy and either end the walk or restart it on the other strategy's page (rule 48).
 function switchStrategy(state, walk, spec, label) {
   state.strategy = spec.strategy;
-  engine.log(state, "Strategy changed to " + spec.strategy + " (rule 40).");
+  engine.log(
+    state,
+    "Strategy changed to " + strategyName(spec.strategy) + " (rule 48).",
+  );
   trail(state, { kind: TRAIL.JUMP, text: label });
   if (spec.endWalk) {
     endWalk(state, phaseResult(spec.endWalk), spec.text);
@@ -50,7 +59,7 @@ function switchStrategy(state, walk, spec, label) {
 }
 // "Save muster die for minion": set the die aside and return to the calling page.
 function reserveDie(state, walk, spec, label) {
-  // A die already set aside and brought back by "Use Muster die set aside for minion" must be used now (Rulings), not set aside again.
+  // A die already set aside and brought back by "Use Muster die set aside for minion" must be used now (rule 34), not set aside again.
   if (walk.fromReserve) {
     trail(state, {
       kind: TRAIL.SKIP,
@@ -66,7 +75,7 @@ function reserveDie(state, walk, spec, label) {
   }
   delete walk.dieAns[DIE_REQUIREMENT.MUSTER];
   delete walk.dieAns[DIE_REQUIREMENT.CHAR_OR_MUSTER]; // the die the player said Queller had is no longer available
-  engine.log(state, "Muster die set aside for a minion (Rulings).");
+  engine.log(state, "Muster die set aside for a minion (rule 34).");
   trail(state, {
     kind: TRAIL.NOTE,
     text: "Muster die set aside for a minion",
@@ -75,7 +84,7 @@ function reserveDie(state, walk, spec, label) {
   walk.die = null;
   doReturn(state);
 }
-// "Phase 5 (use a ring)": restart the walk looking for a ring use (rule 37) when a ring and a die to change are available.
+// "Phase 5 (use an Elven Ring)": restart the walk looking for an Elven Ring use (rule 44) when a ring and a die to change are available.
 function ringAnyJump(state, walk, spec, label) {
   const canUseRing =
     walk.mode !== "ringAny" &&
@@ -90,7 +99,7 @@ function ringAnyJump(state, walk, spec, label) {
     return;
   }
   let why = "no die to change";
-  if (state.ringUsedThisTurn) why = "a ring was already used this turn";
+  if (state.ringUsedThisTurn) why = "an Elven Ring was already used this turn";
   else if (engine.ringsKnown(state) && !state.board.rings)
     why = "no Elven Ring";
   trail(state, { kind: TRAIL.SKIP, text: label, why });
@@ -110,6 +119,11 @@ const JUMP_KIND = {
       WALK_RESULT.BATTLE_NEXT,
       "Another combat round: walk again from “Battle (next round)”.",
     ),
+  sameWalk: (state, walk, spec, label) => {
+    trail(state, { kind: TRAIL.JUMP, text: label });
+    goto(state, spec.page, findStart(spec.page, spec.start));
+    follow(state, null);
+  },
   switch: switchStrategy,
   reserve: reserveDie,
   ringAny: ringAnyJump,
@@ -117,7 +131,7 @@ const JUMP_KIND = {
 // Grey box naming a page: enter it with the die it needs (or the die already held), or skip it.
 function jumpWithDie(state, spec, label) {
   const walk = state.walk;
-  if (engine.dieSatisfies(walk.die, spec.die)) {
+  if ((spec.held && walk.die) || engine.dieSatisfies(walk.die, spec.die)) {
     enterPage(state, spec, label);
     return;
   }
@@ -199,7 +213,7 @@ function askForDie(state, walk, req, label) {
         (engine.ringsKnown(state)
           ? ""
           : "If the Shadow holds an Elven Ring: ") +
-        "Use an Elven Ring (rule 36): change one Queller die that does not show a *preferred* result into " +
+        "Use an Elven Ring (rule 43): change one Queller die that does not show a *preferred* result into " +
         dieWithArticle(req) +
         " result. Choose the die at random.",
     });
@@ -248,7 +262,7 @@ function exitJump(state) {
 export function doReturn(state) {
   const walk = state.walk;
   if (!walk.stack.length) {
-    // A die brought back from "set aside for a minion" that found no action is spent, not set aside again (Rulings: it cannot be used for anything else).
+    // A die brought back from "set aside for a minion" that found no action is spent, not set aside again (rule 34: it cannot be used for anything else).
     if (
       walk.fromReserve &&
       state.settings.dice &&

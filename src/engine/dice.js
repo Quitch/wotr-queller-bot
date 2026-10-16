@@ -60,7 +60,7 @@ export function recoverDice(state) {
     state,
     "Recovered " +
       count +
-      " action dice" +
+      " Action dice" +
       (state.dice.factionDie ? " and the Faction die" : "") +
       ".",
   );
@@ -82,9 +82,9 @@ export function assignHunt(state, requested) {
       placed +
       " " +
       (placed === 1 ? "die" : "dice") +
-      " in the Hunt box before rolling" +
+      " in the Hunt Box before rolling" +
       (placed < requested && cap < requested
-        ? " (rule 34: maximum " +
+        ? " (rule 41: maximum " +
           cap +
           " for " +
           (state.board.fs.companions ?? 0) +
@@ -110,7 +110,7 @@ export function rollRemaining(state) {
   }
   let hunt = "";
   if (eyes)
-    hunt = " — " + eyes + " Eye" + (eyes > 1 ? "s" : "") + " to the Hunt box";
+    hunt = " — " + eyes + " Eye" + (eyes > 1 ? "s" : "") + " to the Hunt Box";
   log(state, "Rolled: " + out.join(", ") + hunt + ".");
   return out;
 }
@@ -178,7 +178,7 @@ export function spendDie(state, die, why) {
   die.status = DIE_STATE.USED;
   log(state, "Used the " + die.face + " die" + (why ? " — " + why : "") + ".");
 }
-// rule 36 / 23 selection: at random from the dice that do not show a preferred result; from all dice if every die does
+// rule 43 / 29 selection: at random from the dice that do not show a preferred result; from all dice if every die does
 export function nonPreferredFirst(state, dice, count) {
   const preferredResults = preferredFaces(state);
   let candidates = dice.filter((die) => !preferredResults.includes(die.face));
@@ -190,7 +190,7 @@ export function nonPreferredFirst(state, dice, count) {
   }
   return out;
 }
-// Elven Ring (rule 36): change one non-preferred available die to the required result.
+// Elven Ring (rule 43): change one non-preferred available die to the required result.
 export function ringChange(state, req) {
   const available = availableActionDice(state);
   if (!available.length) return null;
@@ -208,7 +208,7 @@ export function ringChange(state, req) {
       from +
       " die to " +
       die.face +
-      " (rule 36). Rings left: " +
+      " (rule 43). Elven Rings left: " +
       state.board.rings +
       ".",
   );

@@ -11,7 +11,6 @@ export { CARDS as QB_CARDS } from "../src/cards/index.js";
 export * as QB_DEBUG from "../src/debug.js";
 export { GLOSSARY, GLOSSARY_ALIASES } from "../src/ref/glossary.js";
 export { RULES } from "../src/ref/rules.js";
-export { RULINGS } from "../src/ref/rulings.js";
 export { TURN } from "../src/ref/turn.js";
 export * as QB_UI from "../src/ui/index.js";
 // The panels and tables the render and unit tests build or check without a DOM.
@@ -29,6 +28,7 @@ export {
 } from "../src/ui/tracker.js";
 export { trackerValue } from "../src/ui/handlers.js";
 export { MODAL_REGISTRATIONS, svgPage } from "../src/modals/index.js";
+export { armyValue } from "../src/modals/calc.js";
 export { route } from "../src/modals/flow/route.js";
 export { NODE_STYLE, SVG_COLOUR } from "../src/modals/flow/svg.js";
 export {

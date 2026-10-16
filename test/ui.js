@@ -56,8 +56,8 @@ function checkTextHelpers() {
     "the lookup ignores case; the label keeps it",
   );
   ok(
-    formatText("*Fellowship  region*") ===
-      TERM_BUTTON("fellowship region", "Fellowship  region"),
+    formatText("*Stacking  limit*") ===
+      TERM_BUTTON("stacking limit", "Stacking  limit"),
     "a term's inner spacing is normalised for the lookup",
   );
   ok(

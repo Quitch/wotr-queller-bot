@@ -7,6 +7,7 @@ import { edgeFor, findStart, normalizeText } from "./graph.js";
 // The parts of a walk (state.walk is the flat union of them).
 // Where the walk is: its page and node, the start point it began at, the pages it will return to, its record and its prompt.
 const walkPosition = (page, nodeId, startName, options) => ({
+  flowRev: engine.FLOW_REV,
   page,
   node: nodeId,
   entry: { page, start: startName },
@@ -29,7 +30,7 @@ const walkDieState = (options) => ({
   fromReserve: false,
   reservedDieIndex: null,
 });
-// Elven Ring state (rules 36-38): a ring condition was met; the ring question was put to the player.
+// Elven Ring state (rules 43-45): a ring condition was met; the ring question was put to the player.
 const walkRingState = () => ({ ringArmed: false, ringAsked: false });
 // Card candidates and the priority-list result.
 const walkCardState = () => ({
@@ -38,6 +39,8 @@ const walkCardState = () => ({
   steps: null,
   ctb: null,
   discards: null,
+  // the answer to the round's first "Shadow Army attacking", for the second one
+  attacking: null,
 });
 // Results of the Muster and Faction priority lists.
 const walkChoiceState = () => ({
@@ -73,7 +76,9 @@ export function beginWalk(state, page, startName, options = {}) {
       " from “" +
       normalizeText(startName) +
       "”" +
-      (options.mode === "ringAny" ? " (looking for a ring use, rule 37)" : "") +
+      (options.mode === "ringAny"
+        ? " (looking for an Elven Ring use, rule 44)"
+        : "") +
       ".",
   );
   return true;

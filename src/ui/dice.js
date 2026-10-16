@@ -25,7 +25,7 @@ export function ringIcon(label) {
     '<svg class="ring-ico" viewBox="0 0 24 24" role="img" aria-label="' +
     escapeHTML(label || "Elven Ring condition") +
     '"><title>' +
-    escapeHTML(label || "Elven Ring condition (rule 36)") +
+    escapeHTML(label || "Elven Ring condition (rule 43)") +
     "</title>" +
     RING_PATH +
     "</svg>"
@@ -53,7 +53,7 @@ function faceIcon(face) {
 }
 const DIE_STATUS_TEXT = {
   [DIE_STATE.POOL]: "not yet rolled",
-  [DIE_STATE.HUNT]: "in the Hunt box",
+  [DIE_STATE.HUNT]: "in the Hunt Box",
   [DIE_STATE.AVAIL]: "available — tap to mark it used",
   [DIE_STATE.USED]: "used",
   [DIE_STATE.RESERVED]: "set aside for a minion",
@@ -98,7 +98,7 @@ function dicePoolHTML(dice, available) {
   const huntDice = indexedDice.filter(([die]) => die.status === DIE_STATE.HUNT),
     otherDice = indexedDice.filter(([die]) => die.status !== DIE_STATE.HUNT);
   return (
-    '<div class="dicewrap"><div class="huntbox"><span class="hlbl">Hunt box</span><ul class="dice" role="list" aria-label="Dice in the Hunt box">' +
+    '<div class="dicewrap"><div class="huntbox"><span class="hlbl">Hunt Box</span><ul class="dice" role="list" aria-label="Dice in the Hunt Box">' +
     (huntDice.length
       ? huntDice.map(([die, index]) => dieHTML(die, index)).join("")
       : '<li class="die empty" aria-hidden="true"></li>') +
@@ -144,7 +144,7 @@ function diceSummaryHTML(available) {
     "</b></span>" +
     (state.minionReserved ? "<span>1 set aside for a minion</span>" : "") +
     (engine.ringsKnown(state)
-      ? "<span>Rings held: <b>" + state.board.rings + "</b></span>"
+      ? "<span>Elven Rings held: <b>" + state.board.rings + "</b></span>"
       : "") +
     "</div>"
   );
@@ -171,7 +171,7 @@ export function diceHTML() {
   return (
     '<section class="panel" aria-labelledby="h-dice"><h2 class="ph" id="h-dice">Queller’s dice <span class="r">' +
     engine.diceCount(state) +
-    " action dice" +
+    " Action dice" +
     (dice.factionDie && state.settings.wome ? " + Faction die" : "") +
     "</span></h2>" +
     SPRITE +

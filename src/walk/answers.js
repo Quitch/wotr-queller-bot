@@ -4,7 +4,7 @@ import { CARD, TRAIL, cardById } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
 import { exitAction, spendCurrentDie } from "./actions.js";
 import { cur, endWalk, follow, setPrompt, trail } from "./core.js";
-import { recordDecision } from "./decisions/common.js";
+import { decisionText, recordDecision } from "./decisions/common.js";
 import { dieWithArticle } from "./jumps-table.js";
 import { SHADOW_NATION_NAME } from "./nations.js";
 import {
@@ -52,7 +52,8 @@ function answerYesNo(state, prompt, value) {
   if (prompt.sub === 2) return answerPlainPart(state, prompt, value);
   const node = cur(state);
   recordDecision(state, {
-    text: NODE.text(node),
+    text:
+      prompt.text === NODE.text(node) ? decisionText(state, node) : prompt.text,
     ringCondition: NODE.extra(node).bold,
     answer: value,
     auto: false,
@@ -108,7 +109,7 @@ function answerRing(state, prompt, value) {
     state,
     "Elven Ring used to create " +
       dieWithArticle(prompt.req) +
-      " die (rule 36).",
+      " die (rule 43).",
   );
   trail(state, {
     kind: TRAIL.RING,
@@ -151,7 +152,7 @@ function applyActionToBoard(state, prompt) {
   if (prompt.faction) bringFactionOnBoard(state, prompt.faction);
 }
 // Not possible on an action or a move step. When a Free Peoples card on the table may be what blocks it, ask first
-// (rule 15: Queller removes such a card when it tries the blocked action).
+// (rule 19: Queller removes such a card when it tries the blocked action).
 function notPossible(state, prompt) {
   if (asksIfBlocked(state, prompt))
     setPrompt(state, {

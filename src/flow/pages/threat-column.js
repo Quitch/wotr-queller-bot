@@ -1,42 +1,49 @@
 // The left-hand "threat/exposed" column both Phase 5 pages share: its boxes (threatColumn) and its arrows (threatEdges,
 // with the ids of the boxes the No arrows of its two exits lead to).
-export function threatColumn() {
+export function threatColumn(threatY) {
   return {
     threat: [
       "D",
       10,
-      100,
+      threatY,
       120,
       60,
-      "Shadow under *threat* or Free People *exposed*",
+      "Shadow under *threat* or Free Peoples *exposed*",
       { bold: true },
     ],
-    mobAdjThreat: ["d", 10, 190, 120, 60, "*Mobile* army adjacent to *threat*"],
+    mobAdjThreat: [
+      "d",
+      10,
+      190,
+      120,
+      60,
+      "*Mobile* Army *adjacent* to *threat*",
+    ],
     atkChar: [
       "A",
       170,
       190,
       120,
       60,
-      "Attack using character die",
+      "Attack using Character die",
       { die: "Character" },
     ],
-    atkArmy: ["A", 170, 280, 120, 60, "Attack using army die", { die: "Army" }],
+    atkArmy: ["A", 170, 280, 120, 60, "Attack using Army die", { die: "Army" }],
     createMob: [
       "d",
       10,
       280,
       120,
       60,
-      "Move can create *mobile* army adjacent to *threat*",
+      "Move can create *mobile* Army *adjacent* to *threat*",
     ],
     incTroops: [
       "d",
       10,
-      370,
+      360,
       120,
-      60,
-      "Move can increase troop numbers in the Stronghold under *threat*",
+      80,
+      "Move can increase the *value* of the *garrison* of the Stronghold under *threat*",
     ],
     moveChar: [
       "A",
@@ -44,8 +51,11 @@ export function threatColumn() {
       370,
       120,
       60,
-      "Move using character die",
-      { die: "Character" },
+      "Move using Character die",
+      {
+        die: "Character",
+        help: "Move on the Army page with an Army that contains a Nazgûl or a minion.",
+      },
     ],
     routeThreat: [
       "d",
@@ -53,7 +63,7 @@ export function threatColumn() {
       460,
       120,
       60,
-      "*Mobile* army’s route to closest *target* takes it towards *threat*",
+      "*Mobile* Army’s route to closest *target* takes it towards *threat*",
     ],
     jArmyT: ["J", 170, 460, 120, 60, "Army"],
     shValid: [
@@ -71,9 +81,9 @@ export function threatColumn() {
       640,
       120,
       60,
-      "*Threat* is sieging a Shadow stronghold which can use more leadership",
+      "*Threat* is sieging a Shadow Stronghold which can use more Leadership",
     ],
-    jChar3: ["J", 170, 640, 120, 60, "Character 3 /\nMuster Witch King"],
+    jChar3: ["J", 170, 640, 120, 60, "Character 3 /\nMuster Witch-king"],
     toExposed: ["d", 10, 730, 120, 60, "Can move towards *exposed*"],
     jArmyE: ["J", 170, 730, 120, 60, "Army"],
     ringNote: [
@@ -82,7 +92,7 @@ export function threatColumn() {
       20,
       220,
       40,
-      "bold text indicates a ring should be used where the condition is met and the required die is unavailable",
+      "bold text indicates an Elven Ring should be used where the condition is met and the required die is unavailable",
     ],
   };
 }

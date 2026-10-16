@@ -3,18 +3,22 @@ import * as engine from "../../engine/index.js";
 import { DECK, MINION_STATUS, TRAIL } from "../../engine/index.js";
 import { NODE, NODE_KIND } from "../../flow/index.js";
 import { endWalk, follow, setPrompt, trail } from "../core.js";
+import { dieWithArticle } from "../jumps-table.js";
 import { evalPlayable } from "../playable.js";
 import { PENDING, PROMPT, WALK_RESULT } from "../prompt.js";
 
 // Board consequences of a decision the player answered (the tracker keeps up with what the flowchart just established).
 const DECIDE_HOOKS = {
+  "BA.attacking": (state, answer) => {
+    state.walk.attacking = answer;
+  },
   "CH.musteredWK": (state, answer) => {
     if (answer && !engine.minionInPlay(state, "witchKing")) {
       state.board.chars.witchKing = MINION_STATUS.IN_PLAY;
       state.playable = {};
       engine.log(
         state,
-        "Witch King is now in play (tracker updated; his die joins the pool next turn).",
+        "Witch-king is now in play (tracker updated; his die joins the pool next turn).",
       );
     }
   },
@@ -73,15 +77,66 @@ export function boardFactYesNo(state, factKey, question, trackerValue) {
   });
   return PENDING;
 }
+// A decision as the trail records it: a condition list adds the items that apply to this game.
+export function decisionText(state, node) {
+  if (!NODE.extra(node).items) return NODE.text(node);
+  return (
+    NODE.text(node) +
+    " " +
+    listParts(state, node)
+      .items.map((item) => item.text)
+      .join("; ")
+  );
+}
 // Record an automatic answer to the current decision box and follow its arrow.
 export function answerAuto(state, node, answer, why) {
   recordDecision(state, {
-    text: NODE.text(node),
+    text: decisionText(state, node),
     ringCondition: NODE.extra(node).bold,
     answer,
     auto: true,
     why,
   });
+}
+// A "Using a <die> die and …" box: No when the walk holds another die; with no die held (a walk started from the Jump
+// modal), the player says whether Queller uses that die; then `decide` answers the rest of the box.
+export const requiringDie = (required, decide) =>
+  function decideWithDie(state, node, facts) {
+    if (answerIfOtherDie(state, node, required)) return;
+    if (!facts.walk.die) {
+      const using = askDiePart(state, required);
+      if (using === PENDING) return;
+      if (!using)
+        return answerAuto(
+          state,
+          node,
+          false,
+          "not using " + dieWithArticle(required) + " die",
+        );
+    }
+    return decide(state, node, facts);
+  };
+// The die half of a "Using a <die> die and …" box, asked once per node: true, false, or PENDING while it is open.
+function askDiePart(state, required) {
+  const walk = state.walk,
+    partKey = walk.page + "." + walk.node + ".usingDie";
+  if (partKey in walk.parts) return walk.parts[partKey];
+  setPrompt(state, {
+    type: PROMPT.YES_NO,
+    text: "Is Queller using " + dieWithArticle(required) + " die",
+    part: partKey,
+    node: walk.node,
+    page: walk.page,
+    kind: NODE_KIND.FOLLOW_UP,
+  });
+  return PENDING;
+}
+// A decision that needs a given die: No, naming the die, when the walk holds another one. Returns true when it answered.
+export function answerIfOtherDie(state, node, required) {
+  const die = state.walk.die;
+  if (!die || die === required) return false;
+  answerAuto(state, node, false, "using " + dieWithArticle(die) + " die");
+  return true;
 }
 // Answer from the tracker when it is on, otherwise put the question to the player.
 export function answerFromTracker(state, node, answer, why) {
@@ -115,23 +170,59 @@ export function decisionFacts(state) {
     handCount: engine.handCounts(state),
   };
 }
+// "… holding a *playable* Character card": counted from the hand when the app holds the cards, otherwise asked.
+export function decidePlayableCharacterCard(state, node, { cardsOn }) {
+  if (cardsOn)
+    return answerByPlayableCount(
+      state,
+      node,
+      characterHand(state),
+      "event",
+      "playable Character card",
+    );
+  ask(state, node);
+}
 export const characterHand = (state) =>
   engine.handCardsOfDeck(state, DECK.CHARACTER);
 export const strategyHand = (state) =>
   engine.handCardsOfDeck(state, DECK.STRATEGY);
-// A decision the app cannot answer: a two-part question asks the bold (ring) part first, then the plain part.
-export function askDecision(state, node) {
-  const nodeExtra = NODE.extra(node),
-    walk = state.walk;
-  if (nodeExtra.t2 && !nodeExtra.any) {
-    if (walk.sub === 0)
-      return ask(state, node, NODE.text(node), { sub: 1, bold: true });
-    return ask(state, node, nodeExtra.t2, { sub: 2 });
-  }
-  ask(
-    state,
-    node,
-    null,
-    nodeExtra.any ? { items: nodeExtra.items, any: true } : null,
+// The items of a condition list that apply to this game (a WoME item only with WoME), split into the Elven Ring
+// conditions and the rest.
+export function listParts(state, node) {
+  const items = NODE.items(node).filter(
+    (item) => !item.wome || state.settings.wome,
   );
+  return {
+    items,
+    ring: items.filter((item) => item.bold),
+    plain: items.filter((item) => !item.bold),
+  };
+}
+// One part of a condition list as a question: "A or b or c" (each item after the first starts in lower case).
+export const partText = (items) =>
+  items
+    .map((item, index) =>
+      index
+        ? item.text.replace(
+            /^(\**)([A-Z])(?=[a-z])/,
+            (match, star, letter) => star + letter.toLowerCase(),
+          )
+        : item.text,
+    )
+    .join(" or ");
+// A decision the app cannot answer: an ANY list with both Elven Ring conditions and plain conditions is asked in two
+// parts, the ring part first; any other list shows the items that apply to this game.
+export function askDecision(state, node) {
+  const nodeExtra = NODE.extra(node);
+  const { items, ring, plain } = listParts(state, node);
+  if (nodeExtra.any && ring.length && plain.length) {
+    if (state.walk.sub === 0)
+      return ask(state, node, partText(ring), { sub: 1, bold: true });
+    return ask(state, node, partText(plain), { sub: 2 });
+  }
+  if (!nodeExtra.items) return ask(state, node);
+  ask(state, node, null, {
+    items: items.map((item) => item.text),
+    conditions: !!(nodeExtra.any || nodeExtra.all),
+  });
 }

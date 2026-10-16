@@ -11,16 +11,16 @@ import { availableDice } from "./dice.js";
 
 // Each returns true/false, or asks a situational question (answered once per turn) via situationalAnswer().
 export const SITUATIONAL_QUESTIONS = {
-  mtSiege: "Is Minas Tirith under siege by a Shadow army?",
+  mtSiege: "Is Minas Tirith under siege by a Shadow Army?",
   nazNearFP:
-    "Is a Shadow army containing Nazgûl adjacent to, or in the same region as, a Free Peoples army?",
+    "Is a Shadow Army containing Nazgûl adjacent to, or in the same region as, a Free Peoples Army?",
   wkBesieging:
-    "Is the Witch-king with a Shadow army that is besieging a Stronghold?",
+    "Is the Witch-king with a Shadow Army that is besieging a Stronghold?",
   isenBesieging:
-    "Is an army containing an Isengard unit besieging a Stronghold?",
+    "Is an Army containing an Isengard unit besieging a Stronghold?",
   elvenStronghold: "Does the Shadow control at least one Elven Stronghold?",
   fpNotWar:
-    "Is the Fellowship or a Companion inside the borders of a Free Peoples nation that is not at war?",
+    "Is the Fellowship or a Companion inside the borders of a Free Peoples Nation that is not At War?",
   siegeEngine: "Is a Shadow Siege Engine in this battle?",
 };
 function situationalAnswer(state, key) {
@@ -57,7 +57,7 @@ const PRECONDITIONS = {
     minionInPlay(state, "saruman")
       ? situationalAnswer(state, "isenBesieging")
       : false,
-  // The Lidless Eye has no effect without an unused die (rule 17); only checkable when the app rolls the dice.
+  // The Lidless Eye has no effect without an unused die (rule 21); only checkable when the app rolls the dice.
   unusedDice: (state) =>
     !state.settings.dice ||
     availableDice(state).some(

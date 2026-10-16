@@ -1,5 +1,5 @@
 // The game header: turn, phase and strategy chips, the tool buttons.
-import { PHASE } from "../qb.js";
+import { PHASE, strategyName } from "../qb.js";
 import { MODAL } from "./constants.js";
 import { history, state } from "./session.js";
 
@@ -40,7 +40,7 @@ export function headerHTML() {
       ? '<span class="chip strat-' +
         state.strategy +
         '">' +
-        capitalize(state.strategy) +
+        strategyName(state.strategy) +
         " strategy</span>"
       : "") +
     (state.settings.wome
@@ -65,5 +65,3 @@ export function headerHTML() {
     '">Tools</button></nav></header>'
   );
 }
-const capitalize = (text) =>
-  text ? text[0].toUpperCase() + text.slice(1) : "";

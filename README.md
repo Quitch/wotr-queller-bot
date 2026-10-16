@@ -6,7 +6,7 @@ A browser app that runs the [Queller Bot](https://boardgamegeek.com/filepage/141
 
 Queller Bot is a set of flowcharts and priority lists that tells the Shadow side what to do. On paper you roll its dice, hold its cards and walk the charts yourself. This app can take over as much of that as you like. Each part is optional, and each works on its own:
 
-- it can roll Queller's Action dice and keep the Hunt box;
+- it can roll Queller's Action dice and keep the Hunt Box;
 - it may draw, hold and play Queller's cards, showing you a card only when it is played or when a flowchart needs to know whether it is playable;
 - it walks the flowcharts, asks their yes/no questions and names the action Queller takes;
 - it can answer those questions itself from a board tracker you keep up to date, or put every board question to you.
@@ -37,9 +37,9 @@ npm run build
 ### Playing a game
 
 1. **New game.** Choose what the app takes over: roll and track Queller's dice, draw and hold Queller's cards, track board state in the app, and Warriors of Middle-earth. The cards and expansion choices are fixed for the game; the other two can be changed in Settings. Roll a die for Queller's starting strategy and enter the result.
-2. **Each turn** press the buttons at the top of the walkthrough in turn order: Phase 1 (dice and cards), Phase 2 (strategy check, corruption strategy only), Phase 3 (Hunt box), Phase 4 (roll), then Phase 5 each time Queller is eligible to act. When a battle starts, use Battle for the first round; the button becomes Battle (next round) while the battle continues. Phase 6 is the victory check, and the next turn begins at Phase 1.
+2. **Each turn** press the buttons at the top of the walkthrough in turn order: Phase 1 (dice and cards), Phase 2 (strategy check, Corruption strategy only), Phase 3 (Hunt Box), Phase 4 (roll), then Phase 5 each time Queller is eligible to act. When a battle starts, use Battle for the first round; the button becomes Battle (next round) while the battle continues. Phase 6 is the victory check, and the next turn begins at Phase 1.
 3. **Answer each step.** A decision asks a question. An action names what Queller does: press Done, or Not possible if the game rules prevent it. A step is something to do before continuing. When the app holds Queller's cards, Not possible on a Phase 5 action asks whether your A Power too Great or The Power of Tom Bombadil blocked it: if so, Queller removes the card when it can pay (one Action die, one Army Event card and one Character card), and that is its action. Italic terms show their definition when you hover, focus or tap them.
-4. **Keep the tracker up to date** when board tracking is on. It answers the questions about the Fellowship, minions, nations and factions for you, and decides which of Queller's cards can be played without showing you the rest of the hand. A minion set to eliminated is never mustered again.
+4. **Keep the tracker up to date** when board tracking is on. It answers the questions about the Fellowship, minions, Nations and factions for you, and decides which of Queller's cards can be played without showing you the rest of the hand. A minion set to eliminated is never mustered again.
 5. **Mistakes.** Undo reverses your last action, up to 60 steps. Save / Load keeps named copies or moves a game to another device.
 6. **Help, Rules, Glossary and Flowcharts** are in the game screen's header; on a narrow screen they fold into its Tools menu. The New game screen's header has Help only.
 

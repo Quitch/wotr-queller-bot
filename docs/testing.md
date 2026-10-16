@@ -43,6 +43,8 @@ The audit left five checks to a person. Each is now a scripted check, as far as 
 - The focus ring's appearance. Its colour is in the contrast test; that it is visible around every control is not checked.
 - The Tab trap in every modal. It is exercised in the flowchart modal only; the others share the same framework code.
 - `prefers-reduced-motion`. The prompt animation is behind the media query but no test toggles it.
+- That a rule citation names the right rule. `test/check.js` checks that each cited number exists; when the rules are renumbered, the mapping is reviewed by hand.
+- That node text matches the draw.io flowchart. `npm run anchors -- --check` compares the arrows only; the box text is compared by hand against the file.
 
 ## Running the optional screen-reader check
 

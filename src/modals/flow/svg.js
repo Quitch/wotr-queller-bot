@@ -264,7 +264,7 @@ function ringMarkSVG(id, { x, y, width }, bold) {
       (y + 8) +
       ') scale(0.85)" style="color:' +
       SVG_COLOUR.RING +
-      '"><title>Elven Ring condition (rule 36)</title>' +
+      '"><title>Elven Ring condition (rule 43)</title>' +
       ui.RING_PATH +
       "</g>"
     );
@@ -276,7 +276,7 @@ function ringMarkSVG(id, { x, y, width }, bold) {
     (y - 8) +
     ') scale(0.75)" style="color:' +
     SVG_COLOUR.RING +
-    '"><title>Elven Ring condition (rule 36)</title><circle cx="12" cy="13.5" r="9.5" fill="' +
+    '"><title>Elven Ring condition (rule 43)</title><circle cx="12" cy="13.5" r="9.5" fill="' +
     SVG_COLOUR.RING_BACKGROUND +
     '"/>' +
     ui.RING_PATH +
@@ -297,7 +297,7 @@ function nodeSVG(id, node, { curNode, visited }) {
     '">' +
     shape +
     nodeTextSVG(kind, id, node, box) +
-    ringMarkSVG(id, box, NODE.extra(node).bold) +
+    ringMarkSVG(id, box, NODE.isRing(node)) +
     "</g>"
   );
 }
@@ -365,29 +365,31 @@ function nodeInner(node) {
   let html = esc(text)
     .replace(ui.MARKUP_TERM, "<i>$1</i>")
     .replaceAll("\n", "<br>");
-  if (nodeExtra?.t2)
+  if (nodeExtra.items) {
+    // a condition list (ANY/ALL) is unordered, a priority list ordered
+    const list = nodeExtra.any || nodeExtra.all ? "ul" : "ol";
     html =
-      "<b>" +
+      '<div style="text-align:left;width:100%"><' +
+      (nodeExtra.plainHeader ? "span" : "b") +
+      ' style="display:block;text-align:center">' +
       html +
-      "</b> or " +
-      esc(nodeExtra.t2).replace(ui.MARKUP_TERM, "<i>$1</i>");
-  if (nodeExtra?.items)
-    html =
-      '<div style="text-align:left;width:100%"><b style="display:block;text-align:center">' +
-      html +
-      "</b><" +
-      (nodeExtra.any ? "ul" : "ol") +
-      ' style="margin:2px 0 0;padding-left:18px">' +
-      nodeExtra.items
-        .map(
-          (item) =>
-            "<li>" + esc(item).replace(ui.MARKUP_TERM, "<i>$1</i>") + "</li>",
-        )
-        .join("") +
       "</" +
-      (nodeExtra.any ? "ul" : "ol") +
+      (nodeExtra.plainHeader ? "span" : "b") +
+      "><" +
+      list +
+      ' style="margin:2px 0 0;padding-left:18px">' +
+      NODE.items(node).map(itemHTML).join("") +
+      "</" +
+      list +
       "></div>";
+  }
   return html;
+}
+function itemHTML(item) {
+  const text =
+    (item.wome ? "– WoME – " : "") +
+    esc(item.text).replace(ui.MARKUP_TERM, "<i>$1</i>");
+  return "<li>" + (item.bold ? "<b>" + text + "</b>" : text) + "</li>";
 }
 // The point halfway along a polyline, for its label.
 function midpoint(points) {

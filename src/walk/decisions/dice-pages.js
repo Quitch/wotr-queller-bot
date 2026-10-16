@@ -1,6 +1,11 @@
 // Decision handlers for the Character and Army pages: (state, node, facts), each answering a box from the state or asking the player.
-import { minionInPlay } from "../../engine/index.js";
-import { answerAuto, answerFromTracker, ask } from "./common.js";
+import { DIE_REQUIREMENT, FACE, minionInPlay } from "../../engine/index.js";
+import {
+  answerAuto,
+  answerFromTracker,
+  answerIfOtherDie,
+  ask,
+} from "./common.js";
 import { decideWitchKingInPlay } from "./phase-5.js";
 
 // ---- Character
@@ -13,7 +18,7 @@ function decideNazgulInPlay(state, node, { board }) {
     "tracker: " +
       board.nazgul +
       " Nazgûl" +
-      (witchKing ? ", Witch King in play" : ""),
+      (witchKing ? ", Witch-king in play" : ""),
   );
 }
 function decideNazgulOnMap(state, node, { trackerOn, board }) {
@@ -37,9 +42,19 @@ function decideDieUsed(state, node, { walk }) {
 // ---- Army
 function decideHuntDiceForArmy(state, node, { diceOn, trackerOn, board }) {
   if (diceOn && state.dice.hunt === 0)
-    return answerAuto(state, node, false, "no dice in the Hunt box");
+    return answerAuto(state, node, false, "no dice in the Hunt Box");
   if (trackerOn && board.fs.mordor)
     return answerAuto(state, node, false, "Fellowship in Mordor");
+  ask(state, node);
+}
+
+// "Using an Army/Muster die": the die the Army page was entered with.
+function decideArmyMusterDie(state, node, { walk, diceOn }) {
+  if (answerIfOtherDie(state, node, DIE_REQUIREMENT.ARMY)) return;
+  if (diceOn && walk.dieIndex != null) {
+    const face = state.dice.pool[walk.dieIndex].face;
+    return answerAuto(state, node, face === FACE.ARMY_MUSTER, face + " die");
+  }
   ask(state, node);
 }
 
@@ -52,4 +67,5 @@ export const DICE_PAGE_DECISIONS = {
   "CH.mosMob": decideMouthInPlay,
   "CH.dieUsed": decideDieUsed,
   "AR.huntDice": decideHuntDiceForArmy,
+  "AR.amDie": decideArmyMusterDie,
 };

@@ -7,7 +7,13 @@ import { findStart, normalizeText } from "./graph.js";
 import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
 import { doReturn, ensureDie } from "./jumps.js";
 import { SHADOW_NATION_KEY } from "./nations.js";
-import { FALL_THROUGH, PENDING, PROMPT, WALK_RESULT } from "./prompt.js";
+import {
+  FALL_THROUGH,
+  PENDING,
+  PROMPT,
+  WALK_RESULT,
+  strategyName,
+} from "./prompt.js";
 
 // Draw steps and actions on the Event/Faction pages: the deck depends on the box; with cards off the player draws.
 // The deck a draw node draws from: Character or Faction Event where the node says so, otherwise the strategy's preferred deck.
@@ -97,17 +103,17 @@ function promptAction(state, node, text, extra) {
 const adoptStrategy = (strategy) =>
   function adopt(state) {
     state.strategy = strategy;
-    const message = "Queller uses the " + strategy + " strategy.";
+    const message = "Queller uses the " + strategyName(strategy) + " strategy.";
     engine.log(state, message);
     endWalk(state, WALK_RESULT.STRATEGY, message);
   };
-// "Discard unplayable die" (rule 32): set aside one available die at random.
+// "Discard unplayable die" (rule 39): set aside one available die at random.
 function discardUnusableDie(state, node, { diceOn, label }) {
   if (!diceOn)
     return promptAction(
       state,
       node,
-      "Discard unplayable die: set aside one Queller die that could not be used, chosen at random (rule 32).",
+      "Discard unplayable die: set aside one Queller die that could not be used, chosen at random (rule 39).",
     );
   const available = engine.availableDice(state);
   if (!available.length)
@@ -116,15 +122,15 @@ function discardUnusableDie(state, node, { diceOn, label }) {
   die.status = engine.DIE_STATE.USED;
   engine.log(
     state,
-    "Discarded an unplayable " + die.face + " die at random (rule 32).",
+    "Discarded an unplayable " + die.face + " die at random (rule 39).",
   );
   endWalk(
     state,
     WALK_RESULT.ACTION,
-    "Queller sets aside a " + die.face + " die it could not use (rule 32).",
+    "Queller sets aside a " + die.face + " die it could not use (rule 39).",
   );
 }
-// Re-enter Muster 2 holding the Muster die that was set aside for a minion (Rulings: it must be used now).
+// Re-enter Muster 2 holding the Muster die that was set aside for a minion (rule 34: it must be used now).
 function enterMuster2WithReservedDie(state, walk, reservedIndex) {
   walk.fromReserve = true;
   walk.reservedDieIndex = reservedIndex;
@@ -132,13 +138,8 @@ function enterMuster2WithReservedDie(state, walk, reservedIndex) {
     kind: TRAIL.JUMP,
     text: "Muster 2 (die set aside for the minion)",
   });
-  walk.stack.push({
-    page: walk.page,
-    node: walk.node,
-    die: null,
-    dieIndex: null,
-    dieUsed: false,
-  });
+  // no frame to return to: if Muster 2 finds nothing, doReturn spends the die (rule 34), and the walk does not go
+  // on to "Discard unplayable die"
   walk.die = DIE_REQUIREMENT.MUSTER;
   walk.dieIndex = reservedIndex;
   goto(state, "MU", findStart("MU", "Muster 2"));
@@ -149,19 +150,8 @@ function useReservedMinionDie(state, node, { walk, diceOn, label }) {
   const reserved = diceOn
     ? state.dice.pool.find((die) => die.status === engine.DIE_STATE.RESERVED)
     : null;
-  if (diceOn ? !reserved : !state.minionReserved) {
-    trail(state, {
-      kind: TRAIL.SKIP,
-      text: label,
-      why: "no Muster die set aside",
-    });
-    endWalk(
-      state,
-      WALK_RESULT.NO_ACTION,
-      "Queller has no action — it has no die it can use.",
-    );
-    return;
-  }
+  if (diceOn ? !reserved : !state.minionReserved)
+    return skipAction(state, label, "no Muster die set aside");
   let reservedIndex = null;
   if (diceOn) {
     reserved.status = engine.DIE_STATE.AVAIL;
@@ -175,7 +165,7 @@ function useReservedMinionDie(state, node, { walk, diceOn, label }) {
 function promptPass(state, node) {
   promptAction(state, node, "Pass", {
     pass: true,
-    help: "Only if the game rules permit a pass (Rulings). If Queller cannot pass, follow the arrow out.",
+    help: "Only if the game rules permit a pass. If Queller cannot pass, follow the arrow out (rule 36).",
   });
 }
 // "Discard": the priority list already discarded with cards on; the die (if any) was spent on the draw.
@@ -231,7 +221,7 @@ function politicalTrackPreview(state, nationKey) {
 }
 function advancePoliticalTrack(state, node, { walk, trackerOn, label }) {
   if (!walk.nationChoice || walk.nationChoice === "Faction")
-    return skipAction(state, label, "no nation to advance");
+    return skipAction(state, label, "no Nation to advance");
   const nationKey = SHADOW_NATION_KEY[walk.nationChoice];
   if (!trackerOn)
     return promptAction(
@@ -253,7 +243,7 @@ function advancePoliticalTrack(state, node, { walk, trackerOn, label }) {
 // The tracker field of each minion the Muster page can muster.
 const MINION_KEY = {
   Saruman: "saruman",
-  "Witch King": "witchKing",
+  "Witch-king": "witchKing",
   "Mouth of Sauron": "mouth",
 };
 function musterMinion(state, node, { walk, label }) {
@@ -297,6 +287,7 @@ const ACTION_HANDLERS = {
   "EV.playB": playChosenCard,
   "EV.playC": playChosenCard,
   "EV.playD": playChosenCard,
+  "EV.playChar": playChosenCard,
   "FA.playA": playChosenCard,
   "MU.musterCardA": playChosenCard,
   "M5.playCharDie": playChosenCard,
@@ -351,7 +342,7 @@ export function spendCurrentDie(state, why) {
     );
   releaseCurrentDie(state);
 }
-// Rule 29: an action Queller cannot take is skipped — follow the arrow out of the box, or return to the page that sent us here.
+// Rule 36: an action Queller cannot take is skipped — follow the arrow out of the box, or return to the page that sent us here.
 export function exitAction(state) {
   if (follow(state, null)) return;
   doReturn(state);

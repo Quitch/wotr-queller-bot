@@ -8,7 +8,7 @@
 // matches records by page, ends and label, so order only matters for a readable diff.
 import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { FLOW, NODE, EDGE } from "../src/flow/index.js";
+import { FLOW, NODE, NODE_KIND, EDGE } from "../src/flow/index.js";
 
 const ROOT = path.join(import.meta.dirname, "..");
 const OUT = path.join(ROOT, "src", "flow", "anchors.json");
@@ -206,55 +206,80 @@ function arrowEnds(cell, nodeIds, boxes) {
   }
   return { from, to, ex, en };
 }
-// The arrow's label and whether it is drawn: {label, nolabel}. When flow.js labels the arrow but the diagram does not,
-// the label is not drawn (an arrow with an empty value attribute is a label that was cleared, and is drawn).
-function arrowLabel(cell, candidates) {
-  const drawn = plainText(cell.attrs.value || "") || null;
-  if (drawn || candidates.length !== 1 || !EDGE.label(candidates[0]))
+// The arrow's label and whether it is drawn: {label, nolabel}. The label is the arrow's value or, failing that, a label
+// cell attached to it. Overlapping arrows share one drawn label: a label drawn on a grey box's exit belongs to the
+// arrow it overlaps, so that exit takes its flow.js edge's label; any other drawn label must match flow.js, or the
+// caller warns. When flow.js labels the arrow but the diagram does not, the label is not drawn (an arrow with an empty
+// value attribute is a label that was cleared, and is drawn).
+function arrowLabel(cell, candidates, childLabel, fromJump) {
+  const drawn = plainText(cell.attrs.value || "") || childLabel || null;
+  if (candidates.length !== 1) return { label: drawn, nolabel: false };
+  const label = EDGE.label(candidates[0]) || null;
+  if (drawn && drawn !== label && !fromJump)
     return { label: drawn, nolabel: false };
   return {
-    label: EDGE.label(candidates[0]),
-    nolabel: !("value" in cell.attrs),
+    label,
+    nolabel: !!label && !drawn && !("value" in cell.attrs),
   };
 }
 // One record per arrow on a page, in document order.
 function pageRecords(page, pageKey) {
   const { nodeIds, boxes } = pageBoxes(page, pageKey);
   const flowEdges = FLOW[pageKey].edges;
+  const childLabels = new Map();
+  for (const cell of page.cells)
+    if (styleOf(cell.attrs.style).edgeLabel && cell.attrs.value)
+      childLabels.set(cell.attrs.parent, plainText(cell.attrs.value));
+  const context = { pageKey, nodeIds, boxes, flowEdges, childLabels };
   const records = [];
   for (const cell of page.cells) {
     if (cell.attrs.edge !== "1") continue;
-    const style = styleOf(cell.attrs.style);
-    const { from, to, ex, en } = arrowEnds(cell, nodeIds, boxes);
-    if (!from || !to) {
-      console.warn(
-        `${pageKey}: arrow ${cell.attrs.id} joins boxes flow.js does not have (${cell.attrs.source || JSON.stringify(cell.ends.sourcePoint)} -> ${cell.attrs.target || JSON.stringify(cell.ends.targetPoint)})`,
-      );
-      continue;
-    }
-    const candidates = flowEdges.filter(
-      (edge) => EDGE.from(edge) === from && EDGE.to(edge) === to,
-    );
-    const { label, nolabel } = arrowLabel(cell, candidates);
-    if (!candidates.some((edge) => (EDGE.label(edge) || null) === label))
-      console.warn(
-        `${pageKey}: no flow.js edge ${from} -> ${to} labelled ${JSON.stringify(label)}`,
-      );
-    const an = ex || en ? {} : null;
-    if (ex) an.ex = ex;
-    if (en) an.en = en;
-    records.push({
-      p: pageKey,
-      f: from,
-      t: to,
-      l: label,
-      wp: cell.points.length ? cell.points : null,
-      an,
-      elbow: style.edgeStyle === "elbowEdgeStyle",
-      nolabel,
-    });
+    const record = arrowRecord(cell, context);
+    if (record) records.push(record);
   }
   return records;
+}
+// The record of one arrow, or null for an arrow that is not a route (a loop on one box, or ends flow.js lacks).
+function arrowRecord(
+  cell,
+  { pageKey, nodeIds, boxes, flowEdges, childLabels },
+) {
+  const style = styleOf(cell.attrs.style);
+  const { from, to, ex, en } = arrowEnds(cell, nodeIds, boxes);
+  // an arrow from a box back to itself is a drawing slip, not a route
+  if (from && from === to) return null;
+  if (!from || !to) {
+    console.warn(
+      `${pageKey}: arrow ${cell.attrs.id} joins boxes flow.js does not have (${cell.attrs.source || JSON.stringify(cell.ends.sourcePoint)} -> ${cell.attrs.target || JSON.stringify(cell.ends.targetPoint)})`,
+    );
+    return null;
+  }
+  const candidates = flowEdges.filter(
+    (edge) => EDGE.from(edge) === from && EDGE.to(edge) === to,
+  );
+  const { label, nolabel } = arrowLabel(
+    cell,
+    candidates,
+    childLabels.get(cell.attrs.id),
+    NODE.kind(FLOW[pageKey].nodes[from]) === NODE_KIND.JUMP,
+  );
+  if (!candidates.some((edge) => (EDGE.label(edge) || null) === label))
+    console.warn(
+      `${pageKey}: no flow.js edge ${from} -> ${to} labelled ${JSON.stringify(label)}`,
+    );
+  const an = ex || en ? {} : null;
+  if (ex) an.ex = ex;
+  if (en) an.en = en;
+  return {
+    p: pageKey,
+    f: from,
+    t: to,
+    l: label,
+    wp: cell.points.length ? cell.points : null,
+    an,
+    elbow: style.edgeStyle === "elbowEdgeStyle",
+    nolabel,
+  };
 }
 // List the records that are new, changed or gone between the tracked file and the regenerated ones.
 function reportDifferences(current, records) {

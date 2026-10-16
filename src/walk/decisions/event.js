@@ -1,8 +1,14 @@
 // Decision handlers for the Event page: (state, node, facts), each answering a box from the state or asking the player.
 import * as engine from "../../engine/index.js";
 import { DIE_REQUIREMENT, cardById } from "../../engine/index.js";
-import { DIE_REQUIREMENT_NAME } from "../jumps-table.js";
-import { answerAuto, answerByPlayableCount, ask } from "./common.js";
+import { dieWithArticle } from "../jumps-table.js";
+import {
+  answerAuto,
+  answerByPlayableCount,
+  ask,
+  requiringDie,
+  decidePlayableCharacterCard,
+} from "./common.js";
 import { decidePlayableRevealedCard } from "./phase-5.js";
 
 // ---- Event
@@ -25,7 +31,7 @@ function decideEventDie(state, node, { walk }) {
       state,
       node,
       walk.die === DIE_REQUIREMENT.EVENT,
-      "using a " + DIE_REQUIREMENT_NAME[walk.die] + " die",
+      "using " + dieWithArticle(walk.die) + " die",
     );
   ask(state, node);
 }
@@ -92,7 +98,11 @@ export const EVENT_DECISIONS = {
   "EV.prefPlay": decidePreferredPlayable,
   "EV.eventDie": decideEventDie,
   "EV.less4": decideHandUnder4,
-  "EV.less4b": decideHandUnder4,
+  "EV.less4b": requiringDie(DIE_REQUIREMENT.EVENT, decideHandUnder4),
+  "EV.charCard": requiringDie(
+    DIE_REQUIREMENT.CHARACTER,
+    decidePlayableCharacterCard,
+  ),
   "EV.less3f": decideFactionHandUnder3,
   "EV.anyPlay": decideAnyPlayable,
   "EV.aboveFull": decideHandAboveLimits,
