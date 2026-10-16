@@ -267,6 +267,33 @@ const DIE_QUESTION_NOTE = {
 const messengerPossible = (state) =>
   !state.messengerUsedThisTurn &&
   (!state.settings.tracker || engine.minionInPlay(state, "mouth"));
+// With dice off, after a No to the Army die: may a Muster die act as one (rule 30)?
+function askMessenger(state, req, label) {
+  setPrompt(state, {
+    type: PROMPT.DIE_CHECK,
+    req,
+    label,
+    messenger: true,
+    text: "Does Queller have a Muster die to use as an Army die with Messenger of the Dark Tower (the Mouth of Sauron in play, once per turn, rule 30)?",
+  });
+  return PENDING;
+}
+// With dice off and no die of type `req`: offer an Elven Ring, once per walk.
+function offerRing(state, walk, req, label) {
+  walk.ringAsked = true;
+  setPrompt(state, {
+    type: PROMPT.RING,
+    req,
+    label,
+    text:
+      (engine.ringsKnown(state) ? "" : "If the Shadow holds an Elven Ring: ") +
+      "Use an Elven Ring (rule 43): change one Queller die that does not show a *preferred* result into " +
+      dieWithArticle(req) +
+      " result. Choose the die at random. If the step then turns out not to be possible, the app tells you to turn the die back (rule 43)." +
+      ringLimitText(ringQuestion(state, req)),
+  });
+  return PENDING;
+}
 // Without dice: ask the player whether Queller has the die (once per type per walk), then offer an Elven Ring before giving up.
 function askForDie(state, walk, req, label) {
   if (walk.dieAns[req] === undefined) {
@@ -292,34 +319,10 @@ function askForDie(state, walk, req, label) {
     req === DIE_REQUIREMENT.ARMY &&
     walk.messengerAns === null &&
     messengerPossible(state)
-  ) {
-    setPrompt(state, {
-      type: PROMPT.DIE_CHECK,
-      req,
-      label,
-      messenger: true,
-      text: "Does Queller have a Muster die to use as an Army die with Messenger of the Dark Tower (the Mouth of Sauron in play, once per turn, rule 30)?",
-    });
-    return PENDING;
-  }
-  if (ringMayCreate(state, req) && !walk.ringAsked) {
-    walk.ringAsked = true;
-    const limit = ringQuestion(state, req);
-    setPrompt(state, {
-      type: PROMPT.RING,
-      req,
-      label,
-      text:
-        (engine.ringsKnown(state)
-          ? ""
-          : "If the Shadow holds an Elven Ring: ") +
-        "Use an Elven Ring (rule 43): change one Queller die that does not show a *preferred* result into " +
-        dieWithArticle(req) +
-        " result. Choose the die at random. If the step then turns out not to be possible, the app tells you to turn the die back (rule 43)." +
-        ringLimitText(limit),
-    });
-    return PENDING;
-  }
+  )
+    return askMessenger(state, req, label);
+  if (ringMayCreate(state, req) && !walk.ringAsked)
+    return offerRing(state, walk, req, label);
   trail(state, {
     kind: TRAIL.SKIP,
     text: label,
