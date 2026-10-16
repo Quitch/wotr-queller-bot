@@ -159,7 +159,7 @@ function renderActionPrompt(prompt, walk) {
       (prompt.pass ? "" : '<div class="help">' + dieHelpText(walk) + "</div>"),
     answers:
       actionDoneButtons(prompt) +
-      (engine.offersNotPossible(prompt)
+      (engine.offersNotPossible(prompt, walk)
         ? '<button class="btn no" data-ans="no">Not possible (rule 36)</button>'
         : ""),
   };
@@ -180,13 +180,13 @@ function renderPlayCardPrompt(prompt, walk) {
     answers: DONE_BUTTON,
   };
 }
-function renderStepPrompt(prompt) {
+function renderStepPrompt(prompt, walk) {
   return {
     body:
       questionHTML(prompt.text) +
       orderedListHTML(prompt.items) +
       helpHTML(prompt.help),
-    answers: engine.offersNotPossible(prompt)
+    answers: engine.offersNotPossible(prompt, walk)
       ? DONE_BUTTON +
         '<button class="btn no" data-ans="no">Not possible</button>'
       : '<button class="btn yes" data-ans="done">Continue</button>',

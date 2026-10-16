@@ -1,6 +1,6 @@
 // The grey boxes: enter another page with the die it needs, return from it, set a die aside, switch strategy, look for a ring use.
 import * as engine from "../engine/index.js";
-import { DIE_REQUIREMENT, TRAIL } from "../engine/index.js";
+import { DIE_REQUIREMENT, FACE, TRAIL } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
 import {
   askBoardQuestion,
@@ -9,6 +9,9 @@ import {
   exitJump,
   follow,
   goto,
+  heldDieGone,
+  noDieHeld,
+  releaseCurrentDie,
   setPrompt,
   trail,
 } from "./core.js";
@@ -77,13 +80,28 @@ function switchStrategy(state, walk, spec, label) {
   };
   follow(state, null);
 }
+// The requirements a Muster or Army/Muster die meets: with dice off, the die set aside may be the one they relied on.
+const MUSTER_DIE_REQUIREMENTS = Object.keys(
+  engine.DIE_REQUIREMENT_FACES,
+).filter((req) =>
+  engine.DIE_REQUIREMENT_FACES[req].some(
+    (face) => face === FACE.MUSTER || face === FACE.ARMY_MUSTER,
+  ),
+);
+// Whether the frame of a page the walk will return to holds the die being set aside.
+function holdsDieSetAside(state, walk, frame) {
+  if (state.settings.dice)
+    return walk.dieIndex != null && frame.dieIndex === walk.dieIndex;
+  return MUSTER_DIE_REQUIREMENTS.includes(frame.die);
+}
 function setDieAside(state, walk) {
   state.minionReserved = true;
   if (walk.dieIndex != null && state.settings.dice) {
     state.dice.pool[walk.dieIndex].status = engine.DIE_STATE.RESERVED;
   }
-  delete walk.dieAns[DIE_REQUIREMENT.MUSTER];
-  delete walk.dieAns[DIE_REQUIREMENT.CHAR_OR_MUSTER]; // the die the player said Queller had is no longer available
+  for (const req of MUSTER_DIE_REQUIREMENTS) delete walk.dieAns[req];
+  for (const frame of walk.stack)
+    if (holdsDieSetAside(state, walk, frame)) Object.assign(frame, noDieHeld());
   engine.log(state, "Muster die set aside for a minion (rule 34).");
   trail(state, {
     kind: TRAIL.NOTE,
@@ -156,6 +174,7 @@ const JUMP_KIND = {
 // Grey box naming a page: enter it with the die it needs (or the die already held), or skip it.
 function jumpWithDie(state, spec, label) {
   const walk = state.walk;
+  if (heldDieGone(state)) releaseCurrentDie(state);
   if ((spec.held && walk.die) || engine.dieSatisfies(walk.die, spec.die)) {
     enterPage(state, spec, label);
     return;
@@ -180,12 +199,7 @@ function jumpWithDie(state, spec, label) {
     before.dieIndex != null &&
     walk.dieIndex === before.dieIndex &&
     walk.ringPending?.dieIndex === before.dieIndex;
-  enterPage(
-    state,
-    page,
-    label,
-    sameDie ? { die: null, dieIndex: null, dieViaMessenger: false } : before,
-  );
+  enterPage(state, page, label, sameDie ? noDieHeld() : before);
 }
 // Rule 11: the move towards an exposed target uses an Army die, else an Army/Muster die, else a Character die with an
 // Army that contains a Nazgûl or a minion. At the threat column's "Army" jump for that move, with no Army die (rolled,

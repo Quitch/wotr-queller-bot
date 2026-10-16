@@ -98,6 +98,7 @@ export const WOME_CARDS = [
     cond: null,
     text: "Transport Armies with Corsairs (each Corsairs figure may transport up to two Shadow units, and any number of Minions or Nazgûl, in its region): transport up to two Shadow Armies, up to four regions; or transport one Shadow Army up to two regions, and attack with that Army.",
     faction: "Corsairs",
+    pre: "corsairs",
   },
   {
     id: "sa_Faction05",
@@ -108,6 +109,7 @@ export const WOME_CARDS = [
     cond: null,
     text: "Transport Armies with Corsairs (each Corsairs figure may transport up to two Shadow units, and any number of Minions or Nazgûl, in its region): transport up to two Shadow Armies, up to four regions; or transport one Shadow Army up to two regions, and attack with that Army.",
     faction: "Corsairs",
+    pre: "corsairs",
   },
   {
     id: "sa_Faction06",
@@ -140,6 +142,7 @@ export const WOME_CARDS = [
     cond: null,
     text: "Attack a Free Peoples Army including Rohan and/or Gondor units with a Shadow Army in the same region with Dunlending figures. Dunlendings are considered as Isengard Regular units until the end of the battle.",
     faction: "Dunlendings",
+    pre: "dunlendings",
   },
   {
     id: "sa_Faction09",
@@ -150,6 +153,7 @@ export const WOME_CARDS = [
     cond: null,
     text: "Attack a Free Peoples Army including Rohan and/or Gondor units with a Shadow Army in the same region with Dunlending figures. Dunlendings are considered as Isengard Regular units until the end of the battle.",
     faction: "Dunlendings",
+    pre: "dunlendings",
   },
   {
     id: "sa_Faction10",
@@ -174,6 +178,7 @@ export const WOME_CARDS = [
     cond: null,
     text: 'Move all Spiders up to two regions.\n\nIf the "Shelob\'s Lair" special Hunt tile has not entered play, it is now in play. Add the tile to the Hunt Pool when the Fellowship is on the Mordor Track.',
     faction: "Spiders",
+    pre: "spiders",
     tile: true,
   },
   {
@@ -186,7 +191,7 @@ export const WOME_CARDS = [
     text: "Move all Spiders up to two regions. Then, you may discard one Spider figure in the region with the Fellowship to draw a Hunt tile.\n\nIf the tile shows an Eye, discard it without effect.\n\nOtherwise, follow the rules for a successful Hunt.",
     faction: "Spiders",
     tile: true,
-    pre: "fsNotInFPSettlement",
+    pre: "spidersFsNotInFPSettlement",
   },
   {
     id: "sa_Faction13",
@@ -197,7 +202,7 @@ export const WOME_CARDS = [
     cond: "Play if the Fellowship is not in a region containing a Free Peoples Settlement.",
     text: "Move all Spiders up to two regions. Then, you may discard one Spider figure in the region with the Fellowship to inflict one point of Hunt Damage, following the rules for a successful Hunt. If the Fellowship is hidden, the Free Peoples player may choose to reveal it to prevent this damage.",
     faction: "Spiders",
-    pre: "fsNotInFPSettlement",
+    pre: "spidersFsNotInFPSettlement",
   },
   {
     id: "sa_Faction14",

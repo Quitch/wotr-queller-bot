@@ -1,4 +1,5 @@
 // Scripted scenarios for the behaviour fixed in version 52. Exit 1 on any failure.
+import { readFileSync } from "node:fs";
 import * as fakeWindow from "./load.js";
 const engine = fakeWindow.QB,
   FLOW = fakeWindow.QB_FLOW,
@@ -29,6 +30,11 @@ const die = (face, status) => ({
   kind: engine.DIE_KIND.ACTION,
   face,
   status: status || DIE_STATE.AVAIL,
+});
+const factionDie = (face) => ({
+  kind: engine.DIE_KIND.FACTION,
+  face,
+  status: DIE_STATE.AVAIL,
 });
 // The answer a scenario gives when none of its rules match: No to every question, an empty battle form, "done" otherwise.
 function defaultAnswer(prompt) {
@@ -197,6 +203,105 @@ function musterDieAskedAgainAfterReserve() {
   ).length;
   ok(asks >= 2, "Muster die asked again after the reserve (" + asks + " asks)");
 }
+// Rule 34: the Army/Muster die held for "Attack using Army die" is the Muster die the Muster page sets aside for a
+// minion; back on C5 the walk no longer holds it, so the move towards the target cannot spend it.
+function reservedDieIsNotSpentAsArmyDie() {
+  const rules = [
+    [/^Move can create/, false],
+    [/Will of the West/, true],
+    [/^Shadow under/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*(threat|target)\*$/, true],
+    [/^Attack using Army die$/, "no"],
+    [/not under siege and in a Nation At War/, true],
+    [/can move or attack towards closest/, true],
+    [/^Does Queller have a Character die/, false],
+    [/^Does Queller have/, true],
+  ];
+  const diceOn = phase5State({
+    dice: true,
+    cards: false,
+    tracker: true,
+    wome: false,
+  });
+  diceOn.board.nations.isengard = 0;
+  diceOn.dice.pool = [die("Army/Muster")];
+  engine.startPhase(diceOn, PHASE.P5);
+  driveWalk(diceOn, rules);
+  ok(
+    diceOn.dice.pool[0].status === DIE_STATE.RESERVED &&
+      diceOn.minionReserved &&
+      diceOn.walk.result !== WALK_RESULT.ACTION,
+    "dice on: the die set aside for a minion is not spent as the Army die (" +
+      diceOn.dice.pool[0].status +
+      ", " +
+      diceOn.walk.result +
+      ")",
+  );
+  const diceOff = phase5State({
+    dice: false,
+    cards: false,
+    tracker: true,
+    wome: false,
+  });
+  diceOff.board.nations.isengard = 0;
+  engine.startPhase(diceOff, PHASE.P5);
+  const seen = driveWalk(diceOff, rules);
+  const armyAsks = seen.filter(
+    (prompt) =>
+      prompt?.type === PROMPT.DIE_CHECK && /have an Army die/.test(prompt.text),
+  ).length;
+  ok(
+    diceOff.minionReserved && armyAsks === 2,
+    "dice off: after the Muster die is set aside, the Army die is asked about again (" +
+      armyAsks +
+      " asks)",
+  );
+  ok(
+    diceOff.log.some((entry) => /^Queller used an Army die/.test(entry.text)),
+    "dice off: the log says “an Army die”",
+  );
+  // Dice on, and a page between C5 and the Muster page also holds the die (its frame is added by hand: today only C5
+  // and M5 jump to the Muster boxes that set a die aside). The player turns dice off after the Muster page returns.
+  const toggled = phase5State({
+    dice: true,
+    cards: false,
+    tracker: true,
+    wome: false,
+  });
+  toggled.board.nations.isengard = 0;
+  toggled.dice.pool = [die("Army/Muster")];
+  engine.startPhase(toggled, PHASE.P5);
+  let guard = 0;
+  while (
+    !/Will of the West/.test(toggled.walk.prompt?.text || "") &&
+    guard++ < 40
+  ) {
+    const prompt = toggled.walk.prompt;
+    engine.answer(toggled, ruleAnswer(prompt, rules) ?? defaultAnswer(prompt));
+  }
+  toggled.walk.stack.push({
+    page: "AR",
+    node: "jMuster3",
+    die: DIE_REQUIREMENT.ARMY,
+    dieIndex: 0,
+    dieViaMessenger: false,
+    dieUsed: false,
+  });
+  engine.answer(toggled, true);
+  toggled.settings.dice = false;
+  const toggledSeen = driveWalk(toggled, [
+    [/^Does Queller have an Army die/, false],
+    ...rules,
+  ]);
+  ok(
+    toggled.minionReserved &&
+      toggledSeen.some((prompt) => /have an Army die/.test(prompt?.text)) &&
+      !toggled.log.some((entry) =>
+        /^Queller used an Army die/.test(entry.text),
+      ),
+    "dice turned off after the reserve: no page returned to still holds the die set aside",
+  );
+}
 // dice on, tracker off: no ring without one in the minimal tracker; one ring used once
 function ringUsedOnceOnlyWhenHeld() {
   const stateWithEventAndMusterDice = () => {
@@ -309,6 +414,7 @@ function actionsUpdateTheTracker() {
     wome: true,
   });
   corsairsState.cards.factionHand = ["sa_Faction01"];
+  corsairsState.dice.pool = [factionDie("Recruit")];
   corsairsState.walk = null;
   engine.startWalk(corsairsState, "FA", "Recruit Faction", {
     die: DIE_REQUIREMENT.FACTION_RECRUIT,
@@ -324,6 +430,7 @@ function actionsUpdateTheTracker() {
     tracker: true,
     wome: false,
   });
+  witchKingState.dice.pool = [die("Muster")];
   witchKingState.walk = null;
   engine.startWalk(witchKingState, "CH", "Character 3 / Muster Witch-king", {
     die: DIE_REQUIREMENT.MUSTER,
@@ -333,21 +440,47 @@ function actionsUpdateTheTracker() {
     witchKingState.board.chars.witchKing === MINION_STATUS.IN_PLAY,
     'Witch-king in play after "Mustered Witch-king"',
   );
-  const hillmenState = phase5State({
+}
+// A WoME game at Phase 5 whose Faction hand holds only `id`, after the FA page has played it; `setUp` runs first.
+function playFactionCard(id, setUp = () => {}) {
+  const state = phase5State({
     dice: true,
     cards: true,
     tracker: true,
     wome: true,
   });
-  hillmenState.cards.factionHand = ["sa_Faction06"];
-  hillmenState.walk = null;
-  engine.startWalk(hillmenState, "FA", "Play Faction Event", {
+  state.cards.factionHand = [id];
+  state.dice.pool = [factionDie("Play/Draw")];
+  setUp(state);
+  state.walk = null;
+  engine.startWalk(state, "FA", "Play Faction Event", {
     die: DIE_REQUIREMENT.FACTION_PLAY,
   });
-  driveWalk(hillmenState, [byType(PROMPT.CONFIRM, true)]);
+  driveWalk(state, [byType(PROMPT.CONFIRM, true)]);
+  return state;
+}
+// WoME rules: a Faction Event card played on a Faction not in play never brings it into play; a card that recruits
+// "or adds to the starting setup" puts its figures on the Faction card.
+function recruitCardKeepsFactionOutOfPlay() {
+  const hillmen = playFactionCard("sa_Faction06");
   ok(
-    hillmenState.board.factions.dunlendings === true,
-    "Wild Hillmen brought the Dunlendings into play",
+    hillmen.board.factions.dunlendings === false &&
+      hillmen.cards.discards.F.includes("sa_Faction06") &&
+      hillmen.log.some((entry) =>
+        /Dunlendings are not in play, so the recruited figures go on the Dunlendings Faction card/.test(
+          entry.text,
+        ),
+      ),
+    "Wild Hillmen leaves the Dunlendings out of play and puts the figures on the Faction card",
+  );
+  const fleet = playFactionCard("sa_Faction01", (state) => {
+    state.board.factions.corsairs = true;
+  });
+  ok(
+    fleet.board.factions.corsairs === true &&
+      fleet.cards.discards.F.includes("sa_Faction01") &&
+      !fleet.log.some((entry) => /Faction card/.test(entry.text)),
+    "A Great Fleet with the Corsairs in play recruits on the board: no Faction-card note",
   );
 }
 function lidlessEyeMovesDiceNotItsOwn() {
@@ -683,6 +816,33 @@ function callToBattleCardsIgnoreInitiative() {
   );
 }
 // battleOpen is reset each turn (7.4); the run guard ends a walk that never reaches a prompt (7.3)
+// Between two combat rounds, a walk from the Jump modal (a card's choice, rule 16) leaves the battle open; Queller's
+// next Phase 5 walk closes it.
+function sideWalkKeepsTheBattleOpen() {
+  const ui = fakeWindow.QB_UI;
+  const state = phase5State({
+    dice: false,
+    cards: false,
+    tracker: false,
+    wome: false,
+  });
+  state.battleOpen = true;
+  ui.setState(state);
+  engine.startWalk(state, "EV", "Event card discard");
+  driveWalk(state, []);
+  ui.afterWalk();
+  const sideWalk = state.walk.result,
+    keptOpen = state.battleOpen;
+  engine.startPhase(state, PHASE.P5);
+  driveWalk(state, []);
+  ui.afterWalk();
+  ok(
+    !!sideWalk && keptOpen && state.walk.done && !state.battleOpen,
+    "a Jump-modal walk (" +
+      sideWalk +
+      ") keeps the battle open; the Phase 5 walk closes it",
+  );
+}
 function battleOpenResetAndRunGuard() {
   const turnState = phase5State({
     dice: false,
@@ -897,6 +1057,184 @@ function emptyEventDecksFallBack() {
       engine.cardById[palantir.cards.hand[0]].deck === engine.DECK.STRATEGY &&
       palantirEntries.some((entry) => /drew a Strategy card/.test(entry.text)),
     "the Palantír draws from the Strategy deck when the Character deck is empty",
+  );
+}
+// The draw step before "Above full hand" (EV.drawPrefT, FA.drawT) with nothing to draw keeps the die, as the draw action
+// boxes do, rather than following its arrow to End; with cards off the step offers Not possible, which keeps it too.
+// The step is reached directly through a temporary arrow from the page's start.
+function drawStepWithNoCardKeepsTheDie() {
+  const drawStep = (page, start, from, to, req, face, cards) => {
+    const state = phase5State({ dice: true, cards, tracker: true, wome: true });
+    state.cards.decks.C = [];
+    state.cards.decks.S = [];
+    state.cards.decks.F = [];
+    state.cards.discards.F = [];
+    state.dice.pool = [
+      req === DIE_REQUIREMENT.EVENT ? die(face) : factionDie(face),
+    ];
+    state.walk = null;
+    let seen = [];
+    withTemporaryEdges(FLOW[page].edges, [[from, to]], () => {
+      engine.startWalk(state, page, start, { die: req, dieIndex: 0 });
+      seen = driveWalk(state, [byType(PROMPT.STEP, "no")]);
+    });
+    return { state, seen };
+  };
+  for (const [page, start, from, to, req, face] of [
+    ["EV", "Event", "start", "drawPrefT", DIE_REQUIREMENT.EVENT, "Event"],
+    [
+      "FA",
+      "Draw Faction Event",
+      "startDraw",
+      "drawT",
+      DIE_REQUIREMENT.FACTION_DRAW,
+      "Wild",
+    ],
+  ]) {
+    const cardsOn = drawStep(page, start, from, to, req, face, true);
+    ok(
+      cardsOn.state.dice.pool[0].status === DIE_STATE.AVAIL &&
+        cardsOn.state.walk.done &&
+        cardsOn.state.walk.result !== WALK_RESULT.ACTION,
+      page +
+        "." +
+        to +
+        ": with no card to draw the die is kept (" +
+        cardsOn.state.dice.pool[0].status +
+        ")",
+    );
+    const cardsOff = drawStep(page, start, from, to, req, face, false);
+    const step = cardsOff.seen.find((prompt) => prompt?.node === to);
+    ok(
+      !!step &&
+        engine.offersNotPossible(step, cardsOff.state.walk) &&
+        /draw (is )?not possible/.test(step.help) &&
+        cardsOff.state.dice.pool[0].status === DIE_STATE.AVAIL &&
+        cardsOff.state.walk.done,
+      page +
+        "." +
+        to +
+        ": with cards off the draw step explains and offers Not possible, which keeps the die (" +
+        cardsOff.state.dice.pool[0].status +
+        ")",
+    );
+  }
+  // a prompt saved by version 61 carries only its type, text, node and help
+  const saved = drawStep(
+    "EV",
+    "Event",
+    "start",
+    "drawPrefT",
+    DIE_REQUIREMENT.EVENT,
+    "Event",
+    false,
+  );
+  ok(
+    engine.offersNotPossible(
+      {
+        type: PROMPT.STEP,
+        text: "Draw a *preferred* Event card",
+        node: "drawPrefT",
+      },
+      saved.state.walk,
+    ),
+    "a saved draw-step prompt with no flag still offers Not possible",
+  );
+}
+// Servants of Sauron, played from the hand: the top-up of a short Faction deck leaves the played card in the discards,
+// so it cannot draw itself; it joins the deck in the reshuffle after the draw.
+function servantsOfSauronCannotDrawItself() {
+  const servants = "sa_Faction18";
+  const state = playFactionCard(servants, (setUp) => {
+    setUp.cards.decks.F = ["sa_Faction03", "sa_Faction16"];
+    setUp.cards.discards.F = [];
+  });
+  ok(
+    state.cards.factionHand.length === 1 &&
+      state.cards.factionHand[0] !== servants &&
+      state.cards.decks.F.length === 2 &&
+      state.cards.decks.F.includes(servants) &&
+      state.cards.discards.F.length === 0 &&
+      state.walk.trail.some((entry) => /keep one of 2 cards/.test(entry.text)),
+    "Servants of Sauron looks at the two cards of the deck, not at itself, and is reshuffled into the deck after",
+  );
+}
+// WoME rules: the Faction Event deck is reshuffled from its discards as soon as it runs out, not at the next draw.
+function factionDeckReshuffledWhenItRunsOut() {
+  const state = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  state.cards.factionHand = [];
+  state.cards.discards.F = state.cards.decks.F.splice(1);
+  const discarded = state.cards.discards.F.length;
+  engine.drawCard(state, engine.DECK.FACTION);
+  ok(
+    state.cards.factionHand.length === 1 &&
+      state.cards.decks.F.length === discarded &&
+      state.cards.discards.F.length === 0 &&
+      /Reshuffled the Faction Event discards/.test(lastLogText(state)),
+    "drawing the last Faction Event card reshuffles the discards into a new deck at once",
+  );
+}
+// WoME rules: a Faction Event card that acts on its Faction's figures needs the Faction in play.
+function factionCardsNeedTheirFaction() {
+  const state = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  state.board.fs.inFPSettlement = false;
+  const playable = (ids) => ids.map((id) => engine.precondition(state, id));
+  const cards = [
+    "sa_Faction04",
+    "sa_Faction08",
+    "sa_Faction11",
+    "sa_Faction12",
+    "sa_Faction13",
+  ];
+  ok(
+    playable(cards).every((met) => met === false),
+    "Ships of Great Draught, Death to the Forgoil, The Craft of Shelob, Evil Things and Children of Ungoliant need their Faction",
+  );
+  state.board.factions.corsairs = true;
+  state.board.factions.dunlendings = true;
+  state.board.factions.spiders = true;
+  ok(
+    playable(cards).every((met) => met === true),
+    "with their Factions in play they are playable",
+  );
+  state.board.fs.inFPSettlement = true;
+  ok(
+    playable(["sa_Faction11", "sa_Faction12", "sa_Faction13"]).join() ===
+      "true,false,false",
+    "Evil Things and Children of Ungoliant still need the Fellowship outside a Free Peoples Settlement",
+  );
+}
+// WoME rules: a Faction Event card is an Event card, so the Palantír draws after an Event die plays one.
+function palantirDrawsAfterAFactionCard() {
+  const state = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  state.cards.table = [CARD.PALANTIR];
+  state.cards.factionHand = ["sa_Faction04"];
+  engine.playCard(state, "sa_Faction04");
+  const entries = engine.resolveCardEffects(state, "sa_Faction04", {
+    combat: false,
+    die: DIE_REQUIREMENT.EVENT,
+    palantirBefore: true,
+  });
+  ok(
+    state.cards.hand.length === 1 &&
+      engine.cardById[state.cards.hand[0]].deck === engine.DECK.CHARACTER &&
+      entries.some((entry) => /drew a Character card/.test(entry.text)),
+    "the Palantír draws a Character card after an Event die plays a Faction Event card",
   );
 }
 // The tracker's table triggers: Worn with Sorrow and Toil asks like Flocks of Crebain; Wormtongue leaves when Saruman does.
@@ -1637,6 +1975,233 @@ function savedWalkFromReleasedFlowchartResumes() {
   ok(
     engine.migrate(finished).walk?.done === true,
     "a finished walk from the released flowchart is kept",
+  );
+}
+// test/fixtures/v61-army-walk.json is a game saved by version 61 (commit 10960ec) part-way through the Army page,
+// entered from M5's "Army" jump with an Army die: it resumes with the walk fields added since, and its Army die makes
+// both moves (rule 9). It was made with v61's own code: dice on, cards off, Military, one Army die, startPhase(P5),
+// then Yes to "Shadow under threat", No to "Mobile army adjacent", Yes to "Move can create" (the Character move is
+// skipped and jArmyT enters AR), saved at AR.threatEx.
+const V61_ARMY_WALK = readFileSync(
+  new URL("./fixtures/v61-army-walk.json", import.meta.url),
+  "utf8",
+);
+const V61_ARMY_RULES = [
+  [/adjacent\* to \*threat/, false],
+  byType(PROMPT.YES_NO, true),
+];
+function toArmyMove(state) {
+  for (
+    let guard = 0;
+    guard < 20 && state.walk.prompt && state.walk.prompt.type !== PROMPT.ACTION;
+    guard++
+  )
+    engine.answer(state, ruleAnswer(state.walk.prompt, V61_ARMY_RULES));
+  return state.walk.prompt;
+}
+function answerWithoutThrowing(state, value) {
+  try {
+    engine.answer(state, value);
+    return true;
+  } catch (error) {
+    console.log("     threw:", error.message);
+    return false;
+  }
+}
+function version61ArmyWalkResumesAndEnds() {
+  const saved = JSON.parse(V61_ARMY_WALK);
+  ok(
+    saved.appVersion === 61 &&
+      saved.walk.page === "AR" &&
+      !("armyStart" in saved.walk) &&
+      !("flowRev" in saved.walk),
+    "the fixture is a version 61 walk on the Army page, without the fields added since",
+  );
+  const state = engine.migrate(JSON.parse(V61_ARMY_WALK));
+  const walk = state.walk;
+  ok(
+    walk.armyStart === "Army" &&
+      walk.armyMoves === 0 &&
+      walk.messengerAns === null &&
+      walk.dieViaMessenger === false &&
+      walk.stack.every((frame) => frame.dieViaMessenger === false) &&
+      walk.flowRev === engine.FLOW_REV,
+    "migrate gives the walk its Army start point (from the trail's Army jump) and the defaults of the newer fields",
+  );
+  const move = toArmyMove(state);
+  const answered = move.armyMove && answerWithoutThrowing(state, "done");
+  ok(
+    answered && state.walk.armyMoves === 1 && !state.walk.done,
+    "the first Army move of the resumed walk walks the Army page again for the second",
+  );
+  if (answered && !state.walk.done) {
+    toArmyMove(state);
+    engine.answer(state, "done");
+  }
+  ok(
+    state.walk.done &&
+      state.walk.result === WALK_RESULT.ACTION &&
+      state.dice.pool[0].status === DIE_STATE.USED,
+    "the resumed walk ends after the second move, with the Army die spent",
+  );
+  const back = engine.migrate(JSON.parse(V61_ARMY_WALK));
+  let returned = true;
+  try {
+    driveWalk(back, []);
+  } catch (error) {
+    console.log("     threw:", error.message);
+    returned = false;
+  }
+  ok(
+    returned && back.walk.done,
+    "answered No throughout, the resumed walk returns to M5 through its saved frame and ends",
+  );
+  const lost = engine.migrate(JSON.parse(V61_ARMY_WALK));
+  const lostMove = toArmyMove(lost);
+  lost.walk.armyStart = "Nowhere";
+  ok(
+    lostMove.armyMove &&
+      answerWithoutThrowing(lost, "done") &&
+      lost.walk.done &&
+      lost.dice.pool[0].status === DIE_STATE.USED,
+    "with an Army start point that does not exist, the move ends the walk and spends the die",
+  );
+  const fromArmy = JSON.parse(V61_ARMY_WALK);
+  fromArmy.walk.entry = { page: "AR", start: "Army 2" };
+  fromArmy.walk.trail = fromArmy.walk.trail.filter(
+    (entry) => entry.kind !== TRAIL.JUMP,
+  );
+  fromArmy.walk.stack = [];
+  ok(
+    engine.migrate(fromArmy).walk.armyStart === "Army 2",
+    "a walk that began on the Army page takes its own start point",
+  );
+  const newer = JSON.parse(V61_ARMY_WALK);
+  newer.walk.flowRev = engine.FLOW_REV + 1;
+  ok(
+    engine.migrate(newer).walk.flowRev === engine.FLOW_REV + 1,
+    "a walk from a newer flowchart keeps its revision",
+  );
+  const onMuster = JSON.parse(V61_ARMY_WALK);
+  onMuster.walk.stack.push({
+    page: "AR",
+    node: "jMuster3",
+    die: null,
+    dieIndex: null,
+    dieUsed: false,
+  });
+  onMuster.walk.trail.push({
+    kind: TRAIL.JUMP,
+    text: "Muster 3",
+    page: "AR",
+    node: "jMuster3",
+  });
+  onMuster.walk.page = "MU";
+  onMuster.walk.node = "start3";
+  const offArmy = JSON.parse(V61_ARMY_WALK);
+  offArmy.walk.page = "M5";
+  offArmy.walk.stack = [];
+  ok(
+    engine.migrate(onMuster).walk.armyStart === "Army" &&
+      engine.migrate(offArmy).walk.armyStart === null,
+    "a walk on the Muster page that returns to the Army page takes its Army start point; one that does not, none",
+  );
+}
+// test/fixtures/v61-army-move.json is the same v61 walk saved at the Army page's "Move" action (No to both
+// "adjacent to threat" questions, Yes to the rest), whose prompt v61 drew without the second-move flags.
+function version61ArmyMovePromptGetsBothMoves() {
+  const state = engine.migrate(
+    JSON.parse(
+      readFileSync(
+        new URL("./fixtures/v61-army-move.json", import.meta.url),
+        "utf8",
+      ),
+    ),
+  );
+  ok(
+    state.walk.prompt.type === PROMPT.ACTION &&
+      state.walk.prompt.armyMove === true &&
+      !state.walk.prompt.moveOrAttack,
+    "the saved Move prompt takes the flags that ask about the second Army move",
+  );
+  const first = answerWithoutThrowing(state, "done");
+  ok(
+    first && state.walk.armyMoves === 1 && !state.walk.done,
+    "its first move walks the Army page again for the second",
+  );
+  if (first && !state.walk.done) {
+    toArmyMove(state);
+    engine.answer(state, "done");
+  }
+  ok(
+    state.walk.done && state.dice.pool[0].status === DIE_STATE.USED,
+    "the second move ends the walk with the Army die spent",
+  );
+}
+// The walk of a current game at the point the v61 fixture was saved, for the fields a migrated walk must have.
+function currentArmyWalk() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.dice.pool = [die("Army")];
+  engine.startPhase(state, PHASE.P5);
+  for (let guard = 0; guard < 20 && state.walk.page !== "AR"; guard++)
+    engine.answer(
+      state,
+      /^Shadow under|^Move can create/.test(state.walk.prompt.text),
+    );
+  return state.walk;
+}
+// A field added to the walk or its stack frames without a migrate default fails here.
+function migratedWalkHasEveryField() {
+  const fresh = currentArmyWalk();
+  const migrated = engine.migrate(JSON.parse(V61_ARMY_WALK)).walk;
+  const missing = (current, old) =>
+    Object.keys(current).filter((key) => !(key in old));
+  const walkGaps = missing(fresh, migrated);
+  const frameGaps =
+    fresh.page === "AR" && fresh.stack.length
+      ? missing(fresh.stack[0], migrated.stack[0])
+      : ["(no fresh frame)"];
+  ok(
+    walkGaps.length === 0 && frameGaps.length === 0,
+    "the migrated v61 walk and its frame have every field a current one has" +
+      (walkGaps.length + frameGaps.length
+        ? " (missing: " + [...walkGaps, ...frameGaps].join(", ") + ")"
+        : ""),
+  );
+}
+// Every grey box that enters the Army page, as its trail entry reads, gives a migrated walk that box's start point.
+function migratedArmyStartForEveryArmyJump() {
+  const wrong = [];
+  let boxes = 0;
+  for (const [pageKey, page] of Object.entries(FLOW))
+    for (const [nodeId, node] of Object.entries(page.nodes)) {
+      if (NODE.kind(node) !== fakeWindow.QB_NODE_KIND.JUMP) continue;
+      const spec = engine.jumpSpec(NODE.text(node));
+      if (spec?.page !== "AR") continue;
+      boxes++;
+      const save = JSON.parse(V61_ARMY_WALK);
+      save.walk.trail = [
+        save.walk.trail[0],
+        {
+          kind: TRAIL.JUMP,
+          text: engine.normalizeText(NODE.text(node)),
+          page: pageKey,
+          node: nodeId,
+        },
+      ];
+      if (engine.migrate(save).walk.armyStart !== spec.start)
+        wrong.push(pageKey + "." + nodeId);
+    }
+  ok(
+    boxes > 0 && wrong.length === 0,
+    "every Army jump's trail text migrates to its start point (" +
+      boxes +
+      " boxes" +
+      (wrong.length ? "; wrong: " + wrong.join(", ") : "") +
+      ")",
   );
 }
 // Draft flowchart: "Use Muster die set aside for minion" now comes before "Discard unplayable die". When Muster 2
@@ -2595,6 +3160,41 @@ function exposedMoveFallsBackToCharacterDie() {
     "with the tracker showing no Nazgûl and no minion in play, the question is not asked",
   );
 }
+// A walk started from the Jump modal with a die (no pool index) holds a matching pool die and spends it; with no
+// matching die it holds none.
+function jumpModalDieComesFromThePool() {
+  const withDie = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  withDie.dice.pool = [die("Event"), die("Army/Muster")];
+  engine.startWalk(withDie, "AR", "Army", { die: DIE_REQUIREMENT.ARMY });
+  const heldIndex = withDie.walk.dieIndex;
+  driveWalk(withDie, [[/can move or attack towards closest/, true]]);
+  ok(
+    heldIndex === 1 &&
+      withDie.walk.result === WALK_RESULT.ACTION &&
+      withDie.dice.pool[1].status === DIE_STATE.USED &&
+      withDie.dice.pool[0].status === DIE_STATE.AVAIL,
+    "the Army die picked in the Jump modal is the pool's Army/Muster die, and the action spends it (" +
+      withDie.dice.pool[1].status +
+      ")",
+  );
+  const noMatch = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  noMatch.dice.pool = [die("Event")];
+  engine.startWalk(noMatch, "AR", "Army", { die: DIE_REQUIREMENT.ARMY });
+  ok(
+    noMatch.walk.die === null &&
+      noMatch.walk.dieIndex === null &&
+      noMatch.log.some((entry) =>
+        /no Army die in the pool: the walk starts without one/.test(entry.text),
+      ),
+    "with no matching die in the pool the walk starts without one, and the log says so",
+  );
+}
 // A walk started from the Jump modal holds no die: "Using a Character die and …" asks only about the die and checks the
 // cards from the hand, and "Muster 3" claims a Muster die from the pool instead of carrying a die it does not hold.
 function walkWithoutADie() {
@@ -2641,10 +3241,12 @@ const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
   ["7.1", twoReservedDiceBothUsed],
   ["7.2", musterDieAskedAgainAfterReserve],
+  ["7.2", reservedDieIsNotSpentAsArmyDie],
   ["ring", ringUsedOnceOnlyWhenHeld],
   ["6.1", militaryPhase5PlaysRevealedCardAndPalantirDraws],
   ["6.2", balrogOnTableOfferedAsDurinsBane],
   ["6.3", actionsUpdateTheTracker],
+  ["faction", recruitCardKeepsFactionOutOfPlay],
   ["6.4", lidlessEyeMovesDiceNotItsOwn],
   ["6.4", lidlessEyeTopsUpToThree],
   ["6.5", huntMinimumAskedOnZeroDicePaths],
@@ -2652,8 +3254,14 @@ const SCENARIOS = [
   ["6.6", tableTriggersDiscardOrAsk],
   ["6.7", callToBattleCardsIgnoreInitiative],
   ["7.3/7.4", battleOpenResetAndRunGuard],
+  ["7.3/7.4", sideWalkKeepsTheBattleOpen],
   ["migrate", migrateUpgradesOldSaves],
   ["decks", emptyEventDecksFallBack],
+  ["decks", drawStepWithNoCardKeepsTheDie],
+  ["faction", servantsOfSauronCannotDrawItself],
+  ["faction", factionDeckReshuffledWhenItRunsOut],
+  ["faction", factionCardsNeedTheirFaction],
+  ["faction", palantirDrawsAfterAFactionCard],
   ["dice", wildResultOnlyForFactionSteps],
   ["dice", ringMakesNoFactionDie],
   ["dice", messengerMusterDieActsAsArmyOncePerTurn],
@@ -2672,6 +3280,10 @@ const SCENARIOS = [
   ["draft", noSetAsideDieFallsThroughToDiscard],
   ["draft", eventPageChecksTheDie],
   ["migrate", savedWalkFromReleasedFlowchartResumes],
+  ["migrate", version61ArmyWalkResumesAndEnds],
+  ["migrate", version61ArmyMovePromptGetsBothMoves],
+  ["migrate", migratedWalkHasEveryField],
+  ["migrate", migratedArmyStartForEveryArmyJump],
   ["draft", reservedDieSpentBeforeDiscardingAnother],
   ["draft", reservedDieSpentWithDiceOff],
   ["calc", captainOfTheWestCountsOnce],
@@ -2683,6 +3295,7 @@ const SCENARIOS = [
   ["rings", ringSettledAtTheNextBoldBox],
   ["rings", ringChangedHeldDieIsNotRestored],
   ["migrate", ringStateFromRevision2Migrates],
+  ["draft", jumpModalDieComesFromThePool],
   ["draft", walkWithoutADie],
 ];
 function main() {

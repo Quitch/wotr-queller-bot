@@ -41,6 +41,9 @@ const PRECONDITIONS = {
   allAtWar: allShadowNationsAtWar,
   dunlendings: (state) => state.board.factions.dunlendings,
   corsairs: (state) => state.board.factions.corsairs,
+  spiders: (state) => state.board.factions.spiders,
+  spidersFsNotInFPSettlement: (state) =>
+    state.board.factions.spiders && !state.board.fs.inFPSettlement,
   fpFaction: (state) => {
     const factions = state.board.factions;
     return factions.ents || factions.eagles || factions.deadmen;

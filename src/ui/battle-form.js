@@ -101,6 +101,6 @@ export function dieHelpText(walk) {
       "Uses the " + escapeHTML(state.dice.pool[walk.dieIndex].face) + " die."
     );
   return walk.die
-    ? "Uses a " + escapeHTML(engine.DIE_REQUIREMENT_NAME[walk.die]) + " die."
+    ? "Uses " + escapeHTML(engine.dieWithArticle(walk.die)) + " die."
     : "";
 }

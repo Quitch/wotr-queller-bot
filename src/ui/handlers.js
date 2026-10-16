@@ -80,7 +80,11 @@ export function afterWalk() {
   const result = walk.result || "";
   if (walk.entry.page === "BA") {
     state.battleOpen = result === WALK_RESULT.BATTLE_NEXT;
-  } else if (result !== "") {
+  } else if (
+    result !== "" &&
+    engine.normalizeText(walk.entry.start) === "Phase 5"
+  ) {
+    // only Queller's next Phase 5 walk ends a battle: a walk from the Jump modal (a card's choice, rule 16) does not
     state.battleOpen = false;
   }
   if (result === WALK_RESULT.STRATEGY) {
