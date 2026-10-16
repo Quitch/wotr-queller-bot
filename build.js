@@ -52,8 +52,8 @@ async function buildPage(builtAt, commit) {
   );
 }
 
-// The short hash of HEAD, with "-dirty" when a tracked file differs from it (untracked files are left out, as
-// git describe --dirty does); null outside a git checkout or without git.
+// The short hash of HEAD, with "-dirty" when a tracked file differs from it or git cannot tell (untracked files are
+// left out, as git describe --dirty does); null outside a git checkout or without git.
 function commitStamp() {
   const git = (...args) =>
     execFileSync("git", args, {
@@ -61,12 +61,22 @@ function commitStamp() {
       encoding: "utf8",
       stdio: ["ignore", "pipe", "ignore"],
     }).trim();
+  let hash;
   try {
-    const hash = git("rev-parse", "--short", "HEAD");
-    const dirty = git("status", "--porcelain", "--untracked-files=no");
-    return hash + (dirty ? "-dirty" : "");
+    hash = git("rev-parse", "--short", "HEAD");
   } catch {
     return null;
+  }
+  try {
+    const dirty = git(
+      "--no-optional-locks",
+      "status",
+      "--porcelain",
+      "--untracked-files=no",
+    );
+    return hash + (dirty ? "-dirty" : "");
+  } catch {
+    return hash + "-dirty";
   }
 }
 
