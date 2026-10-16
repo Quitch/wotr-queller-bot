@@ -97,10 +97,13 @@ const chooseCombatCardByPriority = (withCallToBattle) =>
     return chooseAmong(state, node, walk, candidates);
   };
 // The node a literal "PAGE.node" key names.
-export const nodeByKey = (key) => {
+const nodeByKey = (key) => {
   const [page, id] = key.split(".");
   return FLOW[page].nodes[id];
 };
+// The Event page's discard priority, which chooses every discard no flowchart box covers (rule 16).
+export const eventDiscardPriority = () =>
+  NODE.extra(nodeByKey("EV.discPri")).items;
 // "Discard priority": discard each listed hand down to its limit by a priority list (the box's own, or another box's).
 // On the Event page the Faction hand is only checked with WoME in play.
 const discardByPriority = (hands) =>
