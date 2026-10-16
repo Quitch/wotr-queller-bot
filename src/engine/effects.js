@@ -12,7 +12,7 @@ import {
   TRAIL,
 } from "./constants.js";
 import { availableActionDice, nonPreferredFirst } from "./dice.js";
-import { deckName, drawCard } from "./hand.js";
+import { deckName, drawCard, eventDeckToDraw } from "./hand.js";
 import { log } from "./log.js";
 import { applyPriority } from "./priority.js";
 import { shuffle } from "./random.js";
@@ -153,9 +153,24 @@ function resolvePalantirDraw(state, card, play) {
     !play.palantirBefore
   )
     return [];
-  const deckKey =
-    state.strategy === STRATEGY.CORRUPTION ? DECK.CHARACTER : DECK.STRATEGY;
-  const got = drawCard(state, deckKey);
+  // either deck, the preferred one first (rule 25: an empty deck gives way to the other)
+  const deckKey = eventDeckToDraw(
+    state,
+    state.strategy === STRATEGY.CORRUPTION ? DECK.CHARACTER : DECK.STRATEGY,
+  );
+  if (!deckKey) {
+    log(
+      state,
+      "The Palantír of Orthanc: both Event decks are empty, so no card is drawn (rule 25).",
+    );
+    return [
+      {
+        kind: TRAIL.NOTE,
+        text: "The Palantír of Orthanc: both Event decks empty, no card drawn",
+      },
+    ];
+  }
+  drawCard(state, deckKey);
   log(
     state,
     "The Palantír of Orthanc: drew a " +
@@ -167,11 +182,7 @@ function resolvePalantirDraw(state, card, play) {
   return [
     {
       kind: TRAIL.NOTE,
-      text:
-        "The Palantír of Orthanc: drew a " +
-        deckName(deckKey) +
-        " card" +
-        (got ? "" : " — deck empty"),
+      text: "The Palantír of Orthanc: drew a " + deckName(deckKey) + " card",
     },
   ];
 }
