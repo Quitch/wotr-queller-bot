@@ -231,7 +231,9 @@ function settingsLine(state) {
     state.turn +
     ", " +
     state.phase +
-    (state.strategy ? ", " + state.strategy + " strategy" : "") +
+    (state.strategy
+      ? ", " + engine.strategyName(state.strategy) + " strategy"
+      : "") +
     "; settings: dice " +
     onOff(state.settings.dice) +
     ", cards " +
