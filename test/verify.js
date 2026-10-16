@@ -1896,6 +1896,47 @@ function ringStateFromRevision2Migrates() {
     "ringArmed becomes ringDice, with no ring use pending",
   );
 }
+// A walk started from the Jump modal holds no die: "Using a Character die and …" asks only about the die and checks the
+// cards from the hand, and "Muster 3" claims a Muster die from the pool instead of carrying a die it does not hold.
+function walkWithoutADie() {
+  const event = phase5State(
+    { dice: true, cards: true, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  engine.startWalk(event, "EV", "Event", {});
+  const asked = driveWalk(event, [
+    [/^Is Queller using a Character die$/, true],
+  ]).map((prompt) => prompt?.text || "");
+  ok(
+    asked.includes("Is Queller using a Character die") &&
+      !asked.some((text) =>
+        /holding a \*playable\* Character card/.test(text),
+      ) &&
+      event.walk.trail.some(
+        (entry) =>
+          /^Using a Character die and holding/.test(entry.text) &&
+          entry.answer === "No",
+      ),
+    "the Event page asks only whether Queller uses a Character die, and answers the card part from the empty hand",
+  );
+  const army = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  army.dice.pool = [die("Muster")];
+  engine.startWalk(army, "AR", "Army", {});
+  driveWalk(army, [
+    [/^Using an Army\/Muster die$/, true],
+    [/^Shadow is able to muster$/, true],
+  ]);
+  ok(
+    army.walk.result === WALK_RESULT.ACTION &&
+      army.dice.pool[0].status === DIE_STATE.USED,
+    "“Muster 3” with no die held claims and spends the pool's Muster die (" +
+      army.dice.pool[0].status +
+      ")",
+  );
+}
 // The scenarios, with the section of the change log each one guards.
 const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
@@ -1934,6 +1975,7 @@ const SCENARIOS = [
   ["rings", ringSettledAtTheNextBoldBox],
   ["rings", ringChangedHeldDieIsNotRestored],
   ["migrate", ringStateFromRevision2Migrates],
+  ["draft", walkWithoutADie],
 ];
 function main() {
   for (const [number, scenario] of SCENARIOS) {
