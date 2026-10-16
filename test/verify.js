@@ -1467,6 +1467,47 @@ function palantirDrawsAfterAFactionCard() {
     "the Palantír draws a Character card after an Event die plays a Faction Event card",
   );
 }
+// The hand limit (six Event cards, Faction cards apart): a Faction Event card leaves the Event hand at six, so the Palantír
+// draw makes seven and Queller discards one at once by the Event page's discard priority.
+function palantirDrawAboveTheHandLimitDiscards() {
+  const state = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  const faction = "sa_Faction01";
+  const held = state.cards.decks.S.filter(
+    (id) => engine.precondition(state, id) === false,
+  ).slice(0, 6);
+  state.cards.decks.S = state.cards.decks.S.filter((id) => !held.includes(id));
+  state.cards.hand = held;
+  state.cards.factionHand = [faction, "sa_Faction04", "sa_Faction08"];
+  state.cards.table = [CARD.PALANTIR];
+  state.dice.pool = [die("Event")];
+  state.walk = null;
+  engine.startWalk(state, "EV", "Event", {
+    die: DIE_REQUIREMENT.EVENT,
+    dieIndex: 0,
+  });
+  const seen = driveWalk(state, [
+    byType(PROMPT.CONFIRM, (prompt) => prompt.card === faction),
+  ]);
+  const discarded = state.log.filter((entry) =>
+    /hand above the limit/.test(entry.text),
+  );
+  ok(
+    seen.some(
+      (prompt) => prompt?.type === PROMPT.PLAY_CARD && prompt.card === faction,
+    ) &&
+      state.cards.hand.length === 6 &&
+      discarded.length === 1 &&
+      state.walk.trail.some((entry) =>
+        /Event hand above the limit/.test(entry.text),
+      ),
+    "the Palantír's seventh Event card is discarded down to six, with a trail note",
+  );
+}
 // The tracker's table triggers: Worn with Sorrow and Toil asks like Flocks of Crebain; Wormtongue leaves when Saruman does.
 function wornWithSorrowAsksAndWormtongueOnSaruman() {
   const state = phase5State({
@@ -3491,6 +3532,7 @@ const SCENARIOS = [
   ["faction", factionDeckReshuffledWhenItRunsOut],
   ["faction", factionCardsNeedTheirFaction],
   ["faction", palantirDrawsAfterAFactionCard],
+  ["faction", palantirDrawAboveTheHandLimitDiscards],
   ["dice", wildResultOnlyForFactionSteps],
   ["dice", ringMakesNoFactionDie],
   ["dice", messengerMusterDieActsAsArmyOncePerTurn],
