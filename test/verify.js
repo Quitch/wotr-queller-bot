@@ -1515,6 +1515,29 @@ function reservedDieSpentBeforeDiscardingAnother() {
       " wrong)",
   );
 }
+// Dice off: the set-aside Muster die that finds no action in Muster 2 is spent too, so the walk is an action.
+function reservedDieSpentWithDiceOff() {
+  const state = phase5State(
+    { dice: false, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.board.nations.isengard = 0;
+  state.minionReserved = true;
+  engine.startPhase(state, PHASE.P5);
+  driveWalk(state, [[/^Pass/, "no"], byType(PROMPT.ACTION, "no")]);
+  ok(
+    state.walk.result === WALK_RESULT.ACTION &&
+      /sets aside the Muster die it had kept for a minion/.test(
+        lastLogText(state),
+      ) &&
+      state.log.some(
+        (entry) =>
+          entry.text ===
+          "Queller used a Muster die — set aside for a minion, no action possible.",
+      ),
+    "the set-aside Muster die with no action is spent, and the walk is Queller's action",
+  );
+}
 // The army value calculator counts a Captain of the West once: he adds a combat die, not a point of his own.
 function captainOfTheWestCountsOnce() {
   const inputs = (extra) => ({
@@ -1626,6 +1649,35 @@ function ringUsedOnlyWhereRule46Allows() {
         /rule 46 does not allow it/.test(entry.text),
       ),
     "no ring for the Witch-king when he cannot join or create a mobile Army",
+  );
+}
+// Corruption's "Mordor win" box: without the tracker the bold question keeps "Fellowship on the Mordor Track"; with it,
+// and the Fellowship not on the Mordor Track, only the target part is asked.
+function mordorWinRingPartAsksWholeBoldCondition() {
+  const boldPrompt = (tracker) => {
+    const state = phase5State({
+      dice: false,
+      cards: false,
+      tracker,
+      wome: false,
+    });
+    engine.startPhase(state, PHASE.P5);
+    const seen = driveWalk(state, [
+      [/^\*Mobile\* Army \*adjacent\* to \*target\*$/, true],
+    ]);
+    return seen.find((prompt) => /would win the game/.test(prompt.text));
+  };
+  const untracked = boldPrompt(false);
+  ok(
+    untracked?.bold &&
+      /Fellowship on the Mordor Track/.test(untracked.text) &&
+      /would win the game/.test(untracked.text),
+    "tracker off: the bold question asks about the Mordor Track and the target's win",
+  );
+  const tracked = boldPrompt(true);
+  ok(
+    tracked?.bold && tracked.text === "*Target* would win the game",
+    "tracker on, Fellowship not on the Mordor Track: the bold question asks about the target only",
   );
 }
 // Dice off: a No to "Does Queller have … die?" goes on to offer the ring, and a ring for a step that was not possible
@@ -2464,9 +2516,11 @@ const SCENARIOS = [
   ["draft", eventPageChecksTheDie],
   ["migrate", savedWalkFromReleasedFlowchartResumes],
   ["draft", reservedDieSpentBeforeDiscardingAnother],
+  ["draft", reservedDieSpentWithDiceOff],
   ["calc", captainOfTheWestCountsOnce],
   ["rings", ringReturnedWhenItsStepIsNotPossible],
   ["rings", ringUsedOnlyWhereRule46Allows],
+  ["rings", mordorWinRingPartAsksWholeBoldCondition],
   ["rings", diceOffRingOfferedAndTurnedBack],
   ["rings", ringSettledWhereTheDieGoes],
   ["rings", ringSettledAtTheNextBoldBox],
