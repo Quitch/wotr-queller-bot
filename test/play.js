@@ -72,6 +72,10 @@ function randomBattleForm() {
     attackingSiege: coinFlip(),
   };
 }
+const onlyReservedDiceLeft = (state) =>
+  state.settings.dice &&
+  state.dice.pool.some((die) => die.status === DIE_STATE.RESERVED) &&
+  !state.dice.pool.some((die) => die.status === DIE_STATE.AVAIL);
 export function randomAnswer(state) {
   const prompt = state.walk.prompt;
   switch (prompt.type) {
@@ -84,6 +88,8 @@ export function randomAnswer(state) {
     case PROMPT.CHOICE:
       return prompt.options[Math.floor(rnd() * prompt.options.length)].value;
     case PROMPT.ACTION:
+      // only refusing the pass spends a die set aside for a minion, so passing with nothing else left never ends Phase 5
+      if (prompt.pass && onlyReservedDiceLeft(state)) return "no";
       return rnd() < CHANCE.ACTION_DONE ? "done" : "no";
     case PROMPT.PLAY_CARD:
       return "done";
