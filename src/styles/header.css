@@ -53,12 +53,12 @@
   gap: 6px;
   flex-wrap: wrap;
 }
-/* on a narrow screen the tool buttons fold into one Tools button that opens them as a menu (modals/tools.js) */
+/* on a narrow screen the game header's tool buttons fold into one Tools button that opens them as a menu (modals/tools.js); the New game header keeps its one Help button */
 #toolsBtn {
   display: none;
 }
 @media (width <=600px) {
-  .tools [data-modal],
+  .gameTools [data-modal],
   #newGameBtn {
     display: none;
   }

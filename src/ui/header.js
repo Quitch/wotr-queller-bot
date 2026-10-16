@@ -47,7 +47,7 @@ export function headerHTML() {
       ? '<span class="chip"><abbr title="Warriors of Middle-earth">WoME</abbr></span>'
       : "") +
     "</div>" +
-    '<nav class="tools" aria-label="Tools"><button class="btn" id="undoBtn" ' +
+    '<nav class="tools gameTools" aria-label="Tools"><button class="btn" id="undoBtn" ' +
     (history.length ? "" : "disabled") +
     ' title="Undo the last action">Undo</button>' +
     TOOL_BUTTONS.map(

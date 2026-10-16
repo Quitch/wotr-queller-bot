@@ -21,7 +21,7 @@ export function setupHTML() {
   return (
     skipLinkHTML("Skip to the New game options") +
     '<header class="top"><div class="brand"><h1>Queller Bot Runner</h1><span class="sub">Shadow player · War of the Ring 2nd Ed.</span></div>' +
-    '<nav class="tools" aria-label="Tools"><button class="btn" data-modal="' +
+    '<nav class="tools setupTools" aria-label="Tools"><button class="btn" data-modal="' +
     MODAL.HELP +
     '">Help</button></nav></header>' +
     '<main id="main" tabindex="-1" class="setup"><h2 style="font-size:1.3rem;margin-bottom:6px">New game</h2><p class="notice">Choose which parts of the bot the app should run for you. Each part works on its own — turn off anything you would rather keep on the table.</p>' +

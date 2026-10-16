@@ -41,7 +41,7 @@ npm run build
 3. **Answer each step.** A decision asks a question. An action names what Queller does: press Done, or Not possible if the game rules prevent it. A step is something to do before continuing. With an Army die, a move on the Army page is followed by a second walk of the page for another Army's move; “Move/Attack” asks whether Queller moved or attacked. When the app holds Queller's cards, Not possible on a Phase 5 action asks whether your A Power too Great or The Power of Tom Bombadil blocked it: if so, Queller removes the card when it can pay (one Action die, one Army Event card and one Character card), and that is its action. Italic terms show their definition when you hover, focus or tap them.
 4. **Keep the tracker up to date** when board tracking is on. It answers the questions about the Fellowship, minions, Nations and factions for you, and decides which of Queller's cards can be played without showing you the rest of the hand. A minion set to eliminated is never mustered again.
 5. **Mistakes.** Undo reverses your last action, up to 60 steps. Save / Load keeps named copies or moves a game to another device.
-6. **Help, Rules, Glossary and Flowcharts** are in the header; on a narrow screen they fold into the Tools menu.
+6. **Help, Rules, Glossary and Flowcharts** are in the game screen's header; on a narrow screen they fold into its Tools menu. The New game screen's header has Help only.
 
 ### Reporting a problem
 
