@@ -1992,6 +1992,40 @@ function wildResultOnlyForFactionSteps() {
     "dice off: the question for a Faction die says a Wild result counts",
   );
 }
+// WoME p.8: an Elven Ring cannot change the Faction die, and an Action die cannot act on Faction figures, so a ring
+// never makes a die for a Faction step, with dice on or off.
+function ringMakesNoFactionDie() {
+  const ringSearch = (dice) => {
+    const state = phase5State(
+      { dice, cards: false, tracker: dice, wome: true },
+      STRATEGY.MILITARY,
+    );
+    state.board.rings = 1;
+    if (dice) state.dice.pool = [die("Eye")];
+    engine.startWalk(state, "M5", "Phase 5", { mode: "ringAny" });
+    return state;
+  };
+  const diceOn = ringSearch(true);
+  driveWalk(diceOn, [byType(PROMPT.ACTION, "no")]);
+  ok(
+    !diceOn.log.some((entry) =>
+      /Elven Ring: changed a \w+ die to Wild/.test(entry.text),
+    ),
+    "dice on: the rule 44 walk never changes a die to Wild for a Faction step",
+  );
+  const diceOff = ringSearch(false);
+  const factionOffers = driveWalk(diceOff, [
+    byType(PROMPT.ACTION, "no"),
+    byType(PROMPT.RING, false),
+  ]).filter(
+    (prompt) =>
+      prompt?.type === PROMPT.RING && engine.isFactionRequirement(prompt.req),
+  );
+  ok(
+    diceOff.walk.done && factionOffers.length === 0,
+    "dice off: the rule 44 walk offers no ring for a Faction step",
+  );
+}
 // Rule 30, Messenger of the Dark Tower: with the Mouth of Sauron in play and no Army or Army/Muster die, a Muster die
 // acts as an Army die, once per turn; a step that turns out not possible does not use the ability.
 function messengerMusterDieActsAsArmyOncePerTurn() {
@@ -2370,6 +2404,7 @@ const SCENARIOS = [
   ["migrate", migrateUpgradesOldSaves],
   ["decks", emptyEventDecksFallBack],
   ["dice", wildResultOnlyForFactionSteps],
+  ["dice", ringMakesNoFactionDie],
   ["dice", messengerMusterDieActsAsArmyOncePerTurn],
   ["army", armyDieMovesTwoArmies],
   ["army", exposedMoveFallsBackToCharacterDie],
