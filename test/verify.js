@@ -1468,44 +1468,91 @@ function palantirDrawsAfterAFactionCard() {
   );
 }
 // The hand limit (six Event cards, Faction cards apart): a Faction Event card leaves the Event hand at six, so the Palantír
-// draw makes seven and Queller discards one at once by the Event page's discard priority.
+// draw makes seven and Queller discards one at once by the Event page's discard priority; a Character card played from
+// six leaves the draw at six, with nothing to discard. Corruption: the Palantír draws a preferred Character card.
 function palantirDrawAboveTheHandLimitDiscards() {
-  const state = phase5State({
-    dice: true,
-    cards: true,
-    tracker: true,
-    wome: true,
-  });
+  const walkEventPage = (hand, factionHand, playable) => {
+    const state = phase5State({
+      dice: true,
+      cards: true,
+      tracker: true,
+      wome: true,
+    });
+    const deal = (deck, count) => {
+      const ids = state.cards.decks[deck]
+        .filter((id) => engine.precondition(state, id) === false)
+        .slice(0, count);
+      state.cards.decks[deck] = state.cards.decks[deck].filter(
+        (id) => !ids.includes(id),
+      );
+      return ids;
+    };
+    state.cards.hand = hand(deal, state);
+    state.cards.factionHand = factionHand;
+    state.cards.table = [CARD.PALANTIR];
+    state.dice.pool = [die("Event")];
+    state.walk = null;
+    engine.startWalk(state, "EV", "Event", {
+      die: DIE_REQUIREMENT.EVENT,
+      dieIndex: 0,
+    });
+    const seen = driveWalk(state, [
+      byType(PROMPT.CONFIRM, (prompt) => prompt.card === playable),
+    ]);
+    return {
+      state,
+      played: seen.some(
+        (prompt) =>
+          prompt?.type === PROMPT.PLAY_CARD && prompt.card === playable,
+      ),
+      discards: state.log.filter((entry) =>
+        /^Discarded .* — hand above the limit/.test(entry.text),
+      ).length,
+      result: lastTrailText(state),
+    };
+  };
   const faction = "sa_Faction01";
-  const held = state.cards.decks.S.filter(
-    (id) => engine.precondition(state, id) === false,
-  ).slice(0, 6);
-  state.cards.decks.S = state.cards.decks.S.filter((id) => !held.includes(id));
-  state.cards.hand = held;
-  state.cards.factionHand = [faction, "sa_Faction04", "sa_Faction08"];
-  state.cards.table = [CARD.PALANTIR];
-  state.dice.pool = [die("Event")];
-  state.walk = null;
-  engine.startWalk(state, "EV", "Event", {
-    die: DIE_REQUIREMENT.EVENT,
-    dieIndex: 0,
-  });
-  const seen = driveWalk(state, [
-    byType(PROMPT.CONFIRM, (prompt) => prompt.card === faction),
-  ]);
-  const discarded = state.log.filter((entry) =>
-    /hand above the limit/.test(entry.text),
+  let strategyCard;
+  const full = walkEventPage(
+    (deal) => {
+      [strategyCard] = deal("S", 1);
+      return deal("C", 5).concat(strategyCard);
+    },
+    [faction, "sa_Faction04", "sa_Faction08"],
+    faction,
+  );
+  const title = engine.cardById[strategyCard].title;
+  ok(
+    full.played &&
+      full.state.cards.hand.length === 6 &&
+      !full.state.cards.hand.includes(strategyCard) &&
+      full.state.cards.discards.S.includes(strategyCard) &&
+      full.discards === 1 &&
+      full.result ===
+        "Queller plays “A Great Fleet”. Discarded “" +
+          title +
+          "” (hand above the limit).",
+    "the Palantír's seventh Event card makes Queller discard the one non-preferred card, named in the result",
+  );
+  const characterCard = engine.CARDS.find(
+    (card) => card.deck === engine.DECK.CHARACTER && !card.pre && !card.cond,
+  ).id;
+  const six = walkEventPage(
+    (deal, state) => {
+      state.cards.decks.C = state.cards.decks.C.filter(
+        (id) => id !== characterCard,
+      );
+      return deal("S", 5).concat(characterCard);
+    },
+    ["sa_Faction04", "sa_Faction08", "sa_Faction11"],
+    characterCard,
   );
   ok(
-    seen.some(
-      (prompt) => prompt?.type === PROMPT.PLAY_CARD && prompt.card === faction,
-    ) &&
-      state.cards.hand.length === 6 &&
-      discarded.length === 1 &&
-      state.walk.trail.some((entry) =>
-        /Event hand above the limit/.test(entry.text),
-      ),
-    "the Palantír's seventh Event card is discarded down to six, with a trail note",
+    six.played &&
+      six.state.cards.hand.length === 6 &&
+      six.discards === 0 &&
+      !/Discarded/.test(six.result),
+    "a Character card played from six: the Palantír tops the hand back to six and nothing is discarded",
   );
 }
 // The tracker's table triggers: Worn with Sorrow and Toil asks like Flocks of Crebain; Wormtongue leaves when Saruman does.
