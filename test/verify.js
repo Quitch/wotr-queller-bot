@@ -1178,15 +1178,17 @@ function forcedDiscardPaysArmyCharacterAndActionDie() {
   factionWild.dice.pool = [
     { kind: engine.DIE_KIND.FACTION, face: "Wild", status: DIE_STATE.AVAIL },
     die("Muster"),
-    die("Wild"),
+    die("Character"),
   ];
   factionWild.walk.dieIndex = null;
+  // Character is preferred under Corruption: the non-preferred fallback would pay with the Muster die
+  factionWild.strategy = STRATEGY.CORRUPTION;
   notPossibleThen(factionWild, "powerTooGreat");
   ok(
     factionWild.dice.pool[2].status === DIE_STATE.USED &&
       factionWild.dice.pool[0].status === DIE_STATE.AVAIL &&
       factionWild.dice.pool[1].status === DIE_STATE.AVAIL,
-    "a matching Action die (Wild) pays before a non-matching one, never the Faction Wild",
+    "a matching Action die pays before a non-matching one, never the Faction Wild",
   );
   const noDie = atBlockedAttack(["sa013", "sa008"]);
   noDie.dice.pool.forEach((pooled) => {
@@ -1941,6 +1943,55 @@ function ringStateFromRevision2Migrates() {
     "ringArmed becomes ringDice, with no ring use pending",
   );
 }
+// Rule 31 and the WoME rules: a Wild result on the Faction die recruits, plays or draws for the Factions; it is no Army,
+// Muster, Character or Event die.
+function wildResultOnlyForFactionSteps() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: true, wome: true },
+    STRATEGY.MILITARY,
+  );
+  state.dice.pool = [
+    { kind: engine.DIE_KIND.FACTION, face: "Wild", status: DIE_STATE.AVAIL },
+  ];
+  const actionSteps = [
+    DIE_REQUIREMENT.ARMY,
+    DIE_REQUIREMENT.MUSTER,
+    DIE_REQUIREMENT.CHARACTER,
+    DIE_REQUIREMENT.EVENT,
+    DIE_REQUIREMENT.CHAR_OR_MUSTER,
+  ];
+  const factionSteps = [
+    DIE_REQUIREMENT.FACTION_RECRUIT,
+    DIE_REQUIREMENT.FACTION_PLAY,
+    DIE_REQUIREMENT.FACTION_DRAW,
+  ];
+  ok(
+    actionSteps.every((req) => !engine.findDie(state, req)) &&
+      factionSteps.every(
+        (req) => engine.findDie(state, req) === state.dice.pool[0],
+      ),
+    "the Faction die's Wild result recruits, plays or draws for the Factions, and serves no Action step",
+  );
+  const diceOff = phase5State(
+    { dice: false, cards: false, tracker: true, wome: true },
+    STRATEGY.MILITARY,
+  );
+  engine.startPhase(diceOff, PHASE.P5);
+  const factionQuestions = driveWalk(diceOff, [
+    [/^All factions in play/, true],
+    byType(PROMPT.ACTION, "no"),
+  ]).filter(
+    (prompt) =>
+      prompt?.type === PROMPT.DIE_CHECK && /Faction/.test(prompt.text),
+  );
+  ok(
+    factionQuestions.length > 0 &&
+      factionQuestions.every((prompt) =>
+        /a Wild result on the Faction die counts/.test(prompt.text),
+      ),
+    "dice off: the question for a Faction die says a Wild result counts",
+  );
+}
 // A walk started from the Jump modal holds no die: "Using a Character die and …" asks only about the die and checks the
 // cards from the hand, and "Muster 3" claims a Muster die from the pool instead of carrying a die it does not hold.
 function walkWithoutADie() {
@@ -1998,6 +2049,7 @@ const SCENARIOS = [
   ["7.3/7.4", battleOpenResetAndRunGuard],
   ["migrate", migrateUpgradesOldSaves],
   ["decks", emptyEventDecksFallBack],
+  ["dice", wildResultOnlyForFactionSteps],
   ["6.6", wornWithSorrowAsksAndWormtongueOnSaruman],
   ["7.1", reservedDieCannotBeReservedAgain],
   ["muster", musterChoiceCardAutoAnswered],

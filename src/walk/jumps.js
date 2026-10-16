@@ -231,6 +231,17 @@ function ringLimitText(limit) {
     " Only if the answer to this is " + answer + ": " + limit.question + "?"
   );
 }
+// What counts as the die, added to the dice-off question.
+const DIE_QUESTION_NOTE = {
+  [DIE_REQUIREMENT.ARMY]: " (an Army/Muster die counts)",
+  [DIE_REQUIREMENT.MUSTER]: " (an Army/Muster die counts)",
+  [DIE_REQUIREMENT.FACTION_RECRUIT]:
+    " (a Wild result on the Faction die counts, rule 31)",
+  [DIE_REQUIREMENT.FACTION_PLAY]:
+    " (a Wild result on the Faction die counts, rule 31)",
+  [DIE_REQUIREMENT.FACTION_DRAW]:
+    " (a Wild result on the Faction die counts, rule 31)",
+};
 // Without dice: ask the player whether Queller has the die (once per type per walk), then offer an Elven Ring before giving up.
 function askForDie(state, walk, req, label) {
   if (walk.dieAns[req] === undefined) {
@@ -242,9 +253,7 @@ function askForDie(state, walk, req, label) {
         "Does Queller have " +
         dieWithArticle(req) +
         " die available" +
-        (req === DIE_REQUIREMENT.ARMY || req === DIE_REQUIREMENT.MUSTER
-          ? " (an Army/Muster die counts)"
-          : "") +
+        (DIE_QUESTION_NOTE[req] || "") +
         "?",
     });
     return PENDING;
