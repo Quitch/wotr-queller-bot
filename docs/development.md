@@ -6,6 +6,11 @@ How to set the project up, what each npm script does, how the build and the CI w
 
 Node 24 (the version CI runs), then `npm ci`. The browser tests need a Chromium for Playwright once: `npx playwright install chromium`. The optional NVDA screen-reader check has its own one-time setup, described in [testing.md](testing.md).
 
+The `overrides` in `package.json` lift two dev-only dependencies past advisories that their parents' ranges exclude. Remove each one when its parent widens the range:
+
+- `katex ^0.18.2` under `micromark-extension-math` (GHSA-238p-pmpm-9mq7, Dependabot alert 6): `micromark-extension-math` 3.1.0, through `markdownlint`, declares `katex ^0.16.0`. markdownlint never renders math, so only the math syntax is loaded.
+- `smol-toml ^1.9.0` (GHSA-r4xh-jqrq-34v2): `markdownlint-cli2` 0.23.3 pins `smol-toml` 1.8.0 exactly.
+
 ## Scripts
 
 ```text
