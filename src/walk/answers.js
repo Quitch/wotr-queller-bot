@@ -100,6 +100,7 @@ function answerConfirm(state, prompt, value) {
 }
 function answerDieCheck(state, prompt, value) {
   const walk = state.walk;
+  if (prompt.messenger) walk.messengerAns = !!value;
   walk.dieAns[prompt.req] = !!value;
   walk.pendingDie = prompt.label;
   trail(state, {
@@ -110,6 +111,7 @@ function answerDieCheck(state, prompt, value) {
 }
 function answerRing(state, prompt, value) {
   const walk = state.walk;
+  if (prompt.messenger) walk.messengerAns = !!value;
   walk.dieAns[prompt.req] = !!value;
   walk.pendingDie = prompt.label;
   if (!value) {

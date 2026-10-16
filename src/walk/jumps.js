@@ -290,15 +290,11 @@ const DIE_QUESTION_NOTE = {
   [DIE_REQUIREMENT.FACTION_DRAW]:
     " (a Wild result on the Faction die counts, rule 31)",
 };
-// The Army question names Messenger of the Dark Tower unless the tracker shows it cannot apply.
-function dieQuestionNote(state, req) {
-  if (
-    req === DIE_REQUIREMENT.ARMY &&
-    (!state.settings.tracker || messengerAvailable(state))
-  )
-    return " (an Army/Muster die counts; so does a Muster die once per turn with Messenger of the Dark Tower when the Mouth of Sauron is in play, rule 30)";
-  return DIE_QUESTION_NOTE[req] || "";
-}
+// With dice off, Messenger of the Dark Tower may apply unless it was used this turn or the tracker shows no Mouth of
+// Sauron in play.
+const messengerPossible = (state) =>
+  !state.messengerUsedThisTurn &&
+  (!state.settings.tracker || engine.minionInPlay(state, "mouth"));
 // Without dice: ask the player whether Queller has the die (once per type per walk), then offer an Elven Ring before giving up.
 function askForDie(state, walk, req, label) {
   if (walk.dieAns[req] === undefined) {
@@ -310,12 +306,30 @@ function askForDie(state, walk, req, label) {
         "Does Queller have " +
         dieWithArticle(req) +
         " die available" +
-        dieQuestionNote(state, req) +
+        (DIE_QUESTION_NOTE[req] || "") +
         "?",
     });
     return PENDING;
   }
-  if (walk.dieAns[req]) return true;
+  if (walk.dieAns[req]) {
+    if (req === DIE_REQUIREMENT.ARMY && walk.messengerAns)
+      walk.dieViaMessenger = true;
+    return true;
+  }
+  if (
+    req === DIE_REQUIREMENT.ARMY &&
+    walk.messengerAns === null &&
+    messengerPossible(state)
+  ) {
+    setPrompt(state, {
+      type: PROMPT.DIE_CHECK,
+      req,
+      label,
+      messenger: true,
+      text: "Does Queller have a Muster die to use as an Army die with Messenger of the Dark Tower (the Mouth of Sauron in play, once per turn, rule 30)?",
+    });
+    return PENDING;
+  }
   if (ringMayCreate(state, req) && !walk.ringAsked) {
     walk.ringAsked = true;
     const limit = ringQuestion(state, req);
