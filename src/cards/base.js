@@ -435,6 +435,9 @@ export const BASE_CARDS = [
     init: 3,
     pre: "isengardAtWar",
   },
+  // Not in any deck (inDecks in engine/state.js): the WoME setup replaces the base card with the WoME Shadow Event
+  // cards, and this revised version is not one of them. Kept so that an older WoME game holding it in hand or on the
+  // table still shows it.
   {
     id: "sa028",
     set: "WoME-rev",
@@ -592,6 +595,9 @@ export const BASE_CARDS = [
     init: 3,
     pre: "seAtWar",
   },
+  // Not in any deck (inDecks in engine/state.js): the WoME setup replaces the base card with the WoME Shadow Event
+  // cards, and this revised version is not one of them. Kept so that an older WoME game holding it in hand or on the
+  // table still shows it.
   {
     id: "sa038",
     set: "WoME-rev",
