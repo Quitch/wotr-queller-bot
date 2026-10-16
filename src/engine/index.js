@@ -77,6 +77,7 @@ export {
 export {
   drawCard,
   deckName,
+  eventDeckToDraw,
   handCounts,
   discardCard,
   playCard,
