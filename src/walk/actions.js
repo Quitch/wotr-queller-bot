@@ -346,15 +346,13 @@ export function handleAction(state, node) {
 export function releaseCurrentDie(state) {
   state.walk.die = null;
   state.walk.dieIndex = null;
+  state.walk.dieViaMessenger = false;
 }
 export function spendCurrentDie(state, why) {
   const walk = state.walk;
   if (!walk?.die) return;
   ringDieSpent(state);
-  if (
-    walk.messengerDieIndex != null &&
-    walk.messengerDieIndex === walk.dieIndex
-  ) {
+  if (walk.dieViaMessenger) {
     state.messengerUsedThisTurn = true;
     engine.log(
       state,

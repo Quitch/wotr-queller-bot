@@ -2014,12 +2014,13 @@ function messengerMusterDieActsAsArmyOncePerTurn() {
   const offeredThenNotPossible =
     firstTry.some((prompt) => /Attack using Army/.test(prompt?.text || "")) &&
     !state.messengerUsedThisTurn;
+  // the first walk found no action and set a die aside (rule 39); the attack spends exactly one more
+  const usedDice = () =>
+    state.dice.pool.filter((pooled) => pooled.status === DIE_STATE.USED).length;
+  const usedBefore = usedDice();
   engine.startPhase(state, PHASE.P5);
   attackThreat("done");
-  const usedOnce =
-    state.messengerUsedThisTurn &&
-    state.dice.pool.filter((pooled) => pooled.status === DIE_STATE.USED)
-      .length >= 1;
+  const usedOnce = state.messengerUsedThisTurn && usedDice() === usedBefore + 1;
   engine.startPhase(state, PHASE.P5);
   const third = attackThreat("done");
   ok(
@@ -2030,6 +2031,28 @@ function messengerMusterDieActsAsArmyOncePerTurn() {
   );
   engine.nextTurn(state);
   ok(!state.messengerUsedThisTurn, "the next turn makes it available again");
+  // the Army attack claims the Muster die through Messenger and is not possible; the Muster page then spends that die
+  // as a Muster die, which uses no Messenger
+  const musterAfter = phase5State(
+    { dice: true, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  musterAfter.board.chars.mouth = MINION_STATUS.IN_PLAY;
+  musterAfter.dice.pool = [die("Muster")];
+  engine.startPhase(musterAfter, PHASE.P5);
+  driveWalk(musterAfter, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+    [/^Attack using Army die$/, "no"],
+    [/is valid for muster$/, true],
+    [/able to muster$/, true],
+    byType(PROMPT.ACTION, "done"),
+  ]);
+  ok(
+    musterAfter.dice.pool[0].status === DIE_STATE.USED &&
+      !musterAfter.messengerUsedThisTurn,
+    "a Muster die given up as an Army die and then spent as a Muster die uses no Messenger",
+  );
 }
 // A walk started from the Jump modal holds no die: "Using a Character die and …" asks only about the die and checks the
 // cards from the hand, and "Muster 3" claims a Muster die from the pool instead of carrying a die it does not hold.
