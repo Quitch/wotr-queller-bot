@@ -374,21 +374,24 @@ function lidlessEyeMovesDiceNotItsOwn() {
   );
   const eventDie = lidlessEyeState.dice.pool[3];
   ok(
-    huntDice.length === 2 &&
-      lidlessEyeState.dice.hunt === 2 &&
+    huntDice.length === 3 &&
+      lidlessEyeState.dice.hunt === 3 &&
       huntDice.every((pooledDie) => pooledDie.face === "Eye"),
-    "the two non-preferred dice changed to Eye and placed in the Hunt box",
+    "three dice changed to Eye and placed in the Hunt box",
   );
   ok(
     eventDie.status === DIE_STATE.USED,
     "the Event die that played the card was spent, not changed",
   );
   ok(
-    lidlessEyeState.dice.pool.filter(
-      (pooledDie) =>
-        pooledDie.face === "Character" && pooledDie.status === DIE_STATE.AVAIL,
-    ).length === 2,
-    "preferred (Character) dice left alone while non-preferred ones existed",
+    lidlessEyeState.dice.pool[1].status === DIE_STATE.HUNT &&
+      lidlessEyeState.dice.pool[2].status === DIE_STATE.HUNT &&
+      lidlessEyeState.dice.pool.filter(
+        (pooledDie) =>
+          pooledDie.face === "Character" &&
+          pooledDie.status === DIE_STATE.AVAIL,
+      ).length === 1,
+    "both non-preferred dice taken, topped up with one preferred (Character) die",
   );
   const singleDieState = phase5State({
     dice: true,
@@ -408,6 +411,158 @@ function lidlessEyeMovesDiceNotItsOwn() {
     engine.precondition(singleDieState, "sa043") === true,
     "…and playable once another unused die exists",
   );
+}
+// "Up to three": one non-preferred die does not cut the count to one (rule 29 orders the dice, it does not limit them).
+function lidlessEyeTopsUpToThree() {
+  const topUpState = phase5State(
+    { dice: true, cards: true, tracker: true, wome: false },
+    STRATEGY.CORRUPTION,
+  );
+  topUpState.dice.pool = [
+    die("Character"),
+    die("Character"),
+    die("Character"),
+    die("Army"),
+  ];
+  const chosen = engine.nonPreferredFirst(topUpState, topUpState.dice.pool, 3);
+  ok(
+    chosen.length === 3 && chosen[0].face === "Army",
+    "[Character ×3, Army] gives three dice, the Army die first",
+  );
+  ok(
+    engine.nonPreferredFirst(topUpState, topUpState.dice.pool, 1)[0].face ===
+      "Army",
+    "a count of one (the Elven Ring) still takes the non-preferred die",
+  );
+}
+// The game minimum of 1 Hunt die (rulebook p.20) on the flowchart's 0-dice paths, asked of the player after turn 1.
+function huntMinimumAskedOnZeroDicePaths() {
+  const phase3State = (strategy, dice, turn = 2) => {
+    const state = engine.newState({
+      dice,
+      cards: false,
+      tracker: true,
+      wome: false,
+    });
+    state.strategy = strategy;
+    state.turn = turn;
+    state.dice.pool = Array.from({ length: 7 }, () =>
+      die(null, DIE_STATE.POOL),
+    );
+    engine.startPhase(state, PHASE.P3);
+    return state;
+  };
+  const minimumQuestion = /take a die out of the Hunt Box/;
+  const wasAsked = (prompts) =>
+    prompts.some((prompt) => minimumQuestion.test(prompt.text));
+  const rollsLogged = (state) =>
+    state.log.filter((entry) => /for the hunt allocation/.test(entry.text))
+      .length;
+  const stepWhy = (state) =>
+    state.walk.trail.find(
+      (entry) => entry.kind === TRAIL.STEP && /^Roll a die/.test(entry.text),
+    )?.why;
+  const stepPrompt = (prompts) =>
+    prompts.find(
+      (prompt) =>
+        prompt.type === PROMPT.STEP && /Hunt Box/.test(prompt.text || ""),
+    )?.text;
+  for (const [answer, hunt] of [
+    [true, 1],
+    [false, 0],
+  ]) {
+    const militaryState = phase3State(STRATEGY.MILITARY, true);
+    const asked = driveWalk(militaryState, [[minimumQuestion, answer]]);
+    ok(
+      wasAsked(asked) && militaryState.dice.hunt === hunt,
+      "Military “Assign 0 dice”, answered " +
+        (answer ? "Yes" : "No") +
+        ": " +
+        hunt +
+        " in the Hunt Box",
+    );
+  }
+  const firstTurnState = phase3State(STRATEGY.MILITARY, true, 1);
+  ok(
+    !wasAsked(driveWalk(firstTurnState, [[minimumQuestion, true]])) &&
+      firstTurnState.dice.hunt === 0,
+    "turn 1 has no previous turn: not asked, 0 in the Hunt Box",
+  );
+  const realRandom = Math.random;
+  try {
+    for (const [roll, answer, hunt, why] of [
+      [0, true, 1, "rolled 1 → 1 in the Hunt Box (the game minimum)"],
+      [0, false, 0, "rolled 1 → 0 in the Hunt Box"],
+      [0.9, false, 1, "rolled 6 → 1 in the Hunt Box"],
+    ]) {
+      Math.random = () => roll;
+      const corruptionState = phase3State(STRATEGY.CORRUPTION, true);
+      const asked = driveWalk(corruptionState, [[minimumQuestion, answer]]);
+      ok(
+        wasAsked(asked) === (roll === 0) &&
+          corruptionState.dice.hunt === hunt &&
+          rollsLogged(corruptionState) === 1 &&
+          stepWhy(corruptionState) === why,
+        "Corruption, dice on: " +
+          why +
+          (roll ? ", not asked" : "") +
+          ", rolled once",
+      );
+    }
+    // dice switched off while the question is open after the app's roll: the roll stands
+    for (const [answer, text] of [
+      [true, "Assign 1 die to the Hunt Box (rolled 1; the game minimum)."],
+      [false, "Assign 0 dice to the Hunt Box (rolled 1)."],
+    ]) {
+      Math.random = () => 0;
+      const toggledState = phase3State(STRATEGY.CORRUPTION, true);
+      const asked = driveWalk(toggledState, [
+        {
+          test: (prompt) => minimumQuestion.test(prompt.text),
+          answer: () => {
+            toggledState.settings.dice = false;
+            return answer;
+          },
+        },
+      ]);
+      ok(
+        stepPrompt(asked) === text && rollsLogged(toggledState) === 1,
+        "dice switched off after the roll, answered " +
+          (answer ? "Yes" : "No") +
+          ": “" +
+          text +
+          "”, no second roll",
+      );
+    }
+    // dice switched on while the question is open before the player's roll: the app rolls once
+    Math.random = () => 0;
+    const switchedOnState = phase3State(STRATEGY.CORRUPTION, false);
+    const switchedOnPrompts = driveWalk(switchedOnState, [
+      {
+        test: (prompt) => minimumQuestion.test(prompt.text),
+        answer: () => {
+          switchedOnState.settings.dice = true;
+          return false;
+        },
+      },
+    ]);
+    ok(
+      wasAsked(switchedOnPrompts) &&
+        rollsLogged(switchedOnState) === 1 &&
+        stepWhy(switchedOnState) === "rolled 1 → 0 in the Hunt Box",
+      "dice switched on after the question, answered No: one roll, 0 in the Hunt Box",
+    );
+  } finally {
+    Math.random = realRandom;
+  }
+  for (const strategy of [STRATEGY.MILITARY, STRATEGY.CORRUPTION]) {
+    const diceOffState = phase3State(strategy, false);
+    const asked = driveWalk(diceOffState, [[minimumQuestion, true]]);
+    ok(
+      stepPrompt(asked) === "Assign 1 die to the Hunt Box (the game minimum).",
+      strategy + " with dice off, answered Yes: the player assigns 1 die",
+    );
+  }
 }
 function rule34CapsHuntAllocations() {
   const oneCompanionState = phase5State({
@@ -2491,6 +2646,8 @@ const SCENARIOS = [
   ["6.2", balrogOnTableOfferedAsDurinsBane],
   ["6.3", actionsUpdateTheTracker],
   ["6.4", lidlessEyeMovesDiceNotItsOwn],
+  ["6.4", lidlessEyeTopsUpToThree],
+  ["6.5", huntMinimumAskedOnZeroDicePaths],
   ["6.5", rule34CapsHuntAllocations],
   ["6.6", tableTriggersDiscardOrAsk],
   ["6.7", callToBattleCardsIgnoreInitiative],
