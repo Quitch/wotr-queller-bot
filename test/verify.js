@@ -1,4 +1,4 @@
-// Scripted scenarios for the behaviour fixed in version 52. Exit 1 on any failure.
+// Scripted scenarios for the behaviour fixes, each a named function listed in SCENARIOS. Exit 1 on any failure.
 import { readFileSync } from "node:fs";
 import * as fakeWindow from "./load.js";
 import { seedRandom } from "./play.js";
