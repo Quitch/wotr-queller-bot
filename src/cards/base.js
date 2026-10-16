@@ -435,6 +435,7 @@ export const BASE_CARDS = [
     init: 3,
     pre: "isengardAtWar",
   },
+  // Not in any deck: see neverDealt in engine/state.js.
   {
     id: "sa028",
     set: "WoME-rev",
@@ -592,6 +593,7 @@ export const BASE_CARDS = [
     init: 3,
     pre: "seAtWar",
   },
+  // Not in any deck: see neverDealt in engine/state.js.
   {
     id: "sa038",
     set: "WoME-rev",

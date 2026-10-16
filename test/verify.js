@@ -990,6 +990,52 @@ function migrateUpgradesOldSaves() {
     "a current save is unchanged by migrate",
   );
 }
+// WoME setup: its Shadow Event cards replace Shelob's Lair, Corsairs of Umbar and Rage of the Dunlendings, so a new WoME
+// game deals none of them (nor the WoME-rev versions), and a WoME game saved with them in its draw decks loses them
+// there but keeps a copy already drawn: in hand, or in a discard pile, which is never reshuffled (rule 25). A base game
+// keeps the base cards.
+function womeDecksLeaveOutReplacedCards() {
+  const gone = ["sa034", "sa028", "sa038", "sa028b2", "sa038b2"];
+  const inPiles = (state) =>
+    Object.values(state.cards.decks)
+      .concat(Object.values(state.cards.discards))
+      .flat();
+  const fresh = engine.newState({ wome: true });
+  ok(
+    !inPiles(fresh).some((id) => gone.includes(id)),
+    "a new WoME game deals none of the cards WoME replaces",
+  );
+  const base = engine.newState({ wome: false });
+  ok(
+    ["sa034", "sa028b2", "sa038b2"].every((id) => inPiles(base).includes(id)) &&
+      !inPiles(base).some((id) => id === "sa028" || id === "sa038"),
+    "a base game deals Shelob's Lair and the base Corsairs and Rage",
+  );
+  const old = structuredClone(fresh);
+  old.cards.decks.C.push("sa034");
+  old.cards.decks.S.push("sa028");
+  old.cards.discards.S.push("sa038");
+  old.cards.hand.push("sa028");
+  const migrated = engine.migrate(old);
+  ok(
+    !Object.values(migrated.cards.decks)
+      .flat()
+      .some((id) => gone.includes(id)) &&
+      migrated.cards.hand.includes("sa028") &&
+      migrated.cards.discards.S.includes("sa038"),
+    "migrate takes the replaced cards out of a WoME game's draw decks, not its hand or discards",
+  );
+  const again = JSON.stringify(migrated);
+  ok(
+    JSON.stringify(engine.migrate(migrated)) === again,
+    "migrating the WoME decks twice changes nothing",
+  );
+  const baseBefore = JSON.stringify(base);
+  ok(
+    JSON.stringify(engine.migrate(base)) === baseBefore,
+    "migrate leaves a base game's decks alone",
+  );
+}
 // Rule 25: an empty Character or Strategy deck is not rebuilt; the Event page draws from the other one, and with both
 // empty the draw is not possible. Phase 1 draws only what is there. A Faction Event deck is rebuilt from its discards
 // (WoME rules): Servants of Sauron tops up a short Faction deck before it looks at three cards.
@@ -3318,6 +3364,7 @@ const SCENARIOS = [
   ["7.3/7.4", battleOpenResetAndRunGuard],
   ["7.3/7.4", sideWalkKeepsTheBattleOpen],
   ["migrate", migrateUpgradesOldSaves],
+  ["migrate", womeDecksLeaveOutReplacedCards],
   ["decks", emptyEventDecksFallBack],
   ["decks", drawStepWithNoCardKeepsTheDie],
   ["faction", servantsOfSauronCannotDrawItself],
