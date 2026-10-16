@@ -104,10 +104,13 @@ function decideMordorWin(state, node, { trackerOn, board, walk }) {
         auto: true,
         why: "Fellowship on the Mordor Track",
       });
-    return ask(state, node, "*Target* would win the game", {
-      sub: 1,
-      bold: true,
-    });
+    // without the tracker the Mordor half is unknown, so the question keeps it
+    return ask(
+      state,
+      node,
+      trackerOn ? "*Target* would win the game" : partText(ring),
+      { sub: 1, bold: true },
+    );
   }
   ask(state, node, partText(plain), { sub: 2 });
 }
