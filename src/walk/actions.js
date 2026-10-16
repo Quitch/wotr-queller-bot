@@ -24,16 +24,13 @@ import {
 } from "./prompt.js";
 
 // Draw steps and actions on the Event/Faction pages: the deck depends on the box; with cards off the player draws.
-// The deck a draw node draws from: Character or Faction Event where the node says so, otherwise the strategy's preferred
-// deck. An empty Character or Strategy deck gives way to the other one (rule 25); null when both are empty.
-function drawDeck(state, key) {
-  if (key === "EV.drawFac" || key === "FA.drawT") return DECK.FACTION;
-  let named = DECK.STRATEGY;
+const isFactionDraw = (key) => key === "EV.drawFac" || key === "FA.drawT";
+// The deck a draw node names: Character or Faction Event where the node says so, otherwise the strategy's preferred deck.
+function namedDeck(state, key) {
+  if (isFactionDraw(key)) return DECK.FACTION;
   if (key === "EV.drawChar" || state.strategy === STRATEGY.CORRUPTION)
-    named = DECK.CHARACTER;
-  const other = named === DECK.CHARACTER ? DECK.STRATEGY : DECK.CHARACTER;
-  if (state.cards.decks[named].length) return named;
-  return state.cards.decks[other].length ? other : null;
+    return DECK.CHARACTER;
+  return DECK.STRATEGY;
 }
 const EMPTY_DECK_HELP =
   "If that deck is empty, draw from the other Event deck (Character or Strategy); if both are empty, the draw is not possible (rule 25).";
@@ -42,15 +39,16 @@ export function drawStep(state, node) {
     key = walk.page + "." + walk.node,
     label = normalizeText(NODE.text(node)),
     isStep = NODE.kind(node) === NODE_KIND.STEP;
-  const fromFaction = key === "EV.drawFac" || key === "FA.drawT";
   if (!state.settings.cards)
     return setPrompt(state, {
       type: isStep ? PROMPT.STEP : PROMPT.ACTION,
       text: label,
       node: walk.node,
-      help: fromFaction ? undefined : EMPTY_DECK_HELP,
+      help: isFactionDraw(key) ? undefined : EMPTY_DECK_HELP,
     });
-  const deckKey = drawDeck(state, key);
+  const named = namedDeck(state, key);
+  const deckKey =
+    named === DECK.FACTION ? named : engine.eventDeckToDraw(state, named);
   const id = deckKey && engine.drawCard(state, deckKey);
   if (!id) {
     trail(state, {
@@ -75,6 +73,13 @@ export function drawStep(state, node) {
     type: PROMPT.ACTION,
     text:
       label +
+      (deckKey === named
+        ? ""
+        : " (the " +
+          engine.deckName(named) +
+          " deck is empty: Queller drew a " +
+          engine.deckName(deckKey) +
+          " card)") +
       " — done: Queller now holds " +
       handCount.total +
       " Event card" +

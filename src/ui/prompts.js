@@ -140,15 +140,16 @@ function renderRingPrompt(prompt) {
       '<button class="btn yes" data-ans="yes">Elven Ring used</button><button class="btn no" data-ans="no">No Elven Ring available</button>',
   };
 }
+// A prompt's help line, when it has one.
+const helpHTML = (help) =>
+  help ? '<div class="help">' + formatText(help) + "</div>" : "";
 function renderActionPrompt(prompt, walk) {
   return {
     body:
       '<p class="q">Queller: ' +
       formatText(prompt.text) +
       "</p>" +
-      (prompt.help
-        ? '<div class="help">' + formatText(prompt.help) + "</div>"
-        : "") +
+      helpHTML(prompt.help) +
       (prompt.pass ? "" : '<div class="help">' + dieHelpText(walk) + "</div>"),
     answers:
       (prompt.moveOrAttack ? MOVED_OR_ATTACKED_BUTTONS : DONE_BUTTON) +
@@ -178,9 +179,7 @@ function renderStepPrompt(prompt) {
     body:
       questionHTML(prompt.text) +
       orderedListHTML(prompt.items) +
-      (prompt.help
-        ? '<div class="help">' + formatText(prompt.help) + "</div>"
-        : ""),
+      helpHTML(prompt.help),
     answers: engine.offersNotPossible(prompt)
       ? DONE_BUTTON +
         '<button class="btn no" data-ans="no">Not possible</button>'
@@ -198,9 +197,7 @@ function renderBlockedPrompt(prompt) {
           "” not possible because a Free Peoples card on the table blocked it?",
       ) +
       orderedListHTML(original.items) +
-      (original.help
-        ? '<div class="help">' + formatText(original.help) + "</div>"
-        : "") +
+      helpHTML(original.help) +
       '<div class="help">If so, Queller must remove the card (rule 19): it uses one Action die and discards one Army Event card and one Character card, chosen by the Event page discard priority, and that is its action. If Queller cannot pay, the action is not possible.</div>',
     answers:
       engine.FP_PROTECTION_CARDS.map(

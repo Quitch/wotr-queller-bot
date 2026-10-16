@@ -32,8 +32,8 @@ const walkDieState = (options) => ({
   pendingDie: null,
   fromReserve: false,
   reservedDieIndex: null,
-  // a Muster die held as an Army die with Messenger of the Dark Tower (rule 30): its pool index
-  messengerDieIndex: null,
+  // the die held is a Muster die acting as an Army die with Messenger of the Dark Tower (rule 30)
+  dieViaMessenger: false,
   // an Army die on the Army page (rule 9): the start point it entered at, and the moves it has made (0 or 1)
   armyStart: null,
   armyMoves: 0,
@@ -198,6 +198,7 @@ export function doReturn(state) {
   goto(state, frame.page, frame.node);
   walk.die = frame.die;
   walk.dieIndex = frame.dieIndex;
+  walk.dieViaMessenger = !!frame.dieViaMessenger;
   walk.dieUsed = frame.dieUsed;
   settleRing(state);
   walk.cands = null;
@@ -212,10 +213,7 @@ export function spendCurrentDie(state, why) {
   const walk = state.walk;
   if (!walk?.die) return;
   ringDieSpent(state);
-  if (
-    walk.messengerDieIndex != null &&
-    walk.messengerDieIndex === walk.dieIndex
-  ) {
+  if (walk.dieViaMessenger) {
     state.messengerUsedThisTurn = true;
     engine.log(
       state,
@@ -239,4 +237,5 @@ export function spendCurrentDie(state, why) {
 export function releaseCurrentDie(state) {
   state.walk.die = null;
   state.walk.dieIndex = null;
+  state.walk.dieViaMessenger = false;
 }
