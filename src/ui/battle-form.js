@@ -1,11 +1,16 @@
 // The battle form (the facts the combat-card checks need) and the die line of an action prompt.
 import * as engine from "../qb.js";
+import { PROMPT } from "../qb.js";
 import { escapeHTML, find } from "./dom.js";
-import { state } from "./session.js";
+import { battleDraft, setBattleDraft, state } from "./session.js";
 import { checkboxRowHTML, numberRowHTML } from "./widgets.js";
 
+// The player's unsubmitted answers outlive a re-render of the form, but not the battle form prompt itself.
+export function settleBattleDraft() {
+  if (state?.walk?.prompt?.type !== PROMPT.BATTLE_FORM) setBattleDraft(null);
+}
 export function battleFormHTML(prompt) {
-  const battle = state.battle || {},
+  const battle = battleDraft || state.battle || {},
     figures = battle.figures || {};
   const checkbox = (id, label, checked) =>
     checkboxRowHTML("bf-" + id, label, checked);

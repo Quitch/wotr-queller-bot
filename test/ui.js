@@ -1,6 +1,7 @@
 // Unit tests for the UI's pure logic (src/ui/, no DOM): the text helpers and glossary markup, the tracker's board
 // paths, tracker values, the storage wrappers and save loading, the row widgets, the phase tables, the trail and
-// result renderers, the card faces and the transfer helpers. Exit 1 on any failure.
+// result renderers, the battle form's draft, the card faces, the transfer helpers, and the tracker's act-then-ask path
+// (Declared and a tracker change) against a stand-in document. Exit 1 on any failure.
 import * as fakeWindow from "./load.js";
 const engine = fakeWindow.QB,
   ui = fakeWindow.QB_UI,
@@ -357,6 +358,15 @@ function checkFocusKeys() {
     "modal controls (flow tabs, save slots) have focus keys too",
   );
   ok(
+    focusKey(
+      fakeElement({
+        attrs: { "data-gl": "mobile" },
+        dataset: { gl: "mobile" },
+      }),
+    ) === '[data-gl="mobile"]',
+    "a glossary entry is found again by its data-gl",
+  );
+  ok(
     focusKey(fakeElement({ attrs: { class: "x" } })) === null,
     "an element with no id and no identifying attribute has no key",
   );
@@ -413,6 +423,64 @@ function checkRenderBookkeeping() {
     "restoreScroll puts the trail back and leaves an unscrolled log alone",
   );
   fakeWindow.restoreScroll(root([]), scroll);
+}
+// The battle form's draft: a re-render shows the player's unsubmitted answers, the draft outlives a render of the same
+// prompt, and it goes once the battle form prompt does.
+function checkBattleFormDraft() {
+  const state = engine.newState({ cards: true, wome: true });
+  state.phase = PHASE.P5;
+  engine.startBattle(state, 1);
+  ui.setState(state);
+  const draft = {
+    nazLead: 2,
+    shadowElite: false,
+    seElite: false,
+    isengardStronghold: false,
+    defInFs: false,
+    nearMoria: true,
+    figures: { corsairs: false, dunlendings: true, spiders: false },
+    underSiege: false,
+    attackingSiege: false,
+  };
+  const ticked = (html, id) =>
+    new RegExp('id="bf-' + id + '" [^>]*checked').test(html);
+  let html = fakeWindow.battleFormHTML(state.walk.prompt);
+  ok(
+    !ticked(html, "nearMoria") && html.includes('id="bf-nazLead" value="0"'),
+    "with no draft the battle form shows the recorded battle (none yet)",
+  );
+  fakeWindow.setBattleDraft(draft);
+  fakeWindow.settleBattleDraft();
+  html = fakeWindow.battleFormHTML(state.walk.prompt);
+  ok(
+    fakeWindow.battleDraft === draft &&
+      ticked(html, "nearMoria") &&
+      ticked(html, "f-dunlendings") &&
+      !ticked(html, "shadowElite") &&
+      html.includes('id="bf-nazLead" value="2"'),
+    "a re-render of the battle form keeps the draft and shows its answers",
+  );
+  engine.abandonWalk(state);
+  fakeWindow.settleBattleDraft();
+  ok(
+    fakeWindow.battleDraft === null,
+    "the draft is dropped once the battle form prompt is gone",
+  );
+  const other = engine.newState({ cards: true, wome: true });
+  other.phase = PHASE.P5;
+  engine.startBattle(other, 1);
+  fakeWindow.setBattleDraft(draft);
+  ui.setState(other);
+  ok(
+    fakeWindow.battleDraft === null,
+    "the draft is dropped when another game, also at a battle form, replaces this one",
+  );
+  fakeWindow.setBattleDraft(draft);
+  ui.setState(null);
+  ok(
+    fakeWindow.battleDraft === null,
+    "the draft is dropped when the game is cleared for the New game screen",
+  );
 }
 // Saving into a slot writes the game with its turn and time under qb.slots (a fake localStorage as in checkStorage).
 function checkSlotSave() {
@@ -750,12 +818,176 @@ async function checkTransferWiring() {
   delete globalThis.localStorage;
   ui.setState(null);
 }
+// A stand-in document for the tracker's act-then-ask path: #app holds the rendered HTML, and an id selector finds a
+// stub element only while that id is in it; the open modal is one stub; focus() moves activeElement.
+function trackerFakeDocument() {
+  const elements = new Map();
+  const doc = {};
+  const stub = (id) => ({
+    id,
+    dataset: {},
+    classList: { add() {}, remove() {} },
+    setAttribute() {},
+    removeAttribute() {},
+    hasAttribute: () => false,
+    addEventListener() {},
+    contains: () => false,
+    querySelector: () => null,
+    querySelectorAll: () => [],
+    focus() {
+      doc.activeElement = this;
+    },
+  });
+  const app = { ...stub("app"), html: "" };
+  Object.defineProperty(app, "innerHTML", {
+    get: () => app.html,
+    set: (html) => {
+      app.html = html;
+      elements.clear();
+    },
+  });
+  app.querySelector = (selector) => {
+    const id = /^#([\w-]+)$/.exec(selector)?.[1];
+    if (!id || !app.html.includes('id="' + id + '"')) return null;
+    if (!elements.has(id)) elements.set(id, stub(id));
+    return elements.get(id);
+  };
+  let modalEl = null;
+  const mtitle = stub("mtitle"),
+    mclose = stub("mclose");
+  Object.assign(doc, {
+    body: {
+      hasAttribute: () => false,
+      appendChild: (el) => {
+        modalEl = el;
+        el.remove = () => (modalEl = null);
+      },
+    },
+    documentElement: stub("html"),
+    createElement: () => stub(""),
+    querySelectorAll: () => [],
+    querySelector: (selector) => {
+      if (selector === "#app") return app;
+      if (selector === "#modal") return modalEl;
+      if (selector === "#mtitle") return modalEl && mtitle;
+      if (selector === "#mclose") return modalEl && mclose;
+      return app.querySelector(selector);
+    },
+  });
+  doc.activeElement = doc.body;
+  return { doc, app, modalOpen: () => !!modalEl };
+}
+// The tracker's Declared button and a tracker change: act, then one question per triggered table card; the Declared
+// row goes with its last card and focus moves to the tracker heading (through wire.js); onDone runs after the last answer.
+function checkTrackerAsks() {
+  const fake = trackerFakeDocument();
+  globalThis.document = fake.doc;
+  const state = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  state.cards.table = [
+    engine.CARD.FLOCKS_OF_CREBAIN,
+    engine.CARD.WORN_WITH_SORROW,
+  ];
+  ui.setState(state);
+  ui.render();
+  const button = fake.doc.querySelector("#t-fs-declared");
+  ok(
+    !!button && typeof button.onclick === "function",
+    "the full tracker renders and wires the Declared button",
+  );
+  button.focus();
+  button.onclick();
+  // as the ask modal does: close, then hand the choice on
+  const pick = (choice) => {
+    const spec = ui.modal.arg;
+    ui.setModal(null);
+    spec.onPick(choice);
+  };
+  ok(
+    ui.state.log.at(-1).text.startsWith("Declared pressed") &&
+      fake.modalOpen() &&
+      ui.modal.arg.title === "Discard “Flocks of Crebain”?" &&
+      /unconquered/.test(ui.modal.arg.text),
+    "Declared logs the press and asks about Flocks of Crebain first",
+  );
+  pick("ok");
+  ok(
+    ui.state.cards.discards.C.includes(engine.CARD.FLOCKS_OF_CREBAIN) &&
+      ui.modal.arg.title === "Discard “Worn with Sorrow and Toil”?" &&
+      fake.app.html.includes('id="t-fs-declared"'),
+    "Discard it discards Flocks of Crebain, then Worn with Sorrow and Toil is asked; the row stays while Worn is on the table",
+  );
+  pick("ok");
+  ok(
+    ui.state.cards.table.length === 0 &&
+      !fake.app.html.includes('id="t-fs-declared"') &&
+      fake.doc.activeElement.id === "h-track",
+    "the last discard removes the row and focus moves to the tracker heading",
+  );
+
+  const minimal = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: false,
+    wome: false,
+  });
+  minimal.cards.table = [engine.CARD.WORN_WITH_SORROW];
+  ui.setState(minimal);
+  ui.render();
+  ok(
+    fake.app.html.includes('id="t-fs-declared"'),
+    "the minimal tracker shows the Declared row with Worn with Sorrow and Toil on the table",
+  );
+  let done = 0;
+  fakeWindow.fellowshipDeclared(() => done++);
+  ok(
+    done === 0 && ui.modal.arg.title === "Discard “Worn with Sorrow and Toil”?",
+    "onDone waits for the question",
+  );
+  pick("no");
+  ok(
+    done === 1 &&
+      ui.state.cards.table.includes(engine.CARD.WORN_WITH_SORROW) &&
+      fake.app.html.includes('id="t-fs-declared"'),
+    "Keep it keeps the card and the row, then onDone runs once",
+  );
+
+  const change = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  change.cards.table = [engine.CARD.THREATS_AND_PROMISES];
+  change.playable = { stale: true };
+  ui.setState(change);
+  fakeWindow.trackerChange("nations.gondor", FP_STANCE.ACTIVE);
+  ok(
+    ui.state.board.nations.gondor === FP_STANCE.ACTIVE &&
+      Object.keys(ui.state.playable).length === 0 &&
+      /Threats and Promises/.test(ui.modal.arg.title),
+    "a tracker change applies, forgets the playability cache and asks about Threats and Promises",
+  );
+  pick("no");
+  ok(
+    ui.state.cards.table.includes(engine.CARD.THREATS_AND_PROMISES),
+    "Keep it leaves Threats and Promises on the table",
+  );
+  ui.setState(null);
+  ui.setHistory([]);
+  delete globalThis.document;
+}
 async function main() {
   checkTextHelpers();
   checkBoardPaths();
   checkStorage();
   checkFocusKeys();
   checkRenderBookkeeping();
+  checkBattleFormDraft();
   checkSlotSave();
   checkWidgets();
   checkPhaseTables();
@@ -763,6 +995,7 @@ async function main() {
   checkCardFaces();
   await checkTransfer();
   await checkTransferWiring();
+  checkTrackerAsks();
   console.log(fails ? fails + " failure(s)" : "all UI checks passed");
   process.exit(fails ? 1 : 0);
 }

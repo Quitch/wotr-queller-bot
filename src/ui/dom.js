@@ -16,6 +16,7 @@ const FOCUS_ATTRIBUTES = [
   "data-load",
   "data-set",
   "data-ask",
+  "data-gl",
 ];
 const selectorFor = (el, attr) =>
   "[" +
@@ -32,11 +33,12 @@ export function focusKey(el) {
   const attr = FOCUS_ATTRIBUTES.find((name) => el.hasAttribute(name));
   return attr ? selectorFor(el, attr) : null;
 }
-// Attach one click handler to every element a selector matches (within root, default the whole document).
+// Attach one click handler to every element a selector matches (within root, default the whole document); the handler
+// gets the element and the click event.
 export function onClickEach(selector, handler, root = document) {
   root
     .querySelectorAll(selector)
-    .forEach((el) => (el.onclick = () => handler(el)));
+    .forEach((el) => (el.onclick = (event) => handler(el, event)));
 }
 const HTML_ESCAPES = {
   "&": "&amp;",

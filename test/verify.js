@@ -784,14 +784,10 @@ function tableTriggersDiscardOrAsk() {
     to: FP_STANCE.ACTIVE,
   });
   ok(
-    !tableState.cards.table.includes(CARD.WORMTONGUE) && asks.length === 0,
-    "Wormtongue discarded when Rohan activates",
+    !tableState.cards.table.includes(CARD.WORMTONGUE) &&
+      asks.map((pending) => pending.card).join() === CARD.THREATS_AND_PROMISES,
+    "Wormtongue discarded when Rohan activates; only Threats and Promises asks",
   );
-  ok(
-    !tableState.cards.table.includes(CARD.THREATS_AND_PROMISES),
-    "Threats and Promises discarded on a passive→active advance",
-  );
-  tableState.cards.table.push(CARD.THREATS_AND_PROMISES);
   asks = engine.tableTriggers(tableState, {
     key: "nations.gondor",
     from: FP_STANCE.ACTIVE,
@@ -812,16 +808,86 @@ function tableTriggersDiscardOrAsk() {
     !tableState.cards.table.includes(CARD.PALANTIR),
     "Palantír discarded when Saruman is eliminated",
   );
-  tableState.board.fs.revealed = true;
-  tableState.board.fs.inFPSettlement = true;
-  asks = engine.tableTriggers(tableState, {
-    key: "fs.revealed",
-    from: false,
-    to: true,
-  });
+  asks = engine.fellowshipDeclared(tableState);
   ok(
     asks.length === 1 && asks[0].card === CARD.FLOCKS_OF_CREBAIN,
-    "Flocks of Crebain asked about when revealed in a Free Peoples settlement",
+    "Flocks of Crebain asked about when the Fellowship is declared",
+  );
+}
+// RULES-05: a declaration or an enemy Army activates a passive Nation without an attack, so Threats and Promises asks
+// on passive→active instead of discarding itself.
+function threatsAndPromisesAsksOnActivation() {
+  const tableState = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  tableState.cards.table = [CARD.THREATS_AND_PROMISES];
+  const asks = engine.tableTriggers(tableState, {
+    key: "nations.elves",
+    from: FP_STANCE.PASSIVE,
+    to: FP_STANCE.ACTIVE,
+  });
+  ok(
+    tableState.cards.table.includes(CARD.THREATS_AND_PROMISES) &&
+      asks.length === 1 &&
+      asks[0].card === CARD.THREATS_AND_PROMISES &&
+      /Fellowship declaration/.test(asks[0].q),
+    "Threats and Promises stays on the table and asks when a Nation goes from passive to active",
+  );
+}
+// RULES-03: a declaration leaves the Progress counter Hidden, so Flocks of Crebain and Worn with Sorrow and Toil ask on
+// the tracker's Declared button, with the figure in Rivendell (inFPSettlement already true), and not on Revealed.
+function declaringTheFellowshipAsksAboutTableCards() {
+  const declaredState = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  declaredState.cards.table = [
+    CARD.FLOCKS_OF_CREBAIN,
+    CARD.WORN_WITH_SORROW,
+    CARD.THREATS_AND_PROMISES,
+  ];
+  ok(
+    engine.declarationMatters(declaredState),
+    "the Declared button is offered with Flocks of Crebain on the table",
+  );
+  const logBefore = declaredState.log.length;
+  const asks = engine.fellowshipDeclared(declaredState);
+  ok(
+    asks.map((pending) => pending.card).join() ===
+      [CARD.FLOCKS_OF_CREBAIN, CARD.WORN_WITH_SORROW].join() &&
+      asks.every((pending) =>
+        /is that City or Stronghold unconquered/.test(pending.q),
+      ) &&
+      declaredState.cards.table.length === 3 &&
+      !declaredState.board.fs.revealed,
+    "the Declared button asks whether the City or Stronghold is unconquered for Flocks of Crebain and Worn with Sorrow and Toil, discards nothing and leaves the Fellowship hidden",
+  );
+  ok(
+    declaredState.log.length === logBefore + 1 &&
+      /^Declared pressed: .*City or Stronghold of a Free Peoples Nation/.test(
+        declaredState.log.at(-1).text,
+      ) &&
+      !/unconquered/.test(declaredState.log.at(-1).text),
+    "the log records the button press, not whether the City or Stronghold was unconquered",
+  );
+  declaredState.cards.table = [CARD.THREATS_AND_PROMISES];
+  ok(
+    !engine.declarationMatters(declaredState),
+    "no Declared button without a card a declaration may discard",
+  );
+  declaredState.board.fs.revealed = true;
+  ok(
+    engine.tableTriggers(declaredState, {
+      key: "fs.revealed",
+      from: false,
+      to: true,
+    }).length === 0,
+    "ticking Revealed asks about neither card",
   );
 }
 // rule 24: Call to Battle cards ignore initiative
@@ -883,6 +949,124 @@ function sideWalkKeepsTheBattleOpen() {
       sideWalk +
       ") keeps the battle open; the Phase 5 walk closes it",
   );
+}
+// A stand-in document just deep enough for ui/render.js and the modal framework to run in Node: every query finds a
+// blank element (none finds an open #modal), and nothing ever takes focus.
+function fakeElement() {
+  return {
+    dataset: {},
+    style: {},
+    classList: { add() {}, remove() {}, contains: () => false },
+    setAttribute() {},
+    removeAttribute() {},
+    hasAttribute: () => false,
+    addEventListener() {},
+    appendChild() {},
+    remove() {},
+    focus() {},
+    contains: () => false,
+    closest: () => null,
+    querySelector: () => fakeElement(),
+    querySelectorAll: () => [],
+  };
+}
+function withFakeDocument(fn) {
+  const body = fakeElement();
+  globalThis.document = {
+    body,
+    documentElement: fakeElement(),
+    activeElement: body,
+    createElement: fakeElement,
+    querySelector: (selector) => (selector === "#modal" ? null : fakeElement()),
+    querySelectorAll: () => [],
+    getElementById: () => fakeElement(),
+  };
+  try {
+    fn();
+  } finally {
+    delete globalThis.document;
+    fakeWindow.QB_UI.setState(null);
+    fakeWindow.QB_UI.setHistory([]);
+  }
+}
+// Opening the Jump modal changes nothing in the game, so it is not an Undo step.
+function openingJumpAddsNoUndoStep() {
+  const ui = fakeWindow.QB_UI;
+  withFakeDocument(() => {
+    ui.setState(
+      phase5State({ dice: false, cards: false, tracker: false, wome: false }),
+    );
+    ui.setHistory([]);
+    fakeWindow.onPhase(fakeWindow.PHASE_ACTION.JUMP_TO);
+    ok(
+      ui.history.length === 0 && ui.modal?.name === ui.MODAL.JUMP,
+      "the Jump modal opens with no Undo step (" +
+        ui.history.length +
+        " steps)",
+    );
+    fakeWindow.closeModal();
+  });
+}
+// The battle form's unsubmitted answers survive a re-render and an Undo of the same game, and go when the game is
+// replaced: by another game at a battle form, or by the New game screen and then a loaded game at a battle form.
+function battleDraftSurvivesRendersNotANewGame() {
+  const ui = fakeWindow.QB_UI;
+  const atBattleForm = () => {
+    const state = phase5State({
+      dice: false,
+      cards: true,
+      tracker: true,
+      wome: false,
+    });
+    engine.startBattle(state, 1);
+    return state;
+  };
+  const draft = {
+    nazLead: 1,
+    shadowElite: false,
+    seElite: false,
+    isengardStronghold: false,
+    defInFs: false,
+    nearMoria: true,
+    figures: { corsairs: false, dunlendings: false, spiders: false },
+    underSiege: false,
+    attackingSiege: false,
+  };
+  const nearMoriaTicked = () =>
+    /id="bf-nearMoria" [^>]*checked/.test(fakeWindow.gameHTML());
+  withFakeDocument(() => {
+    ui.setState(atBattleForm());
+    ui.setHistory([]);
+    fakeWindow.setBattleDraft(draft);
+    ui.render();
+    ui.act(() => {
+      ui.state.board.rings++;
+    });
+    const afterRender = fakeWindow.battleDraft === draft && nearMoriaTicked();
+    fakeWindow.undo();
+    const afterUndo = fakeWindow.battleDraft === draft && nearMoriaTicked();
+    ui.setState(atBattleForm());
+    ui.render();
+    const afterReplace = fakeWindow.battleDraft === null && !nearMoriaTicked();
+    fakeWindow.setBattleDraft(draft);
+    ui.setState(null);
+    ui.render();
+    ui.setState(atBattleForm());
+    ui.render();
+    const afterLoad = fakeWindow.battleDraft === null && !nearMoriaTicked();
+    ok(
+      afterRender && afterUndo && afterReplace && afterLoad,
+      "the battle form draft survives a re-render (" +
+        afterRender +
+        ") and an Undo (" +
+        afterUndo +
+        "), and goes when another game replaces it (" +
+        afterReplace +
+        ") or is loaded from the New game screen (" +
+        afterLoad +
+        ")",
+    );
+  });
 }
 function battleOpenResetAndRunGuard() {
   const turnState = phase5State({
@@ -1334,13 +1518,7 @@ function wornWithSorrowAsksAndWormtongueOnSaruman() {
   });
   state.cards.table = [CARD.WORN_WITH_SORROW, CARD.WORMTONGUE];
   state.board.chars.saruman = MINION_STATUS.IN_PLAY;
-  state.board.fs.revealed = true;
-  state.board.fs.inFPSettlement = true;
-  const asks = engine.tableTriggers(state, {
-    key: "fs.inFPSettlement",
-    from: false,
-    to: true,
-  });
+  const asks = engine.fellowshipDeclared(state);
   ok(
     asks.length === 1 &&
       asks[0].card === CARD.WORN_WITH_SORROW &&
@@ -3411,9 +3589,13 @@ const SCENARIOS = [
   ["6.5", huntMinimumAskedOnZeroDicePaths],
   ["6.5", rule34CapsHuntAllocations],
   ["6.6", tableTriggersDiscardOrAsk],
+  ["6.6", threatsAndPromisesAsksOnActivation],
+  ["6.6", declaringTheFellowshipAsksAboutTableCards],
   ["6.7", callToBattleCardsIgnoreInitiative],
   ["7.3/7.4", battleOpenResetAndRunGuard],
   ["7.3/7.4", sideWalkKeepsTheBattleOpen],
+  ["ui", openingJumpAddsNoUndoStep],
+  ["ui", battleDraftSurvivesRendersNotANewGame],
   ["migrate", migrateUpgradesOldSaves],
   ["migrate", womeDecksLeaveOutReplacedCards],
   ["decks", emptyEventDecksFallBack],
