@@ -3,7 +3,7 @@ import * as engine from "../engine/index.js";
 import { TRAIL } from "../engine/index.js";
 import { EDGE, FLOW, NODE, NODE_KIND } from "../flow/index.js";
 import { edgeFor, findStart, normalizeText } from "./graph.js";
-import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
+import { DIE_REQUIREMENT_NAME, dieWithArticle } from "./jumps-table.js";
 import { PENDING, PROMPT, WALK_RESULT } from "./prompt.js";
 import { ringBoxState, ringDieSpent, settleRing } from "./rings.js";
 
@@ -71,6 +71,20 @@ export function abandonWalk(state) {
   if (state.walk && !state.walk.done) settleRing(state, true);
   state.walk = null;
 }
+// With dice on, a walk started with a die but no pool index (the Jump modal) holds a matching die from the pool, or none.
+function dieOptions(state, options) {
+  if (!state.settings.dice || !options.die || options.dieIndex != null)
+    return options;
+  const die = engine.findDie(state, options.die);
+  if (die) return { ...options, dieIndex: state.dice.pool.indexOf(die) };
+  engine.log(
+    state,
+    "Queller has no " +
+      DIE_REQUIREMENT_NAME[options.die] +
+      " die in the pool: the walk starts without one.",
+  );
+  return { ...options, die: null };
+}
 // Create the walk at a start point without stepping it; returns false when the start point does not exist.
 export function beginWalk(state, page, startName, options = {}) {
   const id = findStart(page, startName);
@@ -84,7 +98,7 @@ export function beginWalk(state, page, startName, options = {}) {
   abandonWalk(state);
   state.walk = {
     ...walkPosition(page, id, startName, options),
-    ...walkDieState(options),
+    ...walkDieState(dieOptions(state, options)),
     ...walkRingState(),
     ...walkCardState(),
     ...walkChoiceState(),
@@ -205,6 +219,8 @@ export function doReturn(state) {
   walk.dieIndex = frame.dieIndex;
   walk.dieViaMessenger = !!frame.dieViaMessenger;
   walk.dieUsed = frame.dieUsed;
+  // the player may have marked that die used by hand since (a die set aside for a minion is cleared from the frames)
+  if (heldDieGone(state)) releaseCurrentDie(state);
   settleRing(state);
   walk.cands = null;
   walk.chosen = null;
@@ -230,17 +246,30 @@ export function spendCurrentDie(state, why) {
   } else
     engine.log(
       state,
-      "Queller used a " +
-        DIE_REQUIREMENT_NAME[walk.die] +
+      "Queller used " +
+        dieWithArticle(walk.die) +
         " die" +
         (why ? " — " + why : "") +
         ".",
     );
   releaseCurrentDie(state);
 }
+// With dice on, the pool die the walk holds is no longer available (spent or set aside).
+export function heldDieGone(state) {
+  const walk = state.walk;
+  return (
+    state.settings.dice &&
+    walk.dieIndex != null &&
+    state.dice.pool[walk.dieIndex]?.status !== engine.DIE_STATE.AVAIL
+  );
+}
 // The walk no longer holds a die (spent, or given up unspent).
 export function releaseCurrentDie(state) {
-  state.walk.die = null;
-  state.walk.dieIndex = null;
-  state.walk.dieViaMessenger = false;
+  Object.assign(state.walk, noDieHeld());
 }
+// The die fields of a walk, or of a page it will return to, that holds no die.
+export const noDieHeld = () => ({
+  die: null,
+  dieIndex: null,
+  dieViaMessenger: false,
+});
