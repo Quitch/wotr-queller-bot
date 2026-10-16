@@ -12,31 +12,43 @@ jobs:
   verify:
     name: Lint, test, build, Sonar
     runs-on: ubuntu-latest
-    env:
-      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0 # SonarQube Cloud needs the history to tell new code from old
-      - uses: actions/setup-node@v7
+          persist-credentials: false # no later step pushes or fetches; the scan reads the local history only
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
       - run: npm ci --ignore-scripts
       - run: npm run lint
-      - run: npm run coverage # every Node test under c8; writes coverage/lcov.info for Sonar
+      - run: npm run coverage # every Node test under c8; writes coverage/lcov.info for Sonar (the floor is checked after the scan)
       - run: npm run build # a bundle that no longer builds fails here (esbuild's platform binary is an optional dependency, so no install script is needed)
-      - name: SonarQube Cloud scan
-        if: ${{ env.SONAR_TOKEN != '' }} # a fork's pull request has no secret; the rest of the job still verifies it
+      - name: Check for the SonarQube Cloud token # a fork's pull request has no secret; the rest of the job still verifies it
+        id: sonar
+        run: echo "token=${{ secrets.SONAR_TOKEN != '' }}" >> "$GITHUB_OUTPUT" # the expression is expanded to true or false, so the token never reaches the shell
+      - name: SonarQube Cloud scan # waits for the quality gate (sonar.qualitygate.wait) and fails when it fails
+        id: scan
+        if: steps.sonar.outputs.token == 'true'
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }} # this step only, so no npm package run by an earlier step can read it
+      - name: Check the coverage floor # after the scan, so a coverage dip never skips the build or the scan; the floor is in .c8rc.json
+        id: floor
+        if: ${{ !cancelled() && (success() || steps.scan.outcome == 'failure') }} # a failed quality gate still lets the floor be checked
+        run: npm run coverage:check
       - name: Fuzz a seed that changes every run # last, so a seed failure never skips the build or the scan; npm test fuzzes seed 1, and the seed is printed so a failure can be rerun locally
+        if: ${{ !cancelled() && (success() || steps.scan.outcome == 'failure' || steps.floor.outcome == 'failure') }} # a failed quality gate or coverage floor still lets the seed run
         run: node test/fuzz.js $((GITHUB_RUN_ID % 2147483648))
   browser:
     name: Browser tests
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm

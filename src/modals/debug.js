@@ -27,6 +27,7 @@ function environment() {
   }
   return {
     built: typeof QB_BUILT === "undefined" ? null : QB_BUILT, // defined by build.js
+    commit: typeof QB_COMMIT === "undefined" ? null : QB_COMMIT,
     userAgent: navigator.userAgent,
     language: navigator.language,
     languages: navigator.languages,

@@ -225,7 +225,7 @@ function checkBuiltLog(state) {
     state,
     history,
     report: "the walk went wrong",
-    env: { built: "test", userAgent: "node" },
+    env: { built: "test", commit: "abc1234-dirty", userAgent: "node" },
     dom: { prompt: "x" },
     storage: { "qb.autosave": 100 },
     brokenAutosave: '{"settings":{},"board":{}}',
@@ -243,8 +243,10 @@ function checkBuiltLog(state) {
     log.format === debug.FORMAT &&
       log.app.version === engine.VERSION &&
       log.app.built === "test" &&
+      log.app.commit === "abc1234-dirty" &&
+      log.summary[0].endsWith("(built test) from commit abc1234-dirty") &&
       /^\d{4}-/.test(log.exported),
-    "format, version, build and export time present",
+    "format, version, build time, commit and export time present",
   );
   ok(
     log.report === "the walk went wrong" &&

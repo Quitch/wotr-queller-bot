@@ -299,7 +299,8 @@ function summary(state, env, errors) {
   return [
     "Queller Bot Runner version " +
       engine.VERSION +
-      (env?.built ? " (built " + env.built + ")" : ""),
+      (env?.built ? " (built " + env.built + ")" : "") +
+      (env?.commit ? " from commit " + env.commit : ""),
     ...game,
     errorsLine(errors),
     actions.length + " actions in the history",
@@ -355,7 +356,11 @@ function build({
   const timedErrors = withTimes(errors);
   return {
     format: FORMAT,
-    app: { version: engine.VERSION, built: env?.built || null },
+    app: {
+      version: engine.VERSION,
+      built: env?.built || null,
+      commit: env?.commit || null,
+    },
     exported: iso(Date.now()),
     report,
     summary: summary(state, env, timedErrors),

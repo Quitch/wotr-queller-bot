@@ -2,6 +2,7 @@
 // <!doctype>/<head>/<body>, so the page starts at <title>. esbuild follows the imports from src/main.js and the
 // @imports from the stylesheet; the script is a plain IIFE, minified with function and class names kept so that stack
 // traces in the debug log still name the function that threw.
+import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { build } from "esbuild";
@@ -28,13 +29,16 @@ async function bundle(entry, options) {
   });
   return result.outputFiles[0].text;
 }
-// The whole page: fonts, the stylesheet, the app root, then the script with the build time defined into it.
-async function buildPage(builtAt) {
+// The whole page: fonts, the stylesheet, the app root, then the script with the build time and commit defined into it.
+async function buildPage(builtAt, commit) {
   const css = await bundle("src/styles/index.css");
   const js = await bundle("src/main.js", {
     format: "iife",
     keepNames: true,
-    define: { QB_BUILT: JSON.stringify(builtAt) }, // shown in the debug log
+    define: {
+      QB_BUILT: JSON.stringify(builtAt),
+      QB_COMMIT: JSON.stringify(commit),
+    }, // shown in the debug log
   });
   return (
     HEAD +
@@ -48,7 +52,46 @@ async function buildPage(builtAt) {
   );
 }
 
+// The short hash of HEAD, with "-dirty" when a tracked file differs from it or git cannot tell (untracked files are
+// left out, as git describe --dirty does); null outside a git checkout of this project (a source tree unpacked inside
+// another repository must not take that repository's commit) or without git.
+function commitStamp() {
+  const git = (...args) =>
+    execFileSync("git", args, {
+      cwd: ROOT,
+      encoding: "utf8",
+      stdio: ["ignore", "pipe", "ignore"],
+    }).trim();
+  let hash;
+  try {
+    if (
+      path.resolve(git("rev-parse", "--show-toplevel")) !== path.resolve(ROOT)
+    )
+      return null;
+    hash = git("rev-parse", "--short", "HEAD");
+  } catch {
+    return null;
+  }
+  try {
+    const dirty = git(
+      "--no-optional-locks",
+      "status",
+      "--porcelain",
+      "--untracked-files=no",
+    );
+    return hash + (dirty ? "-dirty" : "");
+  } catch {
+    return hash + "-dirty";
+  }
+}
+
 const builtAt = new Date().toISOString().slice(0, 16) + "Z"; // YYYY-MM-DDTHH:MMZ
-const page = await buildPage(builtAt);
+const commit = commitStamp();
+const page = await buildPage(builtAt, commit);
 writeFileSync(OUT, page, "utf8");
-console.log("index.html:", Buffer.byteLength(page), "bytes");
+console.log(
+  "index.html:",
+  Buffer.byteLength(page),
+  "bytes, commit",
+  commit ?? "unknown",
+);
