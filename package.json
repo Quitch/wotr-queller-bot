@@ -37,6 +37,9 @@
     "stylelint-config-standard": "^40.0.0"
   },
   "overrides": {
-    "smol-toml": "^1.7.1"
+    "micromark-extension-math": {
+      "katex": "^0.18.2"
+    },
+    "smol-toml": "^1.9.0"
   }
 }
