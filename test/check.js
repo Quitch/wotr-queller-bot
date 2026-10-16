@@ -200,11 +200,18 @@ function checkCardData() {
 function checkBuiltDecks() {
   for (const [name, expected] of Object.entries(BUILT_DECK_SIZES)) {
     const { decks } = engine.newState({ wome: name === "wome" }).cards;
-    const sizes = Object.fromEntries(
-      Object.entries(decks).map(([deckKey, ids]) => [deckKey, ids.length]),
-    );
-    if (JSON.stringify(sizes) !== JSON.stringify(expected))
-      fail(name + " built decks " + JSON.stringify(sizes));
+    const deckKeys = new Set(Object.keys(decks).concat(Object.keys(expected)));
+    for (const deckKey of deckKeys)
+      if ((decks[deckKey]?.length ?? -1) !== expected[deckKey])
+        fail(
+          name +
+            " built deck " +
+            deckKey +
+            " has " +
+            decks[deckKey]?.length +
+            " cards, expected " +
+            expected[deckKey],
+        );
   }
 }
 // The glossary key a *term* resolves to, as ui/dom.js termKey does: the term, an alias, or the term without its plural s.

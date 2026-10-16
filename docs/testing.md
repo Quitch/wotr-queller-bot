@@ -42,6 +42,7 @@ The audit left five checks to a person. Each is now a scripted check, as far as 
 - A real device. Chromium's touch emulation has no safe-area insets, no browser chrome and no OS gestures.
 - The focus ring's appearance. Its colour is in the contrast test; that it is visible around every control is not checked.
 - axe-core and keyboard checks on prompts past the first action of a walk. `test/smoke.js` and `test/a11y.js` stop at the first action prompt, so the Army die's first and second move buttons are checked only by name, in `test/render.js`.
+- A Phase 5 pass when the only dice left are set aside for a minion. The random driver in `test/play.js` always refuses that Pass, because refusing it is the only way to spend such a die and end Phase 5, so `test/fuzz.js` and `test/render.js` never confirm a pass in that state.
 - The Tab trap in every modal. It is exercised in the flowchart modal only; the others share the same framework code.
 - `prefers-reduced-motion`. The prompt animation is behind the media query but no test toggles it.
 - That a rule citation names the right rule. `test/check.js` checks that each cited number exists; when the rules are renumbered, the mapping is reviewed by hand.

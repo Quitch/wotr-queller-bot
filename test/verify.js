@@ -925,8 +925,9 @@ function migrateUpgradesOldSaves() {
   );
 }
 // WoME setup: its Shadow Event cards replace Shelob's Lair, Corsairs of Umbar and Rage of the Dunlendings, so a new WoME
-// game deals none of them (nor the WoME-rev versions), and a WoME game saved with them in its piles loses them there
-// but keeps a copy already in hand. A base game keeps the base cards.
+// game deals none of them (nor the WoME-rev versions), and a WoME game saved with them in its draw decks loses them
+// there but keeps a copy already drawn: in hand, or in a discard pile, which is never reshuffled (rule 25). A base game
+// keeps the base cards.
 function womeDecksLeaveOutReplacedCards() {
   const gone = ["sa034", "sa028", "sa038", "sa028b2", "sa038b2"];
   const inPiles = (state) =>
@@ -951,9 +952,12 @@ function womeDecksLeaveOutReplacedCards() {
   old.cards.hand.push("sa028");
   const migrated = engine.migrate(old);
   ok(
-    !inPiles(migrated).some((id) => gone.includes(id)) &&
-      migrated.cards.hand.includes("sa028"),
-    "migrate takes the replaced cards out of a WoME game's decks and discards, not its hand",
+    !Object.values(migrated.cards.decks)
+      .flat()
+      .some((id) => gone.includes(id)) &&
+      migrated.cards.hand.includes("sa028") &&
+      migrated.cards.discards.S.includes("sa038"),
+    "migrate takes the replaced cards out of a WoME game's draw decks, not its hand or discards",
   );
   const again = JSON.stringify(migrated);
   ok(
