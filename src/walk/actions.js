@@ -2,11 +2,12 @@
 import * as engine from "../engine/index.js";
 import { DECK, DIE_REQUIREMENT, STRATEGY, TRAIL } from "../engine/index.js";
 import { NODE, NODE_KIND } from "../flow/index.js";
-import { endWalk, follow, goto, setPrompt, trail } from "./core.js";
+import { doReturn, endWalk, follow, goto, setPrompt, trail } from "./core.js";
 import { findStart, normalizeText } from "./graph.js";
 import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
-import { doReturn, ensureDie } from "./jumps.js";
+import { ensureDie } from "./jumps.js";
 import { SHADOW_NATION_KEY } from "./nations.js";
+import { letGoOtherRingDie, ringDieSpent } from "./rings.js";
 import {
   FALL_THROUGH,
   PENDING,
@@ -70,6 +71,7 @@ export function drawStep(state, node) {
 function claimActionDie(state, walk, node, label) {
   const die = NODE.extra(node).die;
   if (!die || (walk.die === die && walk.dieIndex != null)) return true;
+  letGoOtherRingDie(state, die);
   const dieResult = ensureDie(state, die, label);
   if (dieResult === PENDING) return PENDING;
   if (!dieResult) {
@@ -301,12 +303,13 @@ const ACTION_HANDLERS = {
 const isEndBox = (label) => /^End( action)?$/.test(label);
 // An End box: the walk is over; a die held for the action is spent.
 function endAction(state, walk) {
+  const acted = !!walk.die;
+  if (acted) spendCurrentDie(state, "end of action");
   endWalk(
     state,
-    walk.die ? WALK_RESULT.ACTION : WALK_RESULT.END,
-    "End of " + (walk.die ? "action" : "walk") + ".",
+    acted ? WALK_RESULT.ACTION : WALK_RESULT.END,
+    "End of " + (acted ? "action" : "walk") + ".",
   );
-  if (walk.die) spendCurrentDie(state, "end of action");
 }
 export function handleAction(state, node) {
   const walk = state.walk,
@@ -329,6 +332,7 @@ export function releaseCurrentDie(state) {
 export function spendCurrentDie(state, why) {
   const walk = state.walk;
   if (!walk?.die) return;
+  ringDieSpent(state);
   if (state.settings.dice && walk.dieIndex != null) {
     engine.spendDie(state, state.dice.pool[walk.dieIndex], why);
   } else

@@ -210,8 +210,8 @@ function ringUsedOnceOnlyWhenHeld() {
     return state;
   };
   const ringRules = [
-    [/under \*threat\*/, true],
-    [/adjacent to \*threat\*/, true],
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
   ];
   const noRingState = stateWithEventAndMusterDice();
   noRingState.board.rings = 0;
@@ -1447,6 +1447,415 @@ function captainOfTheWestCountsOnce() {
     "3 Regulars and 1 Leadership: 7, 8 with a Captain; 5 Regulars and a Captain: 10 (combat dice capped at 5)",
   );
 }
+// Rules 43 and 46: a ring use stands only when the die it made is spent. Here the threat column's Character attack is
+// not possible, so that ring comes back, and the Army attack's ring is the one used.
+function ringReturnedWhenItsStepIsNotPossible() {
+  const ringState = (dice) => {
+    const state = phase5State({
+      dice: true,
+      cards: false,
+      tracker: false,
+      wome: false,
+    });
+    state.board.rings = 1;
+    state.dice.pool = dice.map((face) => die(face));
+    engine.startPhase(state, PHASE.P5);
+    return state;
+  };
+  const attacked = ringState(["Event", "Event"]);
+  driveWalk(attacked, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+    [/Attack using Character/, "no"],
+    [/Attack using Army/, "done"],
+  ]);
+  const faces = attacked.dice.pool.map((pooled) => pooled.face).sort();
+  ok(
+    attacked.walk.result === WALK_RESULT.ACTION &&
+      attacked.board.rings === 0 &&
+      attacked.ringUsedThisTurn &&
+      faces.join() === "Army,Event" &&
+      attacked.walk.trail.some((entry) =>
+        /not used for a Character die/.test(entry.text),
+      ),
+    "the Character die turns back and the ring makes the Army die instead (" +
+      faces.join() +
+      ")",
+  );
+  const nothing = ringState(["Event", "Event"]);
+  driveWalk(nothing, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+    [/^Pass/, "no"],
+    byType(PROMPT.ACTION, "no"),
+  ]);
+  ok(
+    nothing.board.rings === 1 &&
+      !nothing.ringUsedThisTurn &&
+      nothing.dice.pool.every((pooled) => pooled.face === "Event"),
+    "when no step is possible the ring is not used and every die keeps its face",
+  );
+}
+// Rule 46: the minion box's ring does not make a Muster die to be set aside, and the Witch-king box's ring is used only
+// if he can join or create a mobile Army.
+function ringUsedOnlyWhereRule46Allows() {
+  const trackedState = (setUp) => {
+    const state = phase5State({
+      dice: true,
+      cards: false,
+      tracker: true,
+      wome: false,
+    });
+    state.board.rings = 1;
+    state.dice.pool = [die("Event")];
+    setUp(state);
+    engine.startPhase(state, PHASE.P5);
+    return state;
+  };
+  const minion = trackedState((state) => {
+    state.board.nations.isengard = 0;
+  });
+  driveWalk(minion, [[/Will of the West die/, true]]);
+  ok(
+    minion.board.rings === 1 &&
+      minion.dice.pool[0].face === "Event" &&
+      minion.dice.pool[0].status !== DIE_STATE.RESERVED &&
+      minion.walk.trail.some((entry) =>
+        /would set the die aside/.test(entry.text),
+      ),
+    "no ring when the Muster page would set the die aside",
+  );
+  const witchKing = trackedState((state) => {
+    state.board.chars.witchKing = MINION_STATUS.IN_PLAY;
+  });
+  driveWalk(witchKing, [
+    [/^Witch-king is in play/, true],
+    [/^Witch-king not in a/, false],
+  ]);
+  ok(
+    witchKing.board.rings === 1 &&
+      witchKing.dice.pool[0].face === "Event" &&
+      witchKing.walk.trail.some((entry) =>
+        /rule 46 does not allow it/.test(entry.text),
+      ),
+    "no ring for the Witch-king when he cannot join or create a mobile Army",
+  );
+}
+// Dice off: a No to "Does Queller have … die?" goes on to offer the ring, and a ring for a step that was not possible
+// tells the player to turn the die back.
+function diceOffRingOfferedAndTurnedBack() {
+  const state = phase5State({
+    dice: false,
+    cards: false,
+    tracker: true,
+    wome: false,
+  });
+  state.board.rings = 1;
+  engine.startPhase(state, PHASE.P5);
+  const seen = driveWalk(state, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+    [/^Does Queller have/, false],
+    byType(PROMPT.RING, true),
+    [/Attack using Character/, "no"],
+    [/Attack using Army/, "done"],
+  ]);
+  const ringAsks = seen.filter((prompt) => prompt?.type === PROMPT.RING).length;
+  ok(
+    ringAsks === 2 &&
+      state.board.rings === 0 &&
+      state.log.some((line) => /turn the die back/.test(line.text)),
+    "the ring is offered at the first die question, and turned back when the Character attack was not possible",
+  );
+}
+// Rules 43 and 46, review cases: a ring die spent at an "End action" box keeps the ring used; a die a page found nothing
+// for is given back even with dice rolled; the attack box asks rule 46's question before a Character die; and a die
+// that has been used never turns back.
+function ringSettledWhereTheDieGoes() {
+  const ringState = (strategy, faces) => {
+    const state = phase5State(
+      { dice: true, cards: false, tracker: false, wome: false },
+      strategy,
+    );
+    state.board.rings = 1;
+    state.dice.pool = faces.map((face) => die(face));
+    engine.startPhase(state, PHASE.P5);
+    return state;
+  };
+  const witchKing = ringState(STRATEGY.CORRUPTION, ["Event", "Event"]);
+  driveWalk(witchKing, [
+    [/^Witch-king is in play/, true],
+    [/^Nazgûl or Witch-king in play$/, true],
+    [/^Witch-king not in a/, true],
+    [/^Mustered Witch-king$/, true],
+  ]);
+  ok(
+    witchKing.walk.result === WALK_RESULT.ACTION &&
+      witchKing.board.rings === 0 &&
+      witchKing.ringUsedThisTurn &&
+      !witchKing.walk.trail.some((entry) => /not used/.test(entry.text)),
+    "the ring that made the Witch-king's Character die stands after “End action”",
+  );
+  const nothing = ringState(STRATEGY.CORRUPTION, ["Muster", "Muster"]);
+  driveWalk(nothing, [
+    [/^Character cards > 0 and ANY condition true:/, true],
+    [/^Pass/, "no"],
+    byType(PROMPT.ACTION, "no"),
+  ]);
+  // each ring die comes back before the walk leaves the bold box's steps (the walk later goes on to the rule 44 Elven
+  // Ring search, which may use the ring again)
+  const trailIndex = (pattern) =>
+    nothing.walk.trail.findIndex((entry) => pattern.test(entry.text));
+  const nextBox = trailIndex(/^Fellowship in region which Nazgûl can move to/);
+  ok(
+    trailIndex(/^Elven Ring not used for a Character die/) > -1 &&
+      trailIndex(/^Elven Ring not used for an Event die/) > -1 &&
+      trailIndex(/^Elven Ring not used for an Event die/) < nextBox,
+    "the Character die and then the Event die a page found nothing for are given back",
+  );
+  const attack = (hasNazgul) => {
+    const state = ringState(STRATEGY.MILITARY, ["Event", "Event"]);
+    const seen = driveWalk(state, [
+      [/^\*Mobile\* Army \*adjacent\* to \*target\* or an Army/, true],
+      [/^ANY condition true:/, true],
+      [/contain a Nazgûl or a minion/, hasNazgul],
+      [/can move or attack towards closest/, true],
+      [/^Move\/Attack$/, "done"],
+    ]);
+    return { state, seen };
+  };
+  const withNazgul = attack(true),
+    withoutNazgul = attack(false);
+  const facesUsed = (state) =>
+    state.dice.pool
+      .filter((pooled) => pooled.status === DIE_STATE.USED)
+      .map((pooled) => pooled.face);
+  ok(
+    withNazgul.seen.some((prompt) =>
+      /Nazgûl or a minion/.test(prompt?.text || ""),
+    ) &&
+      facesUsed(withNazgul.state).join() === "Character" &&
+      facesUsed(withoutNazgul.state).join() === "Army",
+    "the attack box's ring makes a Character die only for an Army with a Nazgûl or a minion, otherwise an Army die",
+  );
+  // after Yes, the Character page finds nothing: rule 46 gives this Army a Character die, never an Army die
+  const yesThenNothing = ringState(STRATEGY.MILITARY, ["Event", "Event"]);
+  driveWalk(yesThenNothing, [
+    [/^\*Mobile\* Army \*adjacent\* to \*target\* or an Army/, true],
+    [/^ANY condition true:/, true],
+    [/contain a Nazgûl or a minion/, true],
+    [/^Pass/, "no"],
+    byType(PROMPT.ACTION, "no"),
+  ]);
+  ok(
+    !yesThenNothing.walk.trail.some((entry) =>
+      /die changed to Army/.test(entry.text),
+    ),
+    "after Yes, no ring makes an Army die for the Army 4 step",
+  );
+  const threatOnly = ringState(STRATEGY.CORRUPTION, ["Event", "Event"]);
+  driveWalk(threatOnly, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Threat\* is sieging/, true],
+    [/^Pass/, "no"],
+    byType(PROMPT.ACTION, "no"),
+  ]);
+  ok(
+    !threatOnly.walk.trail.some(
+      (entry) =>
+        entry.kind === TRAIL.JUMP && /Character 3/.test(entry.text || ""),
+    ),
+    "the threat box's ring makes no die for “Character 3 / Muster Witch-king”, a step rule 46 does not list",
+  );
+  // the ring's Character die for "Move using Character die" is given back before the "Army" jump records the walk's
+  // die, so the return from the Army page does not bring that die back as a Character die
+  const givenBack = ringState(STRATEGY.CORRUPTION, ["Event", "Army"]);
+  driveWalk(givenBack, [
+    [/^Shadow under \*threat\*/, true],
+    [/^Move can increase the \*value\*/, true],
+    [/^Move using Character die$/, "no"],
+    [/^\*Threat\* is sieging/, true],
+    [/^Pass/, "no"],
+    byType(PROMPT.ACTION, "no"),
+  ]);
+  ok(
+    !givenBack.walk.trail.some(
+      (entry) =>
+        entry.kind === TRAIL.JUMP && /Character 3/.test(entry.text || ""),
+    ),
+    "a ring die given back does not come back with the return from the next page",
+  );
+  const marked = ringState(STRATEGY.CORRUPTION, ["Event", "Event"]);
+  for (
+    let guard = 0;
+    guard < 10 && marked.walk.prompt?.type !== PROMPT.ACTION;
+    guard++
+  )
+    engine.answer(marked, true);
+  const ringDie = marked.dice.pool.find(
+    (pooled) => pooled.face === "Character",
+  );
+  ringDie.status = DIE_STATE.USED;
+  engine.abandonWalk(marked);
+  ok(
+    ringDie.face === "Character" && marked.board.rings === 0,
+    "a ring die the player marked used does not turn back when the walk is dropped",
+  );
+}
+// Rules 43 and 46, round 4: a ring die still held when the walk reaches the next bold box turns back there, so that box
+// arms its own ring; and with dice off, a No to the ring offer for one of rule 46's two dice leaves the other.
+function ringSettledAtTheNextBoldBox() {
+  const held = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  held.board.rings = 1;
+  held.dice.pool = ["Muster", "Muster", "Muster"].map((face) => die(face));
+  engine.startPhase(held, PHASE.P5);
+  const seen = driveWalk(held, [
+    [/^Character cards > 0 and ANY condition true:/, true],
+    [/^Holding a Character card that uses the term/, true],
+    [/^Play card using/, "no"],
+    [/^\*Mobile\* Army \*adjacent\* to \*target\* or an Army/, true],
+    [/^ANY condition true:/, true],
+    [/contain a Nazgûl or a minion/, true],
+    [/can move or attack towards closest/, true],
+    [/^Move\/Attack$/, "done"],
+  ]);
+  const trailIndex = (pattern) =>
+    held.walk.trail.findIndex((entry) => pattern.test(entry.text));
+  ok(
+    trailIndex(/^Elven Ring not used for an Event die/) > -1 &&
+      trailIndex(/^Elven Ring not used for an Event die/) <
+        trailIndex(/^ANY condition true:/) &&
+      seen.some((prompt) => /Nazgûl or a minion/.test(prompt?.text || "")),
+    "the Event die a ring made for “Play card using Event die” turns back at the next bold box, which asks rule 46's question",
+  );
+  const declined = phase5State(
+    { dice: false, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  declined.board.rings = 1;
+  engine.startPhase(declined, PHASE.P5);
+  const offers = driveWalk(declined, [
+    [/^\*Mobile\* Army \*adjacent\* to \*target\* or an Army/, true],
+    [/^ANY condition true:/, true],
+    [/^Does Queller have/, false],
+    byType(PROMPT.RING, false),
+  ])
+    .filter((prompt) => prompt?.type === PROMPT.RING)
+    .map((prompt) => prompt.req);
+  ok(
+    declined.walk.done &&
+      offers.includes(DIE_REQUIREMENT.CHARACTER) &&
+      offers.includes(DIE_REQUIREMENT.ARMY),
+    "dice off: after a No to the ring for a Character die, the attack box offers it for an Army die (" +
+      offers.join() +
+      ")",
+  );
+  // the rule 44 walk lets a ring make any die, but not one the player already turned the ring down for
+  const search = phase5State(
+    { dice: false, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  search.board.rings = 1;
+  engine.startWalk(search, "M5", "Phase 5", { mode: "ringAny" });
+  const searchOffers = driveWalk(search, [
+    [/^\*Mobile\* Army \*adjacent\* to \*target\* or an Army/, true],
+    [/^ANY condition true:/, true],
+    [/^Does Queller have/, false],
+    byType(PROMPT.RING, false),
+  ])
+    .filter((prompt) => prompt?.type === PROMPT.RING)
+    .map((prompt) => prompt.req);
+  ok(
+    search.walk.done &&
+      searchOffers.filter((req) => req === DIE_REQUIREMENT.CHARACTER).length ===
+        1,
+    "dice off, rule 44 walk: a No to the ring for a Character die is not asked again (" +
+      searchOffers.join() +
+      ")",
+  );
+}
+// Round 6: a ring that changes the very die the walk still held (its step was not possible) does not hand that die back
+// as its old type when the page it was changed for returns.
+function ringChangedHeldDieIsNotRestored() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.board.rings = 1;
+  state.dice.pool = [die("Character")];
+  engine.startPhase(state, PHASE.P5);
+  driveWalk(state, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, false],
+    [/^Move can create \*mobile\* Army/, true],
+    [/^Move using Character die$/, "no"],
+    [/^\*Threat\* is sieging/, true],
+    byType(PROMPT.ACTION, "done"),
+  ]);
+  const pooled = state.dice.pool[0];
+  ok(
+    state.board.rings === 1 &&
+      !state.ringUsedThisTurn &&
+      pooled.face === "Character",
+    "the ring's Army die turns back to Character, and the ring is not used (rings " +
+      state.board.rings +
+      ", die " +
+      pooled.face +
+      "/" +
+      pooled.status +
+      ")",
+  );
+  // without a ring, a page that claims the same pool die for another requirement hands it back on return
+  const kept = phase5State({
+    dice: true,
+    cards: false,
+    tracker: false,
+    wome: false,
+  });
+  kept.dice.pool = [die("Army/Muster")];
+  let heldAtSiege = null;
+  engine.startPhase(kept, PHASE.P5);
+  driveWalk(kept, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+    [/^Attack using Army die$/, "no"],
+    [/is valid for muster$/, true],
+    [
+      /^\*Threat\* is sieging/,
+      () => {
+        heldAtSiege = { die: kept.walk.die, dieIndex: kept.walk.dieIndex };
+        return false;
+      },
+    ],
+  ]);
+  ok(
+    heldAtSiege?.die === DIE_REQUIREMENT.ARMY && heldAtSiege.dieIndex === 0,
+    "the Army die the walk held is held again after the Muster page returns (" +
+      JSON.stringify(heldAtSiege) +
+      ")",
+  );
+}
+// A walk saved with revision 2's ring state takes revision 3's.
+function ringStateFromRevision2Migrates() {
+  const state = phase5State({ dice: true });
+  engine.startPhase(state, PHASE.P5);
+  const old = JSON.parse(JSON.stringify(state));
+  old.walk.flowRev = 2;
+  old.walk.ringArmed = true;
+  delete old.walk.ringDice;
+  delete old.walk.ringPending;
+  const walk = engine.migrate(old).walk;
+  ok(
+    walk.flowRev === engine.FLOW_REV &&
+      walk.ringDice === "any" &&
+      !("ringArmed" in walk) &&
+      walk.ringPending === null,
+    "ringArmed becomes ringDice, with no ring use pending",
+  );
+}
 // A walk started from the Jump modal holds no die: "Using a Character die and …" asks only about the die and checks the
 // cards from the hand, and "Muster 3" claims a Muster die from the pool instead of carrying a die it does not hold.
 function walkWithoutADie() {
@@ -1519,6 +1928,13 @@ const SCENARIOS = [
   ["migrate", savedWalkFromReleasedFlowchartResumes],
   ["draft", reservedDieSpentBeforeDiscardingAnother],
   ["calc", captainOfTheWestCountsOnce],
+  ["rings", ringReturnedWhenItsStepIsNotPossible],
+  ["rings", ringUsedOnlyWhereRule46Allows],
+  ["rings", diceOffRingOfferedAndTurnedBack],
+  ["rings", ringSettledWhereTheDieGoes],
+  ["rings", ringSettledAtTheNextBoldBox],
+  ["rings", ringChangedHeldDieIsNotRestored],
+  ["migrate", ringStateFromRevision2Migrates],
   ["draft", walkWithoutADie],
 ];
 function main() {

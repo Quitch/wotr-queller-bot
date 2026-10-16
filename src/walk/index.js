@@ -15,6 +15,7 @@ export {
   DIE_REQUIREMENT_NAME,
 } from "./jumps-table.js";
 export { startWalk, run } from "./run.js";
+export { abandonWalk } from "./core.js";
 export { answer } from "./answers.js";
 export {
   startPhase,

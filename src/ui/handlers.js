@@ -94,7 +94,7 @@ export function onPhase(id) {
   act(
     () => {
       if (id === PHASE_ACTION.ABANDON) {
-        state.walk = null;
+        engine.abandonWalk(state);
         engine.log(state, "Walk abandoned.");
         return;
       }
@@ -104,7 +104,7 @@ export function onPhase(id) {
       }
       if (id === PHASE.P6) {
         state.phase = PHASE.P6;
-        state.walk = null;
+        engine.abandonWalk(state);
         engine.log(
           state,
           "Phase 6: check victory conditions (Shadow VP 10, Corruption 12, Ring destroyed).",

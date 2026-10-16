@@ -1,7 +1,10 @@
 // Static consistency checks between the walker / the engine, the UI and the flowchart, card, reference and arrow data.
 // Exit 1 on any failure.
 import fs from "node:fs";
+import { execFile } from "node:child_process";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import anchors from "../src/flow/anchors.json" with { type: "json" };
 import * as fakeWindow from "./load.js";
 const FLOW = fakeWindow.QB_FLOW,
@@ -303,7 +306,34 @@ function checkPromptTables() {
   for (const type of rendered)
     if (!types.includes(type)) fail("renderer for unknown prompt " + type);
 }
-function main() {
+// The walker's import cycles stay safe: each module under src/walk/ loads first, in a fresh process, without reading a
+// binding that a cycle has not yet initialised. The processes run side by side.
+async function checkWalkLoadsInAnyOrder() {
+  const walkDir = path.join(SRC_DIR, "walk");
+  const modules = fs
+    .readdirSync(walkDir, { recursive: true })
+    .filter((file) => file.endsWith(".js"));
+  const loadFirst = async (file) => {
+    const url = pathToFileURL(path.join(walkDir, file)).href;
+    try {
+      await promisify(execFile)(process.execPath, [
+        "--input-type=module",
+        "-e",
+        "await import(" + JSON.stringify(url) + ")",
+      ]);
+    } catch (error) {
+      fail(
+        "src/walk/" +
+          file.replaceAll(path.sep, "/") +
+          " cannot load first: " +
+          (error.stderr.match(/\w*Error: .*/) || [error.stderr])[0],
+      );
+    }
+  };
+  await Promise.all(modules.map(loadFirst));
+  return modules.length;
+}
+async function main() {
   const state = engine.newState({
     dice: true,
     cards: true,
@@ -318,6 +348,7 @@ function main() {
   const { terms, citations } = checkReferenceText();
   checkAnchors();
   checkPromptTables();
+  const walkModules = await checkWalkLoadsInAnyOrder();
   console.log(
     fails
       ? fails + " failure(s)"
@@ -329,8 +360,10 @@ function main() {
           citations +
           " rule citations, " +
           anchors.length +
-          " anchor records)",
+          " anchor records, " +
+          walkModules +
+          " walker modules loaded first)",
   );
   process.exit(fails ? 1 : 0);
 }
-main();
+await main();

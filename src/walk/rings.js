@@ -1,0 +1,208 @@
+// Elven Rings (rules 43-46): the die each bold box lets a ring create, and a ring use that stays pending until the die
+// it made is spent. A die that is given up unspent turns back, the ring returns, and the next step may use it instead
+// (rule 46: the die of the first step that is possible).
+import * as engine from "../engine/index.js";
+import { DIE_REQUIREMENT, TRAIL } from "../engine/index.js";
+import { askBoardQuestion, trail } from "./core.js";
+import { dieWithArticle } from "./jumps-table.js";
+import { PENDING } from "./prompt.js";
+
+// any die: a walk saved before rule 46 was applied armed the ring this way
+const ANY_DIE = "any";
+const { ARMY, CHARACTER, EVENT, MUSTER } = DIE_REQUIREMENT;
+const NAZGUL_OR_MINION =
+  "Does the *adjacent* *mobile* Army contain a Nazgûl or a minion (rule 46: then an Elven Ring makes a Character die, otherwise an Army die)";
+// Rule 46, by bold box: the dice a ring may create; for a die the rule limits, the box the walk must then answer Yes
+// (needs), or the question whose answer picks the die (ask: the die for Yes and the die for No).
+const RING_RESULTS = {
+  // the die of the first step below the box that is possible
+  "C5.threat": { dice: [CHARACTER, ARMY, MUSTER] },
+  "M5.threat": { dice: [CHARACTER, ARMY, MUSTER] },
+  "C5.charMordor": { dice: [CHARACTER, EVENT] },
+  "M5.charMordor": { dice: [CHARACTER, EVENT] },
+  // only if he can join or create a mobile Army
+  "C5.wkNotMob": { dice: [CHARACTER], needs: { [CHARACTER]: "CH.wkJoin" } },
+  "M5.wkNotMob": { dice: [CHARACTER], needs: { [CHARACTER]: "CH.wkJoin" } },
+  // not when the Muster page would set the die aside (walk/jumps.js reserveDie)
+  "C5.minion": { dice: [MUSTER] },
+  "M5.minion": { dice: [MUSTER] },
+  // Character if the adjacent mobile Army contains a Nazgûl or a minion, otherwise Army
+  "C5.mordorWin": {
+    dice: [CHARACTER, ARMY],
+    ask: { question: NAZGUL_OR_MINION, yes: CHARACTER, no: ARMY },
+  },
+  "M5.mobAdjBlock": {
+    dice: [CHARACTER, ARMY],
+    ask: { question: NAZGUL_OR_MINION, yes: CHARACTER, no: ARMY },
+  },
+};
+const PHASE_5_PAGES = new Set(["C5", "M5"]);
+// What a bold box arms; a main Phase 5 decision resets it. ringDeclined: the dice the player turned the ring down for.
+export const ringBoxState = () => ({
+  ringDice: null,
+  ringNeeds: null,
+  ringAsk: null,
+  ringAnswer: null,
+  ringDeclined: null,
+});
+// A decision was recorded: a main decision on a Phase 5 page ends what the last bold box armed (an unspent ring die
+// turns back, held or not), and a Yes to a bold box arms the dice rule 46 gives it.
+export function armRing(state, key, isMainDecision, answer, ringCondition) {
+  const walk = state.walk;
+  if (isMainDecision && PHASE_5_PAGES.has(walk.page)) {
+    settleRing(state, true);
+    Object.assign(walk, ringBoxState());
+  }
+  if (!answer || !ringCondition || state.ringUsedThisTurn) return;
+  const result = RING_RESULTS[key] || { dice: ANY_DIE };
+  walk.ringDice = result.dice;
+  walk.ringNeeds = result.needs || null;
+  walk.ringAsk = result.ask || null;
+}
+// Whether a ring may create a die of type `req` here.
+export function ringMayCreate(state, req) {
+  const walk = state.walk;
+  if (!engine.ringAvailable(state)) return false;
+  if (walk.ringDeclined?.includes(req)) return false;
+  if (walk.mode === "ringAny" || walk.ringDice === ANY_DIE) return true;
+  return !!walk.ringDice?.includes(req);
+}
+// The question rule 46 puts before a ring makes a die of type `req`, and the answer that allows it: {question,
+// answer}, or null when the die is not limited.
+export function ringQuestion(state, req) {
+  const ask = state.walk.ringAsk;
+  if (!ask || (req !== ask.yes && req !== ask.no)) return null;
+  return { question: ask.question, answer: req === ask.yes };
+}
+// With dice rolled by the app, ask that question as a board question, once per bold box: true when the ring may make
+// the die, false, or PENDING while the question is open.
+export function ringAllowed(state, req) {
+  const walk = state.walk,
+    limit = ringQuestion(state, req);
+  if (!limit) return true;
+  // no die the ring could change: nothing to ask
+  if (!engine.availableActionDice(state).length) return false;
+  if (walk.ringAnswer == null) {
+    const answer = askBoardQuestion(
+      state,
+      walk.page + "." + walk.node + ".ring46",
+      limit.question,
+    );
+    if (answer === PENDING) return PENDING;
+    walk.ringAnswer = answer;
+  }
+  return walk.ringAnswer === limit.answer;
+}
+// With dice off, the player declined a ring for a die of type `req`. Where rule 46 picks the die by a question, the
+// answer may have ruled out this die only: the ring may still make the other one.
+export function ringDeclined(state, req) {
+  const walk = state.walk;
+  if (!ringQuestion(state, req)) return;
+  walk.ringDeclined = [...(walk.ringDeclined || []), req];
+  walk.ringAsked = false;
+}
+// A ring was used for a die of type `req` (the ring count already taken down): ringsBefore is the count before it, and
+// with dice on dieIndex and from are the pool die it changed and the face it showed.
+export function ringUsed(state, req, ringsBefore, dieIndex, from) {
+  const walk = state.walk;
+  walk.ringPending = {
+    reqs: [req],
+    // 1, or 0 when the ring count was not known (it stays at 0)
+    ringsTaken: ringsBefore - state.board.rings,
+    dieIndex: dieIndex ?? null,
+    from: from ?? null,
+    needs: walk.ringNeeds?.[req] || null,
+    spent: false,
+  };
+}
+// The walk carries the die it holds into a page that uses it as another die (the Army page's "Muster 3"): with dice off,
+// that die is still the ring's.
+export function ringDieHeldAs(state, req) {
+  const pending = state.walk?.ringPending;
+  if (pending && !state.settings.dice && holdsRingDie(state, pending))
+    pending.reqs.push(req);
+}
+// The walk spent the die it holds: if a ring made it, the ring use stands.
+export function ringDieSpent(state) {
+  const pending = state.walk?.ringPending;
+  if (pending && holdsRingDie(state, pending)) pending.spent = true;
+}
+// The walk holds the ring's die only while it holds a die at all: a page it returned from leaves dieIndex behind.
+function holdsRingDie(state, pending) {
+  const walk = state.walk;
+  if (!walk.die) return false;
+  return state.settings.dice
+    ? walk.dieIndex === pending.dieIndex
+    : pending.reqs.includes(walk.die);
+}
+// With dice on, a die that is no longer available was used (marked used, or discarded): the ring stays used.
+const ringDieGone = (state, pending) =>
+  state.settings.dice &&
+  state.dice.pool[pending.dieIndex]?.status !== engine.DIE_STATE.AVAIL;
+// Undo a ring use: the die turns back, the ring returns, and the walk may use a ring again for the next step.
+export function returnRing(state, why) {
+  const walk = state.walk,
+    pending = walk.ringPending;
+  const held = holdsRingDie(state, pending);
+  walk.ringPending = null;
+  if (ringDieGone(state, pending)) return;
+  if (held) {
+    walk.die = null;
+    walk.dieIndex = null;
+  }
+  walk.ringAsked = false;
+  state.board.rings += pending.ringsTaken;
+  state.ringUsedThisTurn = false;
+  const req = pending.reqs[0];
+  if (state.settings.dice) {
+    const die = state.dice.pool[pending.dieIndex];
+    die.face = pending.from;
+    engine.log(
+      state,
+      "Elven Ring not used (" +
+        why +
+        "): the die is back to " +
+        die.face +
+        " (rule 43).",
+    );
+  } else {
+    walk.dieAns[req] = false;
+    engine.log(
+      state,
+      "Elven Ring not used (" +
+        why +
+        "): turn the die back to the result it showed (rule 43).",
+    );
+  }
+  trail(state, {
+    kind: TRAIL.RING,
+    text: "Elven Ring not used for " + dieWithArticle(req) + " die: " + why,
+  });
+}
+// Settle a pending ring use when the walk lets go of the die: a die spent keeps the ring used; a die given up unspent
+// returns it. `letGo`: the walk is over or claims another die, so a die still held is given up too.
+export function settleRing(state, letGo) {
+  const pending = state.walk?.ringPending;
+  if (!pending) return;
+  if (pending.spent) {
+    state.walk.ringPending = null;
+    return;
+  }
+  if (!letGo && holdsRingDie(state, pending)) return;
+  returnRing(state, "the step it was for was not possible");
+}
+// Claiming a die for another step gives up a die a ring made for the last one: call it before ensureDie.
+export function letGoOtherRingDie(state, req) {
+  const pending = state.walk.ringPending;
+  if (pending && !pending.reqs.includes(req)) settleRing(state, true);
+}
+// The box a limited ring use needs (rule 46) was answered: Yes lets the use stand, No undoes it. Returns true when the
+// ring was undone, so the page gives up the step.
+export function ringNeedAnswered(state, key, answer) {
+  const pending = state.walk?.ringPending;
+  if (!pending?.needs || pending.needs !== key) return false;
+  pending.needs = null;
+  if (answer) return false;
+  returnRing(state, "rule 46 does not allow it here");
+  return true;
+}

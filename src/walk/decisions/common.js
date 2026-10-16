@@ -2,9 +2,18 @@
 import * as engine from "../../engine/index.js";
 import { DECK, MINION_STATUS, TRAIL } from "../../engine/index.js";
 import { NODE, NODE_KIND } from "../../flow/index.js";
-import { endWalk, follow, setPrompt, trail } from "../core.js";
+import {
+  askBoardQuestion,
+  cur,
+  doReturn,
+  endWalk,
+  follow,
+  setPrompt,
+  trail,
+} from "../core.js";
 import { dieWithArticle } from "../jumps-table.js";
 import { evalPlayable } from "../playable.js";
+import { armRing, ringNeedAnswered } from "../rings.js";
 import { PENDING, PROMPT, WALK_RESULT } from "../prompt.js";
 
 // Board consequences of a decision the player answered (the tracker keeps up with what the flowchart just established).
@@ -37,11 +46,19 @@ export function recordDecision(
     why,
     ring: !!ringCondition,
   });
-  if (answer && ringCondition && !state.ringUsedThisTurn) walk.ringArmed = true;
-  const hook = DECIDE_HOOKS[walk.page + "." + walk.node];
-  if (hook) hook(state, answer);
+  const key = walk.page + "." + walk.node;
+  armRing(
+    state,
+    key,
+    NODE.kind(cur(state)) === NODE_KIND.DECISION,
+    answer,
+    ringCondition,
+  );
   walk.sub = 0;
   walk.parts = {};
+  if (ringNeedAnswered(state, key, answer)) return doReturn(state);
+  const hook = DECIDE_HOOKS[key];
+  if (hook) hook(state, answer);
   if (!follow(state, answer ? "Yes" : "No")) {
     endWalk(
       state,
@@ -63,19 +80,12 @@ export function ask(state, node, question, promptExtra) {
 // A yes/no board fact: from the tracker when it is on, otherwise asked of the player once per node (answers live in walk.parts). Returns PENDING while the question is open.
 export function boardFactYesNo(state, factKey, question, trackerValue) {
   if (state.settings.tracker) return trackerValue;
-  const walk = state.walk,
-    partKey = walk.page + "." + walk.node + "." + factKey;
-  if (partKey in walk.parts) return walk.parts[partKey];
-  setPrompt(state, {
-    type: PROMPT.YES_NO,
-    text: question,
-    part: partKey,
-    node: walk.node,
-    page: walk.page,
-    kind: NODE_KIND.FOLLOW_UP,
-    board: true,
-  });
-  return PENDING;
+  const walk = state.walk;
+  return askBoardQuestion(
+    state,
+    walk.page + "." + walk.node + "." + factKey,
+    question,
+  );
 }
 // A decision as the trail records it: a condition list adds the items that apply to this game.
 export function decisionText(state, node) {

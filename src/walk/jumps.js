@@ -2,7 +2,15 @@
 import * as engine from "../engine/index.js";
 import { DIE_REQUIREMENT, TRAIL } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
-import { cur, endWalk, follow, goto, setPrompt, trail } from "./core.js";
+import {
+  doReturn,
+  endWalk,
+  exitJump,
+  follow,
+  goto,
+  setPrompt,
+  trail,
+} from "./core.js";
 import { findStart, normalizeText } from "./graph.js";
 import {
   DIE_REQUIREMENT_NAME,
@@ -16,6 +24,16 @@ import {
   phaseResult,
   strategyName,
 } from "./prompt.js";
+import {
+  letGoOtherRingDie,
+  returnRing,
+  ringAllowed,
+  ringDieHeldAs,
+  ringMayCreate,
+  ringQuestion,
+  ringUsed,
+  settleRing,
+} from "./rings.js";
 import { startWalk } from "./run.js";
 
 export function handleJump(state, node) {
@@ -57,6 +75,19 @@ function switchStrategy(state, walk, spec, label) {
   };
   follow(state, null);
 }
+function setDieAside(state, walk) {
+  state.minionReserved = true;
+  if (walk.dieIndex != null && state.settings.dice) {
+    state.dice.pool[walk.dieIndex].status = engine.DIE_STATE.RESERVED;
+  }
+  delete walk.dieAns[DIE_REQUIREMENT.MUSTER];
+  delete walk.dieAns[DIE_REQUIREMENT.CHAR_OR_MUSTER]; // the die the player said Queller had is no longer available
+  engine.log(state, "Muster die set aside for a minion (rule 34).");
+  trail(state, {
+    kind: TRAIL.NOTE,
+    text: "Muster die set aside for a minion",
+  });
+}
 // "Save muster die for minion": set the die aside and return to the calling page.
 function reserveDie(state, walk, spec, label) {
   // A die already set aside and brought back by "Use Muster die set aside for minion" must be used now (rule 34), not set aside again.
@@ -69,23 +100,17 @@ function reserveDie(state, walk, spec, label) {
     exitJump(state);
     return;
   }
-  state.minionReserved = true;
-  if (walk.dieIndex != null && state.settings.dice) {
-    state.dice.pool[walk.dieIndex].status = engine.DIE_STATE.RESERVED;
-  }
-  delete walk.dieAns[DIE_REQUIREMENT.MUSTER];
-  delete walk.dieAns[DIE_REQUIREMENT.CHAR_OR_MUSTER]; // the die the player said Queller had is no longer available
-  engine.log(state, "Muster die set aside for a minion (rule 34).");
-  trail(state, {
-    kind: TRAIL.NOTE,
-    text: "Muster die set aside for a minion",
-  });
+  // rule 46: an Elven Ring does not make a Muster die to be set aside, so without it there is no die to set aside
+  if (walk.ringPending)
+    returnRing(state, "the Muster page would set the die aside");
+  else setDieAside(state, walk);
   walk.dieIndex = null;
   walk.die = null;
   doReturn(state);
 }
 // "Phase 5 (use an Elven Ring)": restart the walk looking for an Elven Ring use (rule 44) when a ring and a die to change are available.
 function ringAnyJump(state, walk, spec, label) {
+  settleRing(state, true);
   const canUseRing =
     walk.mode !== "ringAny" &&
     engine.ringAvailable(state) &&
@@ -93,8 +118,6 @@ function ringAnyJump(state, walk, spec, label) {
   if (canUseRing) {
     trail(state, { kind: TRAIL.JUMP, text: label });
     const entry = walk.entry;
-    walk.done = true;
-    state.walk = null;
     startWalk(state, entry.page, entry.start, { mode: "ringAny" });
     return;
   }
@@ -135,25 +158,33 @@ function jumpWithDie(state, spec, label) {
     enterPage(state, spec, label);
     return;
   }
+  letGoOtherRingDie(state, spec.die);
+  const before = { die: walk.die, dieIndex: walk.dieIndex };
   const dieResult = ensureDie(state, spec.die, label);
   if (dieResult === PENDING) return;
-  if (dieResult) enterPage(state, spec, label);
-  else exitJump(state);
+  if (!dieResult) {
+    exitJump(state);
+    return;
+  }
+  // a ring may have changed the very die the walk held: the return must not bring it back as its old type
+  const sameDie =
+    before.dieIndex != null &&
+    walk.dieIndex === before.dieIndex &&
+    walk.ringPending?.dieIndex === before.dieIndex;
+  enterPage(
+    state,
+    spec,
+    label,
+    sameDie ? { die: null, dieIndex: null } : before,
+  );
 }
 // Make sure Queller has a die of type `req` for the step `label`. Returns true (use it), false (skipped, trail written), or PENDING (prompt open).
 export function ensureDie(state, req, label) {
   const walk = state.walk;
   if (walk.pendingDie === label) {
+    // the die question was answered (dice off): use the die, offer a ring, or skip
     walk.pendingDie = null;
-    const dieResult = walk.dieAns[req];
-    walk.ringArmed = false;
-    if (!dieResult)
-      trail(state, {
-        kind: TRAIL.SKIP,
-        text: label,
-        why: "no " + DIE_REQUIREMENT_NAME[req] + " die",
-      });
-    return !!dieResult;
+    return askForDie(state, walk, req, label);
   }
   if (state.settings.dice) return ensureDieFromPool(state, walk, req, label);
   return askForDie(state, walk, req, label);
@@ -161,15 +192,26 @@ export function ensureDie(state, req, label) {
 // With dice rolled by the app: take a matching die from the pool, changing one with an Elven Ring when that is armed.
 function ensureDieFromPool(state, walk, req, label) {
   let die = engine.findDie(state, req);
-  if (!die && ringPossible(state)) {
-    die = engine.ringChange(state, req);
-    if (die)
+  const allowed = !die && ringMayCreate(state, req) && ringAllowed(state, req);
+  if (allowed === PENDING) return PENDING;
+  if (allowed) {
+    const ringsBefore = state.board.rings;
+    const changed = engine.ringChange(state, req);
+    if (changed) {
+      die = changed.die;
+      ringUsed(
+        state,
+        req,
+        ringsBefore,
+        state.dice.pool.indexOf(die),
+        changed.from,
+      );
       trail(state, {
         kind: TRAIL.RING,
         text: "Elven Ring: die changed to " + die.face,
       });
+    }
   }
-  walk.ringArmed = false;
   if (!die) {
     trail(state, {
       kind: TRAIL.SKIP,
@@ -180,6 +222,14 @@ function ensureDieFromPool(state, walk, req, label) {
   }
   walk.dieIndex = state.dice.pool.indexOf(die);
   return true;
+}
+// The rule 46 question a limited ring offer depends on, as the offer states it.
+function ringLimitText(limit) {
+  if (!limit) return "";
+  const answer = limit.answer ? "Yes" : "No";
+  return (
+    " Only if the answer to this is " + answer + ": " + limit.question + "?"
+  );
 }
 // Without dice: ask the player whether Queller has the die (once per type per walk), then offer an Elven Ring before giving up.
 function askForDie(state, walk, req, label) {
@@ -199,12 +249,10 @@ function askForDie(state, walk, req, label) {
     });
     return PENDING;
   }
-  if (walk.dieAns[req]) {
-    walk.ringArmed = false;
-    return true;
-  }
-  if (ringPossible(state) && !walk.ringAsked) {
+  if (walk.dieAns[req]) return true;
+  if (ringMayCreate(state, req) && !walk.ringAsked) {
     walk.ringAsked = true;
+    const limit = ringQuestion(state, req);
     setPrompt(state, {
       type: PROMPT.RING,
       req,
@@ -215,11 +263,11 @@ function askForDie(state, walk, req, label) {
           : "If the Shadow holds an Elven Ring: ") +
         "Use an Elven Ring (rule 43): change one Queller die that does not show a *preferred* result into " +
         dieWithArticle(req) +
-        " result. Choose the die at random.",
+        " result. Choose the die at random. If the step then turns out not to be possible, the app tells you to turn the die back (rule 43)." +
+        ringLimitText(limit),
     });
     return PENDING;
   }
-  walk.ringArmed = false;
   trail(state, {
     kind: TRAIL.SKIP,
     text: label,
@@ -227,21 +275,17 @@ function askForDie(state, walk, req, label) {
   });
   return false;
 }
-function ringPossible(state) {
-  const walk = state.walk;
-  return (
-    engine.ringAvailable(state) && (walk.ringArmed || walk.mode === "ringAny")
-  );
-}
-function enterPage(state, spec, label) {
+// before: the die the walk held before ensureDie claimed one for this page, which the return gives back.
+function enterPage(state, spec, label, before) {
   const walk = state.walk;
   walk.stack.push({
     page: walk.page,
     node: walk.node,
-    die: walk.die,
-    dieIndex: walk.dieIndex,
+    die: before ? before.die : walk.die,
+    dieIndex: before ? before.dieIndex : walk.dieIndex,
     dieUsed: walk.dieUsed,
   });
+  if (spec.held) ringDieHeldAs(state, spec.die);
   if (!engine.dieSatisfies(walk.die, spec.die)) walk.die = spec.die;
   trail(state, {
     kind: TRAIL.JUMP,
@@ -254,52 +298,4 @@ function enterPage(state, spec, label) {
   walk.steps = null;
   goto(state, spec.page, findStart(spec.page, spec.start));
   follow(state, null);
-}
-function exitJump(state) {
-  // follow the arrow out of the current grey box; if none, return further
-  if (!follow(state, null)) doReturn(state);
-}
-export function doReturn(state) {
-  const walk = state.walk;
-  if (!walk.stack.length) {
-    // A die brought back from "set aside for a minion" that found no action is spent, not set aside again (rule 34: it cannot be used for anything else).
-    if (
-      walk.fromReserve &&
-      state.settings.dice &&
-      walk.reservedDieIndex != null &&
-      state.dice.pool[walk.reservedDieIndex].status === engine.DIE_STATE.AVAIL
-    ) {
-      engine.spendDie(
-        state,
-        state.dice.pool[walk.reservedDieIndex],
-        "set aside for a minion, no action possible",
-      );
-      endWalk(
-        state,
-        WALK_RESULT.ACTION,
-        "Queller sets aside the Muster die it had kept for a minion — no action was possible with it.",
-      );
-      return;
-    }
-    endWalk(
-      state,
-      WALK_RESULT.NO_ACTION,
-      walk.page === "BA"
-        ? "Nothing further from the Battle page this round."
-        : "Queller has no action from this walk.",
-    );
-    return;
-  }
-  const frame = walk.stack.pop();
-  goto(state, frame.page, frame.node);
-  walk.die = frame.die;
-  walk.dieIndex = frame.dieIndex;
-  walk.dieUsed = frame.dieUsed;
-  walk.cands = null;
-  walk.chosen = null;
-  trail(state, {
-    kind: TRAIL.BACK,
-    text: normalizeText(NODE.text(cur(state))),
-  });
-  exitJump(state);
 }
