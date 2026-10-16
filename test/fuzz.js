@@ -14,10 +14,19 @@ import {
 const { PROMPT, CARD_EFFECT, DIE_KIND, DIE_STATE, FACE, HAND, HAND_LIMIT } =
   engine;
 const cardById = engine.cardById;
-seedRandom(+process.argv[2] || 1);
-// --digest: print a sha256 over every final game state, so a refactor that
-// should not change behaviour can be checked against a recorded hash
-const wantDigest = process.argv.includes("--digest");
+// node test/fuzz.js [seed] [--digest], in either order; the seed is any integer (default 1) and is printed first, so a
+// failing run can be repeated. --digest prints a sha256 over every final game state, so a refactor that should not
+// change behaviour can be checked against a recorded hash.
+const args = process.argv.slice(2);
+const seedArgument = args.find((arg) => !arg.startsWith("--"));
+const seed = seedArgument === undefined ? 1 : Number(seedArgument);
+if (!Number.isInteger(seed)) {
+  console.log("the seed must be an integer, not " + seedArgument);
+  process.exit(1);
+}
+seedRandom(seed);
+console.log("seed:", seed);
+const wantDigest = args.includes("--digest");
 const digest = crypto.createHash("sha256");
 const GAMES_PER_SETTING = 25;
 const MAX_RINGS = 3;

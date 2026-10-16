@@ -23,6 +23,10 @@ export const TURNS_PER_GAME = 4;
 const MAX_PROMPTS_PER_WALK = 400;
 const PHASE5_WALKS_WITHOUT_DICE = 12; // with dice off nothing runs out, so Phase 5 stops after this many walks
 const PHASE5_WALK_LIMIT = 60; // with dice on the dice must run out well before this
+// After this many Phase 5 walks every Pass is refused: a real game bounds the passes by the Free Peoples' dice, which the
+// driver does not model, and a die that only a refused Pass spends would otherwise outlast the limit now and then.
+const PHASE5_WALKS_BEFORE_REFUSING_PASS = 30;
+let refusePass = false;
 const CHANCE = {
   YES: 0.5,
   ACTION_DONE: 0.8,
@@ -72,6 +76,16 @@ function randomBattleForm() {
     attackingSiege: coinFlip(),
   };
 }
+const pickOne = (values) => values[Math.floor(rnd() * values.length)];
+// An action carried out: the first move of an Army die may also move a second Army or attack (rule 9), as the UI offers.
+function actionDone(prompt) {
+  if (!prompt.armyMove) return "done";
+  return pickOne(
+    prompt.moveOrAttack
+      ? ["done", "movedBoth", "attacked"]
+      : ["done", "movedBoth"],
+  );
+}
 const onlyReservedDiceLeft = (state) =>
   state.settings.dice &&
   state.dice.pool.some((die) => die.status === DIE_STATE.RESERVED) &&
@@ -89,8 +103,9 @@ export function randomAnswer(state) {
       return prompt.options[Math.floor(rnd() * prompt.options.length)].value;
     case PROMPT.ACTION:
       // only refusing the pass spends a die set aside for a minion, so passing with nothing else left never ends Phase 5
-      if (prompt.pass && onlyReservedDiceLeft(state)) return "no";
-      return rnd() < CHANCE.ACTION_DONE ? "done" : "no";
+      if (prompt.pass && (refusePass || onlyReservedDiceLeft(state)))
+        return "no";
+      return rnd() < CHANCE.ACTION_DONE ? actionDone(prompt) : "no";
     case PROMPT.PLAY_CARD:
       return "done";
     case PROMPT.STEP:
@@ -102,7 +117,9 @@ export function randomAnswer(state) {
     case PROMPT.BATTLE_FORM:
       return randomBattleForm();
     case PROMPT.BLOCKED:
-      return rnd() < CHANCE.BLOCKED_BY_CARD ? "powerTooGreat" : "no";
+      return rnd() < CHANCE.BLOCKED_BY_CARD
+        ? pickOne(engine.FP_PROTECTION_CARDS).key
+        : "no";
   }
   throw new Error("unknown prompt " + prompt.type);
 }
@@ -218,8 +235,11 @@ function playPhase5(state, tag, hooks) {
       );
       break;
     }
+    refusePass = walks >= PHASE5_WALKS_BEFORE_REFUSING_PASS;
     engine.startPhase(state, PHASE.P5);
-    if (!driveWalk(state, tag + " p5#" + walks, hooks)) return false;
+    const walked = driveWalk(state, tag + " p5#" + walks, hooks);
+    refusePass = false;
+    if (!walked) return false;
     walks++;
     if (!maybeBattle(state, tag, hooks)) return false;
     if (rnd() < CHANCE.RANDOM_BOARD_AFTER_WALK) randomBoard(state);

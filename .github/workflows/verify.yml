@@ -25,6 +25,8 @@ jobs:
       - run: npm ci --ignore-scripts
       - run: npm run lint
       - run: npm run coverage # every Node test under c8; writes coverage/lcov.info for Sonar
+      - name: Fuzz a seed that changes every run # npm test fuzzes seed 1; the seed is printed so a failure can be rerun locally
+        run: node test/fuzz.js $((GITHUB_RUN_ID % 2147483648))
       - run: npm run build # a bundle that no longer builds fails here (esbuild's platform binary is an optional dependency, so no install script is needed)
       - name: SonarQube Cloud scan
         if: ${{ env.SONAR_TOKEN != '' }} # a fork's pull request has no secret; the rest of the job still verifies it

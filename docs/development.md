@@ -29,8 +29,8 @@ npm run reader          # the optional NVDA screen-reader check (Windows, headed
 Two scripts run by hand only:
 
 ```text
-node test/fuzz.js 7            # 400 random games with seed 7 across all 16 setting combinations; any seed works
-node test/fuzz.js 7 --digest   # also prints a sha256 of every final state: a refactor that preserves behaviour leaves it unchanged
+node test/fuzz.js 7            # 400 random games with seed 7 across all 16 setting combinations; any integer seed works, 0 included
+node test/fuzz.js 7 --digest   # (the arguments in either order) also prints a sha256 of every final state: a refactor that preserves behaviour leaves it unchanged
 node test/shot.js              # Playwright screenshots to test/shot-*.png, desktop plus phone portrait and landscape (build first)
 ```
 
