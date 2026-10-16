@@ -1,5 +1,6 @@
 // Browser smoke test: boots the built page the way the artifact host does, plays through a turn with every option on,
-// exercises the tracker triggers, the table-card list, the die tap, undo and every modal, then a 360px touch screen
+// checks that a double-click answers one prompt, that a dialog a double-click opens drops its second click, and that
+// the battle form keeps its ticks across a re-render, exercises the tracker triggers, the table-card list, the die tap, undo and every modal, then a 360px touch screen
 // (the Tools menu, no sideways scroll). axe-core runs on every screen and modal. Fails on any page error or a serious
 // axe violation.
 import { readFile } from "node:fs/promises";
@@ -49,6 +50,39 @@ const debugLog = async (page) =>
   JSON.parse(await page.inputValue(SEL.DEBUG_TEXT));
 const usable = (state, status) =>
   state.dice.pool.filter((die) => die.status === status).length;
+const undoDepth = (page) => page.evaluate(() => window.QBUI.history.length);
+// A double-click on an answer answers that prompt only. The first click re-renders, so the second one lands on
+// whatever is under the pointer; that is sent straight to the next prompt's first button (or, when the walk ended, the
+// first phase button), as a click with detail 2, so the check does not depend on where the layout puts it.
+// The second half of a double-click (a press with click count 2) at a point of the page.
+async function secondClickAt(page, x, y) {
+  await page.mouse.move(x, y);
+  await page.mouse.down({ clickCount: 2 });
+  await page.mouse.up({ clickCount: 2 });
+}
+async function secondClickOn(page, handle) {
+  const box = await handle.boundingBox();
+  await secondClickAt(page, box.x + box.width / 2, box.y + box.height / 2);
+}
+async function checkDoubleClickAnswersOnce(page) {
+  const button = await page.$(SEL.ANSWER_BUTTONS);
+  if (!button) {
+    debugFailures.push("no prompt to double-click");
+    return;
+  }
+  const before = await undoDepth(page);
+  await button.click();
+  const next =
+    (await page.$(SEL.ANSWER_BUTTONS)) ||
+    (await page.$(".phasebar [data-phase]"));
+  await secondClickOn(page, next);
+  const after = await undoDepth(page);
+  console.log("double-click on an answer: undo steps", before, "→", after);
+  if (after !== before + 1)
+    debugFailures.push(
+      "a double-click on an answer recorded " + (after - before) + " answers",
+    );
+}
 
 async function newGameWithEverythingOn(page) {
   await axeCheck(page, "setup screen");
@@ -87,12 +121,15 @@ async function newGameWithEverythingOn(page) {
     state.phase,
   );
 }
-// Phase 5 walks until the Phase 6 button appears (bounded).
+// A double-click on a die, then Phase 5 walks until the Phase 6 button appears (bounded); the first walk's first answer
+// is a double-click.
 async function playPhase5UntilPhase6(page) {
+  await checkDoubleClickOnADie(page);
   for (let i = 0; i < MAX_PHASE5_WALKS; i++) {
     const phase5Btn = await page.$(SEL.phase("p5"));
     if (!phase5Btn) break;
     await phase5Btn.click();
+    if (i === 0) await checkDoubleClickAnswersOnce(page);
     await answerAll(page);
   }
   const state = await readState(page);
@@ -105,8 +142,24 @@ async function playPhase5UntilPhase6(page) {
     state.log.length,
   );
 }
+// The battle form keeps a tick across a re-render (a tracker change and its Undo) until it is submitted.
 async function playBattle(page) {
   await page.click(SEL.phase("battle1"));
+  if (await page.$(SEL.BATTLE_FORM_OK)) {
+    await page.check(SEL.BATTLE_NEAR_MORIA);
+    await page.click(SEL.RINGS_INCREASE);
+    const afterChange = await page.isChecked(SEL.BATTLE_NEAR_MORIA);
+    await page.click(SEL.UNDO);
+    const afterUndo = await page.isChecked(SEL.BATTLE_NEAR_MORIA);
+    console.log(
+      "battle form tick after a tracker change:",
+      afterChange,
+      "after its Undo:",
+      afterUndo,
+    );
+    if (!afterChange || !afterUndo)
+      debugFailures.push("a re-render cleared the unsubmitted battle form");
+  } else debugFailures.push("the battle did not open the battle form");
   await answerAll(page);
 }
 // Put Saruman in play with Wormtongue + Palantír on the table, set him to eliminated → auto-discards; Gondor to war →
@@ -157,6 +210,49 @@ async function exerciseTrackerTriggers(page) {
       "the Declared button did not ask about Flocks of Crebain",
     );
   if (flocksDialog) await page.click(SEL.ASK_NO);
+}
+// A double-click on a die: the first click opens "Mark this die as used?"; the second, on the dialog's backdrop or on
+// its Mark as used button, is dropped, so the dialog stays open and the die unspent until a click of its own. The
+// die is then marked by a single click and the marking undone.
+async function checkDoubleClickOnADie(page) {
+  const spend = await page.$(SEL.DIE_SPEND);
+  if (!spend) {
+    debugFailures.push("no available die to double-click");
+    return;
+  }
+  const availBefore = usable(await readState(page), "avail");
+  await spend.click();
+  const onBackdrop = await page.evaluate(
+    () => window.document.elementFromPoint(4, 4)?.id === "modal",
+  );
+  await secondClickAt(page, 4, 4);
+  const openAfterBackdrop = !!(await page.$(SEL.MODAL));
+  if (!openAfterBackdrop) await (await page.$(SEL.DIE_SPEND)).click();
+  await secondClickOn(page, await page.$(SEL.ASK_OK));
+  const openAfterButton = !!(await page.$(SEL.MODAL));
+  const availAfter = usable(await readState(page), "avail");
+  console.log(
+    "double-click on a die: backdrop hit",
+    onBackdrop,
+    "dialog open after the backdrop",
+    openAfterBackdrop,
+    "after the button",
+    openAfterButton,
+    "available dice",
+    availBefore,
+    "→",
+    availAfter,
+  );
+  if (!onBackdrop || !openAfterBackdrop || !openAfterButton)
+    debugFailures.push(
+      "the second click of a double-click on a die closed or answered its dialog",
+    );
+  if (availAfter !== availBefore)
+    debugFailures.push("the second click of a double-click spent the die");
+  if (await page.$(SEL.MODAL)) {
+    await page.click(SEL.ASK_OK);
+    await page.click(SEL.UNDO);
+  }
 }
 // Table card details and reminder, the die tap, undo, every modal, and a walk from another start point.
 async function exerciseTableCardsDiceUndoAndModals(page) {

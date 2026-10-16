@@ -1,7 +1,7 @@
 // Unit tests for the UI's pure logic (src/ui/, no DOM): the text helpers and glossary markup, the tracker's board
 // paths, tracker values, the storage wrappers and save loading, the row widgets, the phase tables, the trail and
-// result renderers, the card faces, the transfer helpers, and the tracker's act-then-ask path (Declared and a tracker
-// change) against a stand-in document. Exit 1 on any failure.
+// result renderers, the battle form's draft, the card faces, the transfer helpers, and the tracker's act-then-ask path
+// (Declared and a tracker change) against a stand-in document. Exit 1 on any failure.
 import * as fakeWindow from "./load.js";
 const engine = fakeWindow.QB,
   ui = fakeWindow.QB_UI,
@@ -356,6 +356,15 @@ function checkFocusKeys() {
     "modal controls (flow tabs, save slots) have focus keys too",
   );
   ok(
+    focusKey(
+      fakeElement({
+        attrs: { "data-gl": "mobile" },
+        dataset: { gl: "mobile" },
+      }),
+    ) === '[data-gl="mobile"]',
+    "a glossary entry is found again by its data-gl",
+  );
+  ok(
     focusKey(fakeElement({ attrs: { class: "x" } })) === null,
     "an element with no id and no identifying attribute has no key",
   );
@@ -412,6 +421,64 @@ function checkRenderBookkeeping() {
     "restoreScroll puts the trail back and leaves an unscrolled log alone",
   );
   fakeWindow.restoreScroll(root([]), scroll);
+}
+// The battle form's draft: a re-render shows the player's unsubmitted answers, the draft outlives a render of the same
+// prompt, and it goes once the battle form prompt does.
+function checkBattleFormDraft() {
+  const state = engine.newState({ cards: true, wome: true });
+  state.phase = PHASE.P5;
+  engine.startBattle(state, 1);
+  ui.setState(state);
+  const draft = {
+    nazLead: 2,
+    shadowElite: false,
+    seElite: false,
+    isengardStronghold: false,
+    defInFs: false,
+    nearMoria: true,
+    figures: { corsairs: false, dunlendings: true, spiders: false },
+    underSiege: false,
+    attackingSiege: false,
+  };
+  const ticked = (html, id) =>
+    new RegExp('id="bf-' + id + '" [^>]*checked').test(html);
+  let html = fakeWindow.battleFormHTML(state.walk.prompt);
+  ok(
+    !ticked(html, "nearMoria") && html.includes('id="bf-nazLead" value="0"'),
+    "with no draft the battle form shows the recorded battle (none yet)",
+  );
+  fakeWindow.setBattleDraft(draft);
+  fakeWindow.settleBattleDraft();
+  html = fakeWindow.battleFormHTML(state.walk.prompt);
+  ok(
+    fakeWindow.battleDraft === draft &&
+      ticked(html, "nearMoria") &&
+      ticked(html, "f-dunlendings") &&
+      !ticked(html, "shadowElite") &&
+      html.includes('id="bf-nazLead" value="2"'),
+    "a re-render of the battle form keeps the draft and shows its answers",
+  );
+  engine.abandonWalk(state);
+  fakeWindow.settleBattleDraft();
+  ok(
+    fakeWindow.battleDraft === null,
+    "the draft is dropped once the battle form prompt is gone",
+  );
+  const other = engine.newState({ cards: true, wome: true });
+  other.phase = PHASE.P5;
+  engine.startBattle(other, 1);
+  fakeWindow.setBattleDraft(draft);
+  ui.setState(other);
+  ok(
+    fakeWindow.battleDraft === null,
+    "the draft is dropped when another game, also at a battle form, replaces this one",
+  );
+  fakeWindow.setBattleDraft(draft);
+  ui.setState(null);
+  ok(
+    fakeWindow.battleDraft === null,
+    "the draft is dropped when the game is cleared for the New game screen",
+  );
 }
 // Saving into a slot writes the game with its turn and time under qb.slots (a fake localStorage as in checkStorage).
 function checkSlotSave() {
@@ -918,6 +985,7 @@ async function main() {
   checkStorage();
   checkFocusKeys();
   checkRenderBookkeeping();
+  checkBattleFormDraft();
   checkSlotSave();
   checkWidgets();
   checkPhaseTables();

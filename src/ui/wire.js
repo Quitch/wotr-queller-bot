@@ -13,7 +13,7 @@ import {
   spendDieClick,
   trackerValue,
 } from "./handlers.js";
-import { state } from "./session.js";
+import { setBattleDraft, state } from "./session.js";
 import {
   DEFAULT_STEP_LIMIT,
   STEP_LIMITS,
@@ -22,7 +22,10 @@ import {
   trackerChange,
 } from "./tracker.js";
 
-// Wiring: the handlers of the game screen's controls, attached after every render.
+// The second click of a double-click lands on whatever the first one rendered (the next prompt's button), so the
+// controls that move the game on ignore it (a modal the first click opened drops it itself, modals/framework.js). A
+// keyboard press is a click with detail 0.
+const isRepeatClick = (event) => event?.detail > 1;
 function wireHeader() {
   find("#undoBtn").onclick = undo;
   const newGameBtn = find("#newGameBtn");
@@ -37,24 +40,34 @@ function wireModalButtons() {
   );
 }
 function wirePhaseButtons() {
-  onClickEach("[data-phase]", (button) => onPhase(button.dataset.phase));
+  onClickEach("[data-phase]", (button, event) => {
+    if (!isRepeatClick(event)) onPhase(button.dataset.phase);
+  });
 }
 function wireAnswerButtons() {
-  onClickEach("[data-ans]", (button) => onAnswer(button.dataset.ans));
+  onClickEach("[data-ans]", (button, event) => {
+    if (!isRepeatClick(event)) onAnswer(button.dataset.ans);
+  });
 }
-// The battle form: its Nazgûl stepper and the button that starts the round.
+// The battle form: its Nazgûl stepper, the draft that keeps its answers across a re-render, and the button that starts
+// the round.
 function wireBattleForm() {
   const battleFormOk = find("#bfOk");
-  if (battleFormOk)
-    battleFormOk.onclick = () => {
-      const form = readBattleForm();
-      act(
-        () => {
-          engine.answer(state, form);
-        },
-        { action: "answer", prompt: PROMPT.BATTLE_FORM, value: form },
-      );
-    };
+  if (!battleFormOk) return;
+  battleFormOk.onclick = (event) => {
+    if (isRepeatClick(event)) return;
+    const form = readBattleForm();
+    act(
+      () => {
+        engine.answer(state, form);
+        setBattleDraft(null);
+      },
+      { action: "answer", prompt: PROMPT.BATTLE_FORM, value: form },
+    );
+  };
+  document.querySelectorAll(".bform input").forEach((input) => {
+    input.onchange = () => setBattleDraft(readBattleForm());
+  });
   onClickEach("[data-bs]", (button) => {
     const input = find("#bf-nazLead");
     const value = Math.max(
@@ -63,6 +76,7 @@ function wireBattleForm() {
     );
     input.value = value;
     find("#bf-nazLead-n").textContent = value;
+    setBattleDraft(readBattleForm());
   });
 }
 function wireDiceSpend() {

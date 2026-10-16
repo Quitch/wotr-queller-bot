@@ -94,7 +94,12 @@ export function afterWalk() {
     if (phase) state.phase = phase;
   }
 }
+// Opening Jump changes nothing in the game, so it is not an Undo step (and act's re-render would replace its opener).
 export function onPhase(id) {
+  if (id === PHASE_ACTION.JUMP_TO) {
+    openModal(MODAL.JUMP);
+    return;
+  }
   act(
     () => {
       if (id === PHASE_ACTION.ABANDON) {
@@ -123,10 +128,6 @@ export function onPhase(id) {
       if (id === PHASE_ACTION.BATTLE_2) {
         engine.startBattle(state, 2);
         afterWalk();
-        return;
-      }
-      if (id === PHASE_ACTION.JUMP_TO) {
-        openModal(MODAL.JUMP);
         return;
       }
       if (id === PHASE.SETUP) {
