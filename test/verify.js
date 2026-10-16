@@ -2058,13 +2058,13 @@ function messengerMusterDieActsAsArmyOncePerTurn() {
 // point; the die is spent after the second move, or when the second walk finds none. An attack uses the whole die, and a
 // Character die makes one move.
 function armyDieMovesTwoArmies() {
-  const armyWalk = (face, req, rules) => {
+  const armyWalk = (face, req, rules, start = "Army 4") => {
     const state = phase5State(
       { dice: true, cards: false, tracker: false, wome: false },
       STRATEGY.MILITARY,
     );
     state.dice.pool = [die(face)];
-    engine.startWalk(state, "AR", "Army 4", { die: req, dieIndex: 0 });
+    engine.startWalk(state, "AR", start, { die: req, dieIndex: 0 });
     const seen = driveWalk(state, rules);
     const moveAsks = seen.filter((prompt) => prompt?.text === "Move/Attack");
     return { state, moveAsks };
@@ -2119,6 +2119,89 @@ function armyDieMovesTwoArmies() {
   ok(
     character.moveAsks.length === 1 && !character.moveAsks[0].moveOrAttack,
     "a Character die makes one move",
+  );
+  const second = armyWalk("Army", DIE_REQUIREMENT.ARMY, [
+    toMove,
+    [/^Move\/Attack$/, "done"],
+  ]);
+  ok(
+    second.moveAsks.length === 2 &&
+      second.moveAsks[0].armyMove &&
+      !second.moveAsks[1].armyMove &&
+      !second.moveAsks[1].moveOrAttack &&
+      second.state.log.some((entry) =>
+        /^Queller: Move\/Attack \(first Army move\)\.$/.test(entry.text),
+      ),
+    "the second move offers neither another first move nor an attack, and the log names the first move",
+  );
+  const both = armyWalk("Army", DIE_REQUIREMENT.ARMY, [
+    toMove,
+    [/^Move\/Attack$/, "movedBoth"],
+  ]);
+  ok(
+    both.moveAsks.length === 1 &&
+      both.state.dice.pool[0].status === DIE_STATE.USED &&
+      both.state.walk.result === WALK_RESULT.ACTION &&
+      both.state.walk.trail.some(
+        (entry) => entry.answer === "moved two Armies",
+      ),
+    "“Moved two Armies” uses the die without a second walk",
+  );
+  // the first walk moves; the second finds a threat with an adjacent mobile Army, and skips the attack
+  let walkNumber = 0;
+  const secondWalkActions = [];
+  const noAttack = armyWalk(
+    "Army",
+    DIE_REQUIREMENT.ARMY,
+    [
+      {
+        test: (prompt) => /^\*Threat\* exists$/.test(prompt.text),
+        answer: () => ++walkNumber > 1,
+      },
+      [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+      {
+        test: (prompt) => prompt.type === PROMPT.ACTION,
+        answer: (prompt) => {
+          if (walkNumber > 1) secondWalkActions.push(prompt.text);
+          return walkNumber > 1 ? "no" : "done";
+        },
+      },
+      toMove,
+    ],
+    "Army",
+  );
+  ok(
+    walkNumber === 2 &&
+      !secondWalkActions.includes("Attack") &&
+      noAttack.state.walk.trail.some(
+        (entry) =>
+          entry.kind === TRAIL.SKIP &&
+          entry.text === "Attack" &&
+          /rule 9/.test(entry.why || ""),
+      ),
+    "on the second walk an Attack box is skipped: the die's second use is a move (" +
+      secondWalkActions.join() +
+      ")",
+  );
+  // after the first move the die has acted, so it cannot pay to remove a Free Peoples card (rule 19)
+  const moved = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  moved.dice.pool = [die("Army")];
+  engine.startWalk(moved, "AR", "Army 4", {
+    die: DIE_REQUIREMENT.ARMY,
+    dieIndex: 0,
+  });
+  for (let guard = 0; guard < 20 && !moved.walk.armyMoves; guard++)
+    engine.answer(
+      moved,
+      moved.walk.prompt.type === PROMPT.YES_NO ? true : "done",
+    );
+
+  ok(
+    moved.walk.armyMoves === 1 && moved.walk.dieUsed === true,
+    "the first Army move marks the die used, so a blocked second move cannot pay with it",
   );
 }
 // A walk started from the Jump modal holds no die: "Using a Character die and …" asks only about the die and checks the

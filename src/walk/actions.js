@@ -347,15 +347,25 @@ export function handleAction(state, node) {
     if (result !== FALL_THROUGH) return result;
   }
   if (isEndBox(label)) return endAction(state, walk);
+  if (walk.page === "AR" && walk.armyMoves && label === "Attack") {
+    trail(state, {
+      kind: TRAIL.SKIP,
+      text: label,
+      why: "the Army die has made a move: its second use is a move by another Army (rule 9)",
+    });
+    return exitAction(state);
+  }
   promptAction(state, node, label, {
     help: NODE.extra(node).help,
     ...armyMoveFlags(walk, label),
   });
 }
-// An Army die gives two moves by two different Armies (rule 9): on the Army page a move action is the first of them;
-// "Move/Attack" asks which it was, because an attack uses the whole die.
+// An Army die gives two moves by two different Armies (rule 9): on the Army page the first move action asks whether it
+// moved one Army (the second move follows) or two ("if both are not used for one condition"), and "Move/Attack" also
+// whether it attacked, which uses the whole die. The second move is a plain move.
 function armyMoveFlags(walk, label) {
   if (walk.page !== "AR" || walk.die !== DIE_REQUIREMENT.ARMY) return {};
+  if (walk.armyMoves) return {};
   if (label === "Move/Attack") return { armyMove: true, moveOrAttack: true };
   return label.startsWith("Move") ? { armyMove: true } : {};
 }
