@@ -9,6 +9,8 @@ import {
   exitJump,
   follow,
   goto,
+  heldDieGone,
+  releaseCurrentDie,
   setPrompt,
   trail,
 } from "./core.js";
@@ -77,13 +79,26 @@ function switchStrategy(state, walk, spec, label) {
   };
   follow(state, null);
 }
+const MUSTER_DIE_REQUIREMENTS = [
+  DIE_REQUIREMENT.MUSTER,
+  DIE_REQUIREMENT.CHAR_OR_MUSTER,
+  DIE_REQUIREMENT.ARMY,
+];
 function setDieAside(state, walk) {
   state.minionReserved = true;
   if (walk.dieIndex != null && state.settings.dice) {
     state.dice.pool[walk.dieIndex].status = engine.DIE_STATE.RESERVED;
   }
-  delete walk.dieAns[DIE_REQUIREMENT.MUSTER];
-  delete walk.dieAns[DIE_REQUIREMENT.CHAR_OR_MUSTER]; // the die the player said Queller had is no longer available
+  // with dice off the die set aside may be the Army/Muster die an Army answer or a page returned to relies on
+  for (const req of MUSTER_DIE_REQUIREMENTS) delete walk.dieAns[req];
+  if (!state.settings.dice)
+    for (const frame of walk.stack)
+      if (MUSTER_DIE_REQUIREMENTS.includes(frame.die))
+        Object.assign(frame, {
+          die: null,
+          dieIndex: null,
+          dieViaMessenger: false,
+        });
   engine.log(state, "Muster die set aside for a minion (rule 34).");
   trail(state, {
     kind: TRAIL.NOTE,
@@ -156,6 +171,7 @@ const JUMP_KIND = {
 // Grey box naming a page: enter it with the die it needs (or the die already held), or skip it.
 function jumpWithDie(state, spec, label) {
   const walk = state.walk;
+  if (heldDieGone(state)) releaseCurrentDie(state);
   if ((spec.held && walk.die) || engine.dieSatisfies(walk.die, spec.die)) {
     enterPage(state, spec, label);
     return;

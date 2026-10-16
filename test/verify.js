@@ -30,6 +30,11 @@ const die = (face, status) => ({
   face,
   status: status || DIE_STATE.AVAIL,
 });
+const factionDie = (face) => ({
+  kind: engine.DIE_KIND.FACTION,
+  face,
+  status: DIE_STATE.AVAIL,
+});
 // The answer a scenario gives when none of its rules match: No to every question, an empty battle form, "done" otherwise.
 function defaultAnswer(prompt) {
   if (engine.YES_NO_PROMPTS.includes(prompt.type)) return false;
@@ -197,6 +202,64 @@ function musterDieAskedAgainAfterReserve() {
   ).length;
   ok(asks >= 2, "Muster die asked again after the reserve (" + asks + " asks)");
 }
+// Rule 34: the Army/Muster die held for "Attack using Army die" is the Muster die the Muster page sets aside for a
+// minion; back on C5 the walk no longer holds it, so the move towards the target cannot spend it.
+function reservedDieIsNotSpentAsArmyDie() {
+  const rules = [
+    [/^Move can create/, false],
+    [/Will of the West/, true],
+    [/^Shadow under/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*(threat|target)\*$/, true],
+    [/^Attack using Army die$/, "no"],
+    [/not under siege and in a Nation At War/, true],
+    [/can move or attack towards closest/, true],
+    [/^Does Queller have a Character die/, false],
+    [/^Does Queller have/, true],
+  ];
+  const diceOn = phase5State({
+    dice: true,
+    cards: false,
+    tracker: true,
+    wome: false,
+  });
+  diceOn.board.nations.isengard = 0;
+  diceOn.dice.pool = [die("Army/Muster")];
+  engine.startPhase(diceOn, PHASE.P5);
+  driveWalk(diceOn, rules);
+  ok(
+    diceOn.dice.pool[0].status === DIE_STATE.RESERVED &&
+      diceOn.minionReserved &&
+      diceOn.walk.result !== WALK_RESULT.ACTION,
+    "dice on: the die set aside for a minion is not spent as the Army die (" +
+      diceOn.dice.pool[0].status +
+      ", " +
+      diceOn.walk.result +
+      ")",
+  );
+  const diceOff = phase5State({
+    dice: false,
+    cards: false,
+    tracker: true,
+    wome: false,
+  });
+  diceOff.board.nations.isengard = 0;
+  engine.startPhase(diceOff, PHASE.P5);
+  const seen = driveWalk(diceOff, rules);
+  const armyAsks = seen.filter(
+    (prompt) =>
+      prompt?.type === PROMPT.DIE_CHECK && /have an Army die/.test(prompt.text),
+  ).length;
+  ok(
+    diceOff.minionReserved && armyAsks === 2,
+    "dice off: after the Muster die is set aside, the Army die is asked about again (" +
+      armyAsks +
+      " asks)",
+  );
+  ok(
+    diceOff.log.some((entry) => /^Queller used an Army die/.test(entry.text)),
+    "dice off: the log says “an Army die”",
+  );
+}
 // dice on, tracker off: no ring without one in the minimal tracker; one ring used once
 function ringUsedOnceOnlyWhenHeld() {
   const stateWithEventAndMusterDice = () => {
@@ -309,6 +372,7 @@ function actionsUpdateTheTracker() {
     wome: true,
   });
   corsairsState.cards.factionHand = ["sa_Faction01"];
+  corsairsState.dice.pool = [factionDie("Recruit")];
   corsairsState.walk = null;
   engine.startWalk(corsairsState, "FA", "Recruit Faction", {
     die: DIE_REQUIREMENT.FACTION_RECRUIT,
@@ -324,6 +388,7 @@ function actionsUpdateTheTracker() {
     tracker: true,
     wome: false,
   });
+  witchKingState.dice.pool = [die("Muster")];
   witchKingState.walk = null;
   engine.startWalk(witchKingState, "CH", "Character 3 / Muster Witch-king", {
     die: DIE_REQUIREMENT.MUSTER,
@@ -340,6 +405,7 @@ function actionsUpdateTheTracker() {
     wome: true,
   });
   hillmenState.cards.factionHand = ["sa_Faction06"];
+  hillmenState.dice.pool = [factionDie("Play/Draw")];
   hillmenState.walk = null;
   engine.startWalk(hillmenState, "FA", "Play Faction Event", {
     die: DIE_REQUIREMENT.FACTION_PLAY,
@@ -743,6 +809,66 @@ function emptyEventDecksFallBack() {
       palantirEntries.some((entry) => /drew a Strategy card/.test(entry.text)),
     "the Palantír draws from the Strategy deck when the Character deck is empty",
   );
+}
+// The draw step before "Above full hand" (EV.drawPrefT, FA.drawT) with nothing to draw keeps the die, as the draw action
+// boxes do, rather than following its arrow to End; with cards off the step offers Not possible, which keeps it too.
+// The step is reached directly through a temporary arrow from the page's start.
+function drawStepWithNoCardKeepsTheDie() {
+  const drawStep = (page, start, from, to, req, face, cards) => {
+    const state = phase5State({ dice: true, cards, tracker: true, wome: true });
+    state.cards.decks.C = [];
+    state.cards.decks.S = [];
+    state.cards.decks.F = [];
+    state.cards.discards.F = [];
+    state.dice.pool = [
+      req === DIE_REQUIREMENT.EVENT ? die(face) : factionDie(face),
+    ];
+    state.walk = null;
+    let seen = [];
+    withTemporaryEdges(FLOW[page].edges, [[from, to]], () => {
+      engine.startWalk(state, page, start, { die: req, dieIndex: 0 });
+      seen = driveWalk(state, [byType(PROMPT.STEP, "no")]);
+    });
+    return { state, seen };
+  };
+  for (const [page, start, from, to, req, face] of [
+    ["EV", "Event", "start", "drawPrefT", DIE_REQUIREMENT.EVENT, "Event"],
+    [
+      "FA",
+      "Draw Faction Event",
+      "startDraw",
+      "drawT",
+      DIE_REQUIREMENT.FACTION_DRAW,
+      "Wild",
+    ],
+  ]) {
+    const cardsOn = drawStep(page, start, from, to, req, face, true);
+    ok(
+      cardsOn.state.dice.pool[0].status === DIE_STATE.AVAIL &&
+        cardsOn.state.walk.done &&
+        cardsOn.state.walk.result !== WALK_RESULT.ACTION,
+      page +
+        "." +
+        to +
+        ": with no card to draw the die is kept (" +
+        cardsOn.state.dice.pool[0].status +
+        ")",
+    );
+    const cardsOff = drawStep(page, start, from, to, req, face, false);
+    const step = cardsOff.seen.find((prompt) => prompt?.node === to);
+    ok(
+      !!step &&
+        engine.offersNotPossible(step) &&
+        cardsOff.state.dice.pool[0].status === DIE_STATE.AVAIL &&
+        cardsOff.state.walk.done,
+      page +
+        "." +
+        to +
+        ": with cards off the draw step offers Not possible, which keeps the die (" +
+        cardsOff.state.dice.pool[0].status +
+        ")",
+    );
+  }
 }
 // The tracker's table triggers: Worn with Sorrow and Toil asks like Flocks of Crebain; Wormtongue leaves when Saruman does.
 function wornWithSorrowAsksAndWormtongueOnSaruman() {
@@ -2440,6 +2566,39 @@ function exposedMoveFallsBackToCharacterDie() {
     "with the tracker showing no Nazgûl and no minion in play, the question is not asked",
   );
 }
+// A walk started from the Jump modal with a die (no pool index) holds a matching pool die and spends it; with no
+// matching die it holds none.
+function jumpModalDieComesFromThePool() {
+  const withDie = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  withDie.dice.pool = [die("Event"), die("Army/Muster")];
+  engine.startWalk(withDie, "AR", "Army", { die: DIE_REQUIREMENT.ARMY });
+  const heldIndex = withDie.walk.dieIndex;
+  driveWalk(withDie, [[/can move or attack towards closest/, true]]);
+  ok(
+    heldIndex === 1 &&
+      withDie.walk.result === WALK_RESULT.ACTION &&
+      withDie.dice.pool[1].status === DIE_STATE.USED &&
+      withDie.dice.pool[0].status === DIE_STATE.AVAIL,
+    "the Army die picked in the Jump modal is the pool's Army/Muster die, and the action spends it (" +
+      withDie.dice.pool[1].status +
+      ")",
+  );
+  const noMatch = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  noMatch.dice.pool = [die("Event")];
+  engine.startWalk(noMatch, "AR", "Army", { die: DIE_REQUIREMENT.ARMY });
+  ok(
+    noMatch.walk.die === null &&
+      noMatch.walk.dieIndex === null &&
+      noMatch.log.some((entry) => /no Army die available/.test(entry.text)),
+    "with no matching die in the pool the walk starts without one, and the log says so",
+  );
+}
 // A walk started from the Jump modal holds no die: "Using a Character die and …" asks only about the die and checks the
 // cards from the hand, and "Muster 3" claims a Muster die from the pool instead of carrying a die it does not hold.
 function walkWithoutADie() {
@@ -2486,6 +2645,7 @@ const SCENARIOS = [
   ["7.1", reservedMusterDieIsUsedOrSpent],
   ["7.1", twoReservedDiceBothUsed],
   ["7.2", musterDieAskedAgainAfterReserve],
+  ["7.2", reservedDieIsNotSpentAsArmyDie],
   ["ring", ringUsedOnceOnlyWhenHeld],
   ["6.1", militaryPhase5PlaysRevealedCardAndPalantirDraws],
   ["6.2", balrogOnTableOfferedAsDurinsBane],
@@ -2497,6 +2657,7 @@ const SCENARIOS = [
   ["7.3/7.4", battleOpenResetAndRunGuard],
   ["migrate", migrateUpgradesOldSaves],
   ["decks", emptyEventDecksFallBack],
+  ["decks", drawStepWithNoCardKeepsTheDie],
   ["dice", wildResultOnlyForFactionSteps],
   ["dice", ringMakesNoFactionDie],
   ["dice", messengerMusterDieActsAsArmyOncePerTurn],
@@ -2526,6 +2687,7 @@ const SCENARIOS = [
   ["rings", ringSettledAtTheNextBoldBox],
   ["rings", ringChangedHeldDieIsNotRestored],
   ["migrate", ringStateFromRevision2Migrates],
+  ["draft", jumpModalDieComesFromThePool],
   ["draft", walkWithoutADie],
 ];
 function main() {

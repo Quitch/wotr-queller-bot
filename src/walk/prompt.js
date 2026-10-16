@@ -26,10 +26,11 @@ export const YES_NO_PROMPTS = [
   PROMPT.DIE_CHECK,
   PROMPT.RING,
 ];
-// The prompts the player can answer with Not possible (rule 36): an action the app does not perform itself, or a move.
+// The prompts the player can answer with Not possible (rule 36): an action the app does not perform itself, a move, or
+// a draw step (both decks empty, rule 25).
 export const offersNotPossible = (prompt) =>
   (prompt.type === PROMPT.ACTION && !prompt.auto) ||
-  (prompt.type === PROMPT.STEP && !!prompt.move);
+  (prompt.type === PROMPT.STEP && (!!prompt.move || !!prompt.draw));
 // How a walk ended (walk.result); a walk that reached another start point ends with phaseResult(name).
 export const WALK_RESULT = {
   ACTION: "action",

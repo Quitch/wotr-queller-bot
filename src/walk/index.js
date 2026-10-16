@@ -13,6 +13,7 @@ export {
   CARD_CRITERIA_NODES,
   jumpSpec,
   DIE_REQUIREMENT_NAME,
+  dieWithArticle,
 } from "./jumps-table.js";
 export { startWalk, run } from "./run.js";
 export { abandonWalk } from "./core.js";
