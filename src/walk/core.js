@@ -32,8 +32,10 @@ const walkDieState = (options) => ({
   pendingDie: null,
   fromReserve: false,
   reservedDieIndex: null,
-  // the die held is a Muster die acting as an Army die with Messenger of the Dark Tower (rule 30)
+  // the die held is a Muster die acting as an Army die with Messenger of the Dark Tower (rule 30); with dice off, the
+  // player's answer to the Messenger question (null until asked)
   dieViaMessenger: false,
+  messengerAns: null,
   // an Army die on the Army page (rule 9): the start point it entered at, and the moves it has made (0 or 1)
   armyStart: null,
   armyMoves: 0,
