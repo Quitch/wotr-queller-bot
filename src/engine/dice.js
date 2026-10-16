@@ -1,5 +1,10 @@
 // The dice: recovering, the Hunt box, rolling, finding and spending a die, and the Elven Ring change.
-import { huntCap, minionInPlay, shadowFactionInPlay } from "./board.js";
+import {
+  huntCap,
+  minionInPlay,
+  shadowFactionInPlay,
+  takeRing,
+} from "./board.js";
 import {
   BASE_ACTION_DICE,
   DIE_KIND,
@@ -190,8 +195,8 @@ export function nonPreferredFirst(state, dice, count) {
   }
   return out;
 }
-// Elven Ring (rule 43): change one non-preferred available die to the required result. Returns {die, from} (the face it
-// showed), or null when no die is available.
+// Elven Ring (rule 43): change one non-preferred available die to the required result. Returns {die, from, taken} (the
+// face it showed and takeRing's count), or null when no die is available.
 export function ringChange(state, req) {
   const available = availableActionDice(state);
   if (!available.length) return null;
@@ -201,8 +206,7 @@ export function ringChange(state, req) {
   if (req === DIE_REQUIREMENT.CHAR_OR_MUSTER) face = FACE.CHARACTER;
   else if (isFactionRequirement(req)) face = FACE.WILD;
   die.face = face;
-  state.board.rings = Math.max(0, state.board.rings - 1);
-  state.ringUsedThisTurn = true;
+  const taken = takeRing(state);
   log(
     state,
     "Used an Elven Ring: changed a " +
@@ -213,5 +217,5 @@ export function ringChange(state, req) {
       state.board.rings +
       ".",
   );
-  return { die, from };
+  return { die, from, taken };
 }

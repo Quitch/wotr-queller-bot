@@ -118,10 +118,7 @@ function answerRing(state, prompt, value) {
     ringDeclined(state, prompt.req);
     return;
   }
-  const ringsBefore = state.board.rings;
-  state.board.rings = Math.max(0, state.board.rings - 1);
-  state.ringUsedThisTurn = true;
-  ringUsed(state, prompt.req, ringsBefore);
+  ringUsed(state, prompt.req, engine.takeRing(state));
   engine.log(
     state,
     "Elven Ring used to create " +
