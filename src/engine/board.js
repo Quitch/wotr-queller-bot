@@ -52,6 +52,18 @@ export function ringAvailable(state) {
     !state.ringUsedThisTurn && (!ringsKnown(state) || state.board.rings > 0)
   );
 }
+// Take an Elven Ring for this turn's use. Returns the rings taken off the count: 1, or 0 when the count is already 0
+// (an untracked count usually is). giveBackRing undoes it.
+export function takeRing(state) {
+  const taken = state.board.rings > 0 ? 1 : 0;
+  state.board.rings -= taken;
+  state.ringUsedThisTurn = true;
+  return taken;
+}
+export function giveBackRing(state, taken) {
+  state.board.rings += taken;
+  state.ringUsedThisTurn = false;
+}
 // Hunt box maximum (rulebook: the number of Companions, but always at least one) — rule 41 caps the flowchart allocations at it.
 export function huntCap(state) {
   return Math.max(1, state.board.fs.companions ?? 0);
