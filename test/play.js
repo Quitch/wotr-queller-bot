@@ -86,6 +86,9 @@ function actionDone(prompt) {
       : ["done", "movedBoth"],
   );
 }
+// The pool as problem reports show it: each die's face and status.
+export const poolText = (state) =>
+  JSON.stringify(state.dice.pool.map((die) => die.face + "/" + die.status));
 const onlyReservedDiceLeft = (state) =>
   state.settings.dice &&
   state.dice.pool.some((die) => die.status === DIE_STATE.RESERVED) &&
@@ -139,7 +142,7 @@ function answerPrompt(state, tag) {
 // Answer prompts at random until the walk is done, then do what the app does after a walk (afterWalk: the phase and
 // the open battle); false when it had to stop on a problem. The hooks run around every answer: onWalkStart(state, tag)
 // once, onPrompt(state, tag) before each answer and afterAnswer(state, tag, prompt) after it; onPrompt and afterAnswer
-// stop the walk by returning false.
+// stop the walk by returning false. onWalkEnd(state, tag) runs once the walk is done.
 function driveWalk(state, tag, hooks) {
   let prompts = 0;
   hooks.onWalkStart?.(state, tag);
@@ -156,6 +159,7 @@ function driveWalk(state, tag, hooks) {
       return false;
     }
   }
+  hooks.onWalkEnd?.(state, tag);
   engine.afterWalk(state);
   return true;
 }
@@ -190,8 +194,11 @@ function playSetup(state, tag, hooks) {
 }
 function playPhases1to4(state, tag, hooks) {
   for (const phase of [PHASE.P1, PHASE.P2, PHASE.P3, PHASE.P4]) {
+    const previousWalk = state.walk;
     engine.startPhase(state, phase);
-    if (state.walk && !driveWalk(state, tag + " " + phase, hooks)) return false;
+    // a phase that starts no walk (Phase 2 under the Military strategy) leaves the last one, already handled, in place
+    const walked = state.walk && state.walk !== previousWalk;
+    if (walked && !driveWalk(state, tag + " " + phase, hooks)) return false;
     hooks.afterPhase?.(state, tag + " " + phase);
   }
   return true;
@@ -227,9 +234,7 @@ function playPhase5(state, tag, hooks) {
           " left=" +
           left +
           " pool=" +
-          JSON.stringify(
-            state.dice.pool.map((die) => die.face + "/" + die.status),
-          ) +
+          poolText(state) +
           " last=" +
           state.walk.result,
       );

@@ -72,6 +72,7 @@ export function onPhase(id) {
   }
   act(
     () => {
+      const finishedBefore = state.walk?.done ? state.walk : null;
       if (id === PHASE_ACTION.ABANDON) {
         engine.abandonWalk(state);
         engine.log(state, "Walk abandoned.");
@@ -92,21 +93,21 @@ export function onPhase(id) {
       }
       if (id === PHASE_ACTION.BATTLE_1) {
         engine.startBattle(state, 1);
-        engine.afterWalk(state);
+        engine.afterWalk(state, finishedBefore);
         return;
       }
       if (id === PHASE_ACTION.BATTLE_2) {
         engine.startBattle(state, 2);
-        engine.afterWalk(state);
+        engine.afterWalk(state, finishedBefore);
         return;
       }
       if (id === PHASE.SETUP) {
         engine.startPhase(state, PHASE.SETUP);
-        engine.afterWalk(state);
+        engine.afterWalk(state, finishedBefore);
         return;
       }
       engine.startPhase(state, id);
-      engine.afterWalk(state);
+      engine.afterWalk(state, finishedBefore);
     },
     { action: "phase", id },
   );

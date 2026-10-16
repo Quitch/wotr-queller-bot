@@ -209,13 +209,24 @@ function checkWidgets() {
 function checkPhaseTables() {
   const phases = Object.values(PHASE),
     actions = Object.values(fakeWindow.PHASE_ACTION);
-  // afterWalk reads a walk's end point through the inverse of PHASE_LABEL, so every phase needs its own label
-  const phaseByLabel = Object.fromEntries(
-    Object.entries(engine.PHASE_LABEL).map(([phase, label]) => [label, phase]),
-  );
+  // a walk that ends at a phase's start point moves the game to that phase (afterWalk reads the end point's label)
+  const phaseAfterWalkTo = (phase) => {
+    const state = engine.newState({});
+    state.phase = phase === PHASE.P6 ? PHASE.P1 : PHASE.P6;
+    state.walk = {
+      done: true,
+      result: engine.phaseResult(engine.PHASE_LABEL[phase]),
+      entry: { page: "C14", start: "Phase 1" },
+    };
+    engine.afterWalk(state);
+    return state.phase;
+  };
+  const wrong = phases.filter((phase) => phaseAfterWalkTo(phase) !== phase);
   ok(
-    phases.every((phase) => Object.values(phaseByLabel).includes(phase)),
-    "PHASE_LABEL gives every phase a label of its own",
+    wrong.length === 0,
+    "a walk ending at each phase's label moves the game to that phase (" +
+      (wrong.join(", ") || "all match") +
+      ")",
   );
   ok(
     new Set(phases.concat(actions)).size === phases.length + actions.length,

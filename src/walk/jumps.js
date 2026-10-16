@@ -1,7 +1,7 @@
 // The grey boxes: enter another page with the die it needs, return from it, set a die aside, switch strategy, look for a ring use.
 import * as engine from "../engine/index.js";
 import { DIE_REQUIREMENT, FACE, TRAIL } from "../engine/index.js";
-import { NODE } from "../flow/index.js";
+import { FLOW, NODE } from "../flow/index.js";
 import {
   askBoardQuestion,
   doReturn,
@@ -135,14 +135,22 @@ function ringAnyJump(state, walk, spec, label) {
     walk.mode !== "ringAny" &&
     engine.ringAvailable(state) &&
     (!state.settings.dice || engine.availableActionDice(state).length > 0);
-  if (canUseRing) {
+  const entry = walk.entry;
+  // the entry comes from the saved game: a start point that is not on the page would make beginWalk throw at every try
+  const restartsAt =
+    FLOW[entry?.page] && typeof entry.start === "string"
+      ? findStart(entry.page, entry.start)
+      : null;
+  if (canUseRing && restartsAt) {
     trail(state, { kind: TRAIL.JUMP, text: label });
-    const entry = walk.entry;
     startWalk(state, entry.page, entry.start, { mode: "ringAny" });
     return;
   }
   let why = "no die to change";
-  if (state.ringUsedThisTurn) why = "an Elven Ring was already used this turn";
+  if (canUseRing)
+    why = "the walk's start point “" + entry?.start + "” is not on its page";
+  else if (state.ringUsedThisTurn)
+    why = "an Elven Ring was already used this turn";
   else if (engine.ringsKnown(state) && !state.board.rings)
     why = "no Elven Ring";
   trail(state, { kind: TRAIL.SKIP, text: label, why });

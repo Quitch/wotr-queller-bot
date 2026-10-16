@@ -62,9 +62,11 @@ const PHASE_BY_LABEL = Object.fromEntries(
   Object.entries(PHASE_LABEL).map(([phase, label]) => [label, phase]),
 );
 // After a walk ends: remember whether a battle is still open, and move the phase on when the walk reached the next start point.
-export function afterWalk(state) {
+// finishedBefore is the walk that was already done when the action began: a phase that starts no walk (Phase 2 under
+// the Military strategy) leaves it in place, and its end point must not be applied a second time.
+export function afterWalk(state, finishedBefore = null) {
   const walk = state.walk;
-  if (!walk?.done) return;
+  if (!walk?.done || walk === finishedBefore) return;
   const result = walk.result || "";
   if (walk.entry.page === "BA") {
     state.battleOpen = result === WALK_RESULT.BATTLE_NEXT;

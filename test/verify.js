@@ -989,6 +989,44 @@ function withFakeDocument(fn) {
     fakeWindow.QB_UI.setHistory([]);
   }
 }
+// A phase button that starts no walk (Phase 2 under the Military strategy) leaves the last walk in place: its end point
+// is not applied again, so the phase stays the one pressed and a finished battle round does not reopen the battle.
+function phaseWithoutAWalkKeepsThePhase() {
+  const ui = fakeWindow.QB_UI;
+  const military = () =>
+    phase5State(
+      { dice: false, cards: false, tracker: false, wome: false },
+      STRATEGY.MILITARY,
+    );
+  withFakeDocument(() => {
+    const state = military();
+    engine.startPhase(state, PHASE.P4);
+    driveWalk(state, []);
+    state.walk.result = engine.phaseResult("Phase 5");
+    engine.afterWalk(state);
+    const afterPhase4 = state.phase;
+    ui.setState(state);
+    fakeWindow.onPhase(PHASE.P2);
+    const battle = military();
+    engine.startBattle(battle, 1);
+    driveWalk(battle, []);
+    battle.walk.result = WALK_RESULT.BATTLE_NEXT;
+    battle.battleOpen = false;
+    ui.setState(battle);
+    fakeWindow.onPhase(PHASE.P2);
+    ok(
+      afterPhase4 === PHASE.P5 &&
+        state.phase === PHASE.P2 &&
+        battle.phase === PHASE.P2 &&
+        !battle.battleOpen,
+      "Phase 2 under Military stays Phase 2 after a walk that ended at Phase 5 (" +
+        state.phase +
+        "), and a finished battle round stays closed (" +
+        battle.battleOpen +
+        ")",
+    );
+  });
+}
 // Opening the Jump modal changes nothing in the game, so it is not an Undo step.
 function openingJumpAddsNoUndoStep() {
   const ui = fakeWindow.QB_UI;
@@ -3535,6 +3573,49 @@ function exposedMoveFallsBackToCharacterDie() {
     "with the tracker showing no Nazgûl and no minion in play, the question is not asked",
   );
 }
+// "Phase 5 (use an Elven Ring …)" restarts the walk from its entry, which comes from the saved game: an entry whose
+// start point is not on the page skips the jump with a reason instead of throwing at every answer.
+function ringJumpSkipsAStartPointThatIsGone() {
+  const walkToTheRingJump = (start) => {
+    const state = phase5State({
+      dice: true,
+      cards: false,
+      tracker: false,
+      wome: false,
+    });
+    state.dice.pool = [die("Event"), die("Muster")];
+    state.board.rings = 1;
+    engine.startPhase(state, PHASE.P5);
+    state.walk.entry.start = start;
+    let error = null;
+    try {
+      driveWalk(state, [
+        [/^Pass/, "no"],
+        byType(PROMPT.ACTION, "no"),
+        byType(PROMPT.STEP, "no"),
+      ]);
+    } catch (thrown) {
+      error = thrown;
+    }
+    const ringJump = state.walk.trail.find((entry) =>
+      /use an Elven Ring/.test(entry.text || ""),
+    );
+    return { state, error, ringJump };
+  };
+  const kept = walkToTheRingJump("Phase 5");
+  const gone = walkToTheRingJump("Phase 9");
+  ok(
+    kept.state.walk.mode === "ringAny" &&
+      !gone.error &&
+      gone.state.walk.mode !== "ringAny" &&
+      gone.state.walk.done &&
+      gone.ringJump?.kind === TRAIL.SKIP &&
+      /“Phase 9” is not on its page/.test(gone.ringJump.why),
+    "the ring jump restarts from a known entry, and skips one whose start point is gone (" +
+      (gone.error?.message || gone.ringJump?.why) +
+      ")",
+  );
+}
 // A start point that does not exist throws (so act() rolls the action back) and leaves the walk in progress alone,
 // instead of logging and letting a battle round's prompt land on the previous walk.
 function unknownStartPointThrows() {
@@ -3682,6 +3763,7 @@ const SCENARIOS = [
   ["6.7", callToBattleCardsIgnoreInitiative],
   ["7.3/7.4", battleOpenResetAndRunGuard],
   ["7.3/7.4", sideWalkKeepsTheBattleOpen],
+  ["ui", phaseWithoutAWalkKeepsThePhase],
   ["ui", openingJumpAddsNoUndoStep],
   ["ui", battleDraftSurvivesRendersNotANewGame],
   ["migrate", migrateUpgradesOldSaves],
@@ -3727,6 +3809,7 @@ const SCENARIOS = [
   ["rings", ringChangedHeldDieIsNotRestored],
   ["migrate", ringStateFromRevision2Migrates],
   ["draft", unknownStartPointThrows],
+  ["draft", ringJumpSkipsAStartPointThatIsGone],
   ["draft", jumpModalDieComesFromThePool],
   ["draft", walkWithoutADie],
 ];
