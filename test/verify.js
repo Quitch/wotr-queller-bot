@@ -1,6 +1,7 @@
 // Scripted scenarios for the behaviour fixed in version 52. Exit 1 on any failure.
 import { readFileSync } from "node:fs";
 import * as fakeWindow from "./load.js";
+import { seedRandom } from "./play.js";
 const engine = fakeWindow.QB,
   FLOW = fakeWindow.QB_FLOW,
   NODE = fakeWindow.QB_NODE,
@@ -49,6 +50,8 @@ const byType = (type, answer) => ({
   test: (prompt) => prompt.type === type,
   answer,
 });
+// No to every question whose text matches one of the patterns (for a strict walk, which answers nothing by default).
+const answerNo = (...patterns) => patterns.map((pattern) => [pattern, false]);
 function ruleAnswer(prompt, rules) {
   for (const rule of rules) {
     const [test, answer] = Array.isArray(rule)
@@ -65,17 +68,41 @@ function ruleAnswer(prompt, rules) {
   }
   return undefined;
 }
-// Answer prompts by the rules until the walk finishes; returns the prompts seen.
-function driveWalk(state, rules, maxPrompts = 80) {
+const promptWhere = (state) =>
+  state.walk ? " at " + state.walk.page + "." + state.walk.node : "";
+// Answer prompts by the rules until the walk finishes; returns the prompts seen. A walk that is not done after
+// maxPrompts fails the scenario. strict: a prompt no rule matches fails it too, so a rule whose node text has drifted
+// cannot leave the walk to the default answers.
+function driveWalk(state, rules, { strict = false, maxPrompts = 80 } = {}) {
   let guard = 0;
   const seen = [];
   while (state.walk && !state.walk.done && guard++ < maxPrompts) {
     const prompt = state.walk.prompt;
     seen.push(prompt);
     let answer = ruleAnswer(prompt, rules);
-    if (answer === undefined) answer = defaultAnswer(prompt);
+    if (answer === undefined) {
+      if (strict)
+        ok(
+          false,
+          "no rule answers the " +
+            prompt?.type +
+            " prompt “" +
+            String(prompt?.text).slice(0, 60) +
+            "”" +
+            promptWhere(state),
+        );
+      answer = defaultAnswer(prompt);
+    }
     engine.answer(state, answer);
   }
+  if (!state.walk?.done)
+    ok(
+      false,
+      "the walk is not done after " +
+        seen.length +
+        " prompts" +
+        promptWhere(state),
+    );
   return seen;
 }
 // A game at Phase 5 with the given settings and strategy; both hands start empty so a scenario deals exactly the cards it needs.
@@ -317,11 +344,27 @@ function ringUsedOnceOnlyWhenHeld() {
   const ringRules = [
     [/^Shadow under \*threat\*/, true],
     [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+    ...answerNo(
+      /^\*Mobile\* Army \*adjacent\* to \*target\*/,
+      /^\*Mobile\* Army’s route to closest/,
+      /^\*Threat\* is sieging/,
+      /^Can move towards \*exposed\*/,
+      /^Character cards > 0 and ANY condition/,
+      /^Conditions to muster a minion met/,
+      /^Fellowship in region which Nazgûl/,
+      /^Move can create \*mobile\* Army/,
+      /^Move can increase the \*value\*/,
+      /^Southrons & Easterlings not At War/,
+      /^Stronghold under \*threat\* is valid/,
+      /^Witch-king is in play and not in a/,
+    ),
+    [/^Pass$/, "done"],
+    [/^Attack using Character die$/, "done"],
   ];
   const noRingState = stateWithEventAndMusterDice();
   noRingState.board.rings = 0;
   engine.startPhase(noRingState, PHASE.P5);
-  driveWalk(noRingState, ringRules);
+  driveWalk(noRingState, ringRules, { strict: true });
   ok(
     !noRingState.ringUsedThisTurn &&
       !noRingState.log.some((entry) => /Elven Ring/.test(entry.text)),
@@ -330,7 +373,7 @@ function ringUsedOnceOnlyWhenHeld() {
   const oneRingState = stateWithEventAndMusterDice();
   oneRingState.board.rings = 1;
   engine.startPhase(oneRingState, PHASE.P5);
-  driveWalk(oneRingState, ringRules);
+  driveWalk(oneRingState, ringRules, { strict: true });
   ok(
     oneRingState.ringUsedThisTurn &&
       oneRingState.board.rings === 0 &&
@@ -3136,19 +3179,41 @@ function exposedMoveFallsBackToCharacterDie() {
     state.dice.pool = [die("Character")];
     setUp(state);
     engine.startPhase(state, PHASE.P5);
-    const seen = driveWalk(state, [
-      [/^Shadow under \*threat\*/, true],
-      [/^Can move towards \*exposed\*$/, true],
-      [/contain a Nazgûl or a minion/, hasNazgul],
-      // the threat moves are not for the Character die: this Yes must never be asked
-      [/^\*Threat\* exists$/, true],
-      [/^\*Exposed\* \*target\* exists$/, true],
-      [/^Does Queller have an Army die/, false],
-      [/^Does Queller have a Character die/, true],
-      [/^Move nearest Army towards/, "done"],
-      [/^Pass/, "no"],
-      byType(PROMPT.ACTION, "no"),
-    ]);
+    const seen = driveWalk(
+      state,
+      [
+        [/^Shadow under \*threat\*/, true],
+        [/^Can move towards \*exposed\*$/, true],
+        [/contain a Nazgûl or a minion/, hasNazgul],
+        // the threat moves are not for the Character die: this Yes must never be asked
+        [/^\*Threat\* exists$/, true],
+        [/^\*Exposed\* \*target\* exists$/, true],
+        [/^Does Queller have an Army die/, false],
+        [/^Does Queller have a Character die/, true],
+        [/^Move nearest Army towards/, "done"],
+        [/^Pass/, "no"],
+        byType(PROMPT.ACTION, "no"),
+        ...answerNo(
+          /^\*Mobile\* Army \*adjacent\* to \*t/,
+          /^\*Mobile\* Army with Leadership/,
+          /^\*Mobile\* Army’s route to closest/,
+          /^\*Playable\* Muster Strategy cards/,
+          /^\*Threat\* is sieging/,
+          /^Army \*aggressive\* against/,
+          /^Character cards > 0 and ANY condition/,
+          /^Conditions to muster a minion met/,
+          /^Holding a \*playable\* \*preferred\* card/,
+          /^Move can create \*mobile\* Army/,
+          /^Move can increase the \*value\*/,
+          /^Nazgûl or Witch-king in play/,
+          /^Southrons & Easterlings not At War/,
+          /^Stronghold under \*threat\* is valid/,
+          /^Using a Character die and holding a \*playable\* Character/,
+          /^Witch-king is in play and not in a/,
+        ),
+      ],
+      { strict: true },
+    );
     return { state, seen };
   };
   const characterJump = (state) =>
@@ -3273,9 +3338,14 @@ function walkWithoutADie() {
     STRATEGY.MILITARY,
   );
   engine.startWalk(event, "EV", "Event", {});
-  const asked = driveWalk(event, [
-    [/^Is Queller using a Character die$/, true],
-  ]).map((prompt) => prompt?.text || "");
+  const asked = driveWalk(
+    event,
+    [
+      [/^Is Queller using a Character die$/, true],
+      ...answerNo(/^Using an Event die/),
+    ],
+    { strict: true },
+  ).map((prompt) => prompt?.text || "");
   ok(
     asked.includes("Is Queller using a Character die") &&
       !asked.some((text) =>
@@ -3294,10 +3364,29 @@ function walkWithoutADie() {
   );
   army.dice.pool = [die("Muster")];
   engine.startWalk(army, "AR", "Army", {});
-  driveWalk(army, [
-    [/^Using an Army\/Muster die$/, true],
-    [/^Shadow is able to muster$/, true],
-  ]);
+  driveWalk(
+    army,
+    [
+      [/^Using an Army\/Muster die$/, true],
+      [/^Shadow is able to muster$/, true],
+      ...answerNo(
+        /^\*Exposed\* \*target\* exists/,
+        /^\*Mobile\* Army \*adjacent\* to \*target\*/,
+        /^\*Mobile\* Army can move or attack towards closest/,
+        /^\*Threat\* exists/,
+        /^Able to create an \*exposed\*/,
+        /^Army can move into Fellowship region/,
+        /^Army can move into a Free Peoples’ Settlement/,
+        /^Fellowship \*adjacent\* to Shadow Settlement/,
+        /^Less than six Nazgûl in play/,
+        /^Muster possible in region containing a Shadow Army/,
+        /^Two Shadow Armies able to merge/,
+      ),
+      [/^Muster$/, "done"],
+      byType(PROMPT.PRIORITY, "ok"),
+    ],
+    { strict: true },
+  );
   ok(
     army.walk.result === WALK_RESULT.ACTION &&
       army.dice.pool[0].status === DIE_STATE.USED,
@@ -3371,6 +3460,7 @@ const SCENARIOS = [
   ["draft", walkWithoutADie],
 ];
 function main() {
+  seedRandom(1);
   for (const [number, scenario] of SCENARIOS) {
     scenarioNumber = number;
     scenario();
