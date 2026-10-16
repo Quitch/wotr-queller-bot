@@ -25,6 +25,8 @@ export {
   DEFAULT_STEP_LIMIT,
   STEP_LIMITS,
   boardValue,
+  fellowshipDeclared,
+  trackerChange,
 } from "../src/ui/tracker.js";
 export { trackerValue } from "../src/ui/handlers.js";
 export { modalRegistrations, svgPage } from "../src/modals/index.js";
