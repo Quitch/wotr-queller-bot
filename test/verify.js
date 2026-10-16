@@ -334,21 +334,46 @@ function actionsUpdateTheTracker() {
     witchKingState.board.chars.witchKing === MINION_STATUS.IN_PLAY,
     'Witch-king in play after "Mustered Witch-king"',
   );
-  const hillmenState = phase5State({
+}
+// A WoME game at Phase 5 whose Faction hand holds only `id`, after the FA page has played it; `setUp` runs first.
+function playFactionCard(id, setUp = () => {}) {
+  const state = phase5State({
     dice: true,
     cards: true,
     tracker: true,
     wome: true,
   });
-  hillmenState.cards.factionHand = ["sa_Faction06"];
-  hillmenState.walk = null;
-  engine.startWalk(hillmenState, "FA", "Play Faction Event", {
+  state.cards.factionHand = [id];
+  setUp(state);
+  state.walk = null;
+  engine.startWalk(state, "FA", "Play Faction Event", {
     die: DIE_REQUIREMENT.FACTION_PLAY,
   });
-  driveWalk(hillmenState, [byType(PROMPT.CONFIRM, true)]);
+  driveWalk(state, [byType(PROMPT.CONFIRM, true)]);
+  return state;
+}
+// WoME rules: a Faction Event card played on a Faction not in play never brings it into play; a card that recruits
+// "or adds to the starting setup" puts its figures on the Faction card.
+function recruitCardKeepsFactionOutOfPlay() {
+  const hillmen = playFactionCard("sa_Faction06");
   ok(
-    hillmenState.board.factions.dunlendings === true,
-    "Wild Hillmen brought the Dunlendings into play",
+    hillmen.board.factions.dunlendings === false &&
+      hillmen.cards.discards.F.includes("sa_Faction06") &&
+      hillmen.log.some((entry) =>
+        /Dunlendings are not in play, so the recruited figures go on the Dunlendings Faction card/.test(
+          entry.text,
+        ),
+      ),
+    "Wild Hillmen leaves the Dunlendings out of play and puts the figures on the Faction card",
+  );
+  const fleet = playFactionCard("sa_Faction01", (state) => {
+    state.board.factions.corsairs = true;
+  });
+  ok(
+    fleet.board.factions.corsairs === true &&
+      fleet.cards.discards.F.includes("sa_Faction01") &&
+      !fleet.log.some((entry) => /Faction card/.test(entry.text)),
+    "A Great Fleet with the Corsairs in play recruits on the board: no Faction-card note",
   );
 }
 function lidlessEyeMovesDiceNotItsOwn() {
@@ -940,6 +965,102 @@ function emptyEventDecksFallBack() {
       engine.cardById[palantir.cards.hand[0]].deck === engine.DECK.STRATEGY &&
       palantirEntries.some((entry) => /drew a Strategy card/.test(entry.text)),
     "the Palantír draws from the Strategy deck when the Character deck is empty",
+  );
+}
+// Servants of Sauron, played from the hand: the top-up of a short Faction deck leaves the played card in the discards,
+// so it cannot draw itself; it joins the deck in the reshuffle after the draw.
+function servantsOfSauronCannotDrawItself() {
+  const servants = "sa_Faction18";
+  const state = playFactionCard(servants, (setUp) => {
+    setUp.cards.decks.F = ["sa_Faction03", "sa_Faction16"];
+    setUp.cards.discards.F = [];
+  });
+  ok(
+    state.cards.factionHand.length === 1 &&
+      state.cards.factionHand[0] !== servants &&
+      state.cards.decks.F.length === 2 &&
+      state.cards.decks.F.includes(servants) &&
+      state.cards.discards.F.length === 0 &&
+      state.walk.trail.some((entry) => /keep one of 2 cards/.test(entry.text)),
+    "Servants of Sauron looks at the two cards of the deck, not at itself, and is reshuffled into the deck after",
+  );
+}
+// WoME rules: the Faction Event deck is reshuffled from its discards as soon as it runs out, not at the next draw.
+function factionDeckReshuffledWhenItRunsOut() {
+  const state = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  state.cards.factionHand = [];
+  state.cards.discards.F = state.cards.decks.F.splice(1);
+  const discarded = state.cards.discards.F.length;
+  engine.drawCard(state, engine.DECK.FACTION);
+  ok(
+    state.cards.factionHand.length === 1 &&
+      state.cards.decks.F.length === discarded &&
+      state.cards.discards.F.length === 0 &&
+      /Reshuffled the Faction Event discards/.test(lastLogText(state)),
+    "drawing the last Faction Event card reshuffles the discards into a new deck at once",
+  );
+}
+// WoME rules: a Faction Event card that acts on its Faction's figures needs the Faction in play.
+function factionCardsNeedTheirFaction() {
+  const state = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  state.board.fs.inFPSettlement = false;
+  const playable = (ids) => ids.map((id) => engine.precondition(state, id));
+  const cards = [
+    "sa_Faction04",
+    "sa_Faction08",
+    "sa_Faction11",
+    "sa_Faction12",
+    "sa_Faction13",
+  ];
+  ok(
+    playable(cards).every((met) => met === false),
+    "Ships of Great Draught, Death to the Forgoil, The Craft of Shelob, Evil Things and Children of Ungoliant need their Faction",
+  );
+  state.board.factions.corsairs = true;
+  state.board.factions.dunlendings = true;
+  state.board.factions.spiders = true;
+  ok(
+    playable(cards).every((met) => met === true),
+    "with their Factions in play they are playable",
+  );
+  state.board.fs.inFPSettlement = true;
+  ok(
+    playable(["sa_Faction11", "sa_Faction12", "sa_Faction13"]).join() ===
+      "true,false,false",
+    "Evil Things and Children of Ungoliant still need the Fellowship outside a Free Peoples Settlement",
+  );
+}
+// WoME rules: a Faction Event card is an Event card, so the Palantír draws after an Event die plays one.
+function palantirDrawsAfterAFactionCard() {
+  const state = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  state.cards.table = [CARD.PALANTIR];
+  state.cards.factionHand = ["sa_Faction04"];
+  engine.playCard(state, "sa_Faction04");
+  const entries = engine.resolveCardEffects(state, "sa_Faction04", {
+    combat: false,
+    die: DIE_REQUIREMENT.EVENT,
+    palantirBefore: true,
+  });
+  ok(
+    state.cards.hand.length === 1 &&
+      engine.cardById[state.cards.hand[0]].deck === engine.DECK.CHARACTER &&
+      entries.some((entry) => /drew a Character card/.test(entry.text)),
+    "the Palantír draws a Character card after an Event die plays a Faction Event card",
   );
 }
 // The tracker's table triggers: Worn with Sorrow and Toil asks like Flocks of Crebain; Wormtongue leaves when Saruman does.
@@ -2915,6 +3036,7 @@ const SCENARIOS = [
   ["6.1", militaryPhase5PlaysRevealedCardAndPalantirDraws],
   ["6.2", balrogOnTableOfferedAsDurinsBane],
   ["6.3", actionsUpdateTheTracker],
+  ["faction", recruitCardKeepsFactionOutOfPlay],
   ["6.4", lidlessEyeMovesDiceNotItsOwn],
   ["6.4", lidlessEyeTopsUpToThree],
   ["6.5", huntMinimumAskedOnZeroDicePaths],
@@ -2925,6 +3047,10 @@ const SCENARIOS = [
   ["migrate", migrateUpgradesOldSaves],
   ["migrate", womeDecksLeaveOutReplacedCards],
   ["decks", emptyEventDecksFallBack],
+  ["faction", servantsOfSauronCannotDrawItself],
+  ["faction", factionDeckReshuffledWhenItRunsOut],
+  ["faction", factionCardsNeedTheirFaction],
+  ["faction", palantirDrawsAfterAFactionCard],
   ["dice", wildResultOnlyForFactionSteps],
   ["dice", ringMakesNoFactionDie],
   ["dice", messengerMusterDieActsAsArmyOncePerTurn],
