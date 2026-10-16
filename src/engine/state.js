@@ -10,6 +10,7 @@ import {
   PHASE,
   SHADOW_NATIONS,
   STARTING_COMPANIONS,
+  TRAIL,
   VERSION,
   FLOW_REV,
   FLOW_REV_1_MOVED_STEPS,
@@ -152,6 +153,28 @@ function migrateWalk(walk) {
   if (from < 3) migrateWalkFromRev2(walk);
   walk.flowRev = FLOW_REV;
 }
+// Fields a walk gained after version 61 (walkDieState in walk/core.js): a walk saved without them resumes with their
+// defaults, whatever its flowchart revision.
+function migrateWalkFields(walk) {
+  walk.armyMoves ??= 0;
+  walk.messengerAns ??= null;
+  walk.dieViaMessenger ??= false;
+  for (const frame of walk.stack || []) frame.dieViaMessenger ??= false;
+  if (walk.armyStart === undefined) walk.armyStart = savedArmyStart(walk);
+}
+// The start point a walk on (or returning to) the Army page entered it at: the last Army jump in its trail, else the
+// walk's own start. The pattern matches the trail text of the Army boxes of JUMPS in walk/jumps-table.js.
+const ARMY_JUMP = /^(Army(?: [2-4])?)(?: \(|$)/;
+function savedArmyStart(walk) {
+  const stack = walk.stack || [];
+  if (walk.page !== "AR" && !stack.some((frame) => frame.page === "AR"))
+    return null;
+  for (const entry of (walk.trail || []).slice().reverse()) {
+    const match = entry.kind === TRAIL.JUMP && ARMY_JUMP.exec(entry.text);
+    if (match) return match[1];
+  }
+  return walk.entry?.page === "AR" ? walk.entry.start : null;
+}
 // Revision 2 armed a ring for whatever die the next step needed (ringArmed); revision 3 keeps the dice rule 46 allows
 // ("any" is that same reading) and a ring use waiting for its die to be spent.
 function migrateWalkFromRev2(walk) {
@@ -188,8 +211,10 @@ export function migrate(save) {
   if (save.board?.nations) migrateNations(save.board.nations);
   if (save.board?.chars) migrateMinions(save.board.chars);
   if (save.board && save.board.rings === undefined) save.board.rings = 0;
-  if (save.walk && !save.walk.done && save.walk.flowRev !== FLOW_REV)
-    migrateWalk(save.walk);
+  if (save.walk && !save.walk.done) {
+    if ((save.walk.flowRev || 1) < FLOW_REV) migrateWalk(save.walk);
+    migrateWalkFields(save.walk);
+  }
   delete save.shownCard;
   delete save.lastAction;
   return save;

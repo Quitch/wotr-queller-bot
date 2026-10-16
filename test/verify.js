@@ -1,4 +1,5 @@
 // Scripted scenarios for the behaviour fixed in version 52. Exit 1 on any failure.
+import { readFileSync } from "node:fs";
 import * as fakeWindow from "./load.js";
 const engine = fakeWindow.QB,
   FLOW = fakeWindow.QB_FLOW,
@@ -1484,6 +1485,111 @@ function savedWalkFromReleasedFlowchartResumes() {
     "a finished walk from the released flowchart is kept",
   );
 }
+// test/fixtures/v61-army-walk.json is a game saved by version 61 (commit 10960ec) part-way through the Army page,
+// entered from M5's "Army" jump with an Army die: it resumes with the walk fields added since, and its Army die makes
+// both moves (rule 9). It was made with v61's own code: dice on, cards off, Military, one Army die, startPhase(P5),
+// then Yes to "Shadow under threat", No to "Mobile army adjacent", Yes to "Move can create" (the Character move is
+// skipped and jArmyT enters AR), saved at AR.threatEx.
+const V61_ARMY_WALK = readFileSync(
+  new URL("./fixtures/v61-army-walk.json", import.meta.url),
+  "utf8",
+);
+const V61_ARMY_RULES = [
+  [/adjacent\* to \*threat/, false],
+  byType(PROMPT.YES_NO, true),
+];
+function toArmyMove(state) {
+  for (
+    let guard = 0;
+    guard < 20 && state.walk.prompt.type !== PROMPT.ACTION;
+    guard++
+  )
+    engine.answer(state, ruleAnswer(state.walk.prompt, V61_ARMY_RULES));
+  return state.walk.prompt;
+}
+function answerWithoutThrowing(state, value) {
+  try {
+    engine.answer(state, value);
+    return true;
+  } catch (error) {
+    console.log("     threw:", error.message);
+    return false;
+  }
+}
+function version61ArmyWalkResumesAndEnds() {
+  const saved = JSON.parse(V61_ARMY_WALK);
+  ok(
+    saved.appVersion === 61 &&
+      saved.walk.page === "AR" &&
+      !("armyStart" in saved.walk) &&
+      !("flowRev" in saved.walk),
+    "the fixture is a version 61 walk on the Army page, without the fields added since",
+  );
+  const state = engine.migrate(JSON.parse(V61_ARMY_WALK));
+  const walk = state.walk;
+  ok(
+    walk.armyStart === "Army" &&
+      walk.armyMoves === 0 &&
+      walk.messengerAns === null &&
+      walk.dieViaMessenger === false &&
+      walk.stack.every((frame) => frame.dieViaMessenger === false) &&
+      walk.flowRev === engine.FLOW_REV,
+    "migrate gives the walk its Army start point (from the trail's Army jump) and the defaults of the newer fields",
+  );
+  const move = toArmyMove(state);
+  const answered = move.armyMove && answerWithoutThrowing(state, "done");
+  ok(
+    answered && state.walk.armyMoves === 1 && !state.walk.done,
+    "the first Army move of the resumed walk walks the Army page again for the second",
+  );
+  if (answered) {
+    toArmyMove(state);
+    engine.answer(state, "done");
+  }
+  ok(
+    state.walk.done &&
+      state.walk.result === WALK_RESULT.ACTION &&
+      state.dice.pool[0].status === DIE_STATE.USED,
+    "the resumed walk ends after the second move, with the Army die spent",
+  );
+  const back = engine.migrate(JSON.parse(V61_ARMY_WALK));
+  let returned = true;
+  try {
+    driveWalk(back, []);
+  } catch (error) {
+    console.log("     threw:", error.message);
+    returned = false;
+  }
+  ok(
+    returned && back.walk.done,
+    "answered No throughout, the resumed walk returns to M5 through its saved frame and ends",
+  );
+  const lost = engine.migrate(JSON.parse(V61_ARMY_WALK));
+  toArmyMove(lost);
+  lost.walk.armyStart = "Nowhere";
+  ok(
+    answerWithoutThrowing(lost, "done") &&
+      lost.walk.done &&
+      lost.dice.pool[0].status === DIE_STATE.USED,
+    "with an Army start point that does not exist, the move ends the walk and spends the die",
+  );
+  const fromArmy = JSON.parse(V61_ARMY_WALK);
+  fromArmy.walk.entry = { page: "AR", start: "Army 2" };
+  fromArmy.walk.trail = fromArmy.walk.trail.filter(
+    (entry) => entry.kind !== TRAIL.JUMP,
+  );
+  fromArmy.walk.stack = [];
+  ok(
+    engine.migrate(fromArmy).walk.armyStart === "Army 2",
+    "a walk that began on the Army page takes its own start point",
+  );
+  const newer = JSON.parse(V61_ARMY_WALK);
+  newer.walk.flowRev = engine.FLOW_REV + 1;
+  ok(
+    engine.migrate(newer).walk.flowRev === engine.FLOW_REV + 1,
+    "a walk from a newer flowchart keeps its revision",
+  );
+}
 // Draft flowchart: "Use Muster die set aside for minion" now comes before "Discard unplayable die". When Muster 2
 // finds nothing for the die brought back, that die is spent (rule 34); "Discard unplayable die" does not pick another.
 function reservedDieSpentBeforeDiscardingAnother() {
@@ -2515,6 +2621,7 @@ const SCENARIOS = [
   ["draft", noSetAsideDieFallsThroughToDiscard],
   ["draft", eventPageChecksTheDie],
   ["migrate", savedWalkFromReleasedFlowchartResumes],
+  ["migrate", version61ArmyWalkResumesAndEnds],
   ["draft", reservedDieSpentBeforeDiscardingAnother],
   ["draft", reservedDieSpentWithDiceOff],
   ["calc", captainOfTheWestCountsOnce],
