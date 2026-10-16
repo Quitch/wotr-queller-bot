@@ -132,7 +132,7 @@ export const BASE_CARDS = [
     onTable: true,
     cpre: "nazLead1",
     reminder:
-      "Discard it before a Hunt roll to add 1 to all dice on that roll (including re-rolls). The app asks whether to discard it when the tracker shows the Fellowship revealed in a Free Peoples settlement.",
+      "Discard it before a Hunt roll to add 1 to all dice on that roll (including re-rolls). When the Fellowship is declared in a City or Stronghold of a Free Peoples Nation, press Declared in the board tracker and the app asks whether that City or Stronghold is unconquered.",
   },
   {
     id: "sa010",
@@ -435,6 +435,7 @@ export const BASE_CARDS = [
     init: 3,
     pre: "isengardAtWar",
   },
+  // Not in any deck: see neverDealt in engine/state.js.
   {
     id: "sa028",
     set: "WoME-rev",
@@ -592,6 +593,7 @@ export const BASE_CARDS = [
     init: 3,
     pre: "seAtWar",
   },
+  // Not in any deck: see neverDealt in engine/state.js.
   {
     id: "sa038",
     set: "WoME-rev",
@@ -783,7 +785,7 @@ export const BASE_CARDS = [
     onTable: true,
     cpre: "isengardStronghold",
     reminder:
-      "Discarded automatically when a Free Peoples nation in the tracker advances from passive; when a nation goes to war the app asks whether an attack or a Companion caused it.",
+      "With the full board tracker, when a Free Peoples Nation advances on the Political Track the app asks whether an attack or a Companion’s special ability caused it; a Fellowship declaration, an enemy Army entering the Nation or a Muster die does not discard it.",
   },
   {
     id: "sa051",
@@ -820,6 +822,6 @@ export const BASE_CARDS = [
     onTable: true,
     cpre: "nazInBattle",
     reminder:
-      "When a Companion in the Fellowship is taken as a casualty, discard one Free Peoples Character Event card (random from the hand, or from the table). The app asks whether to discard it when the tracker shows the Fellowship revealed in a Free Peoples settlement.",
+      "When a Companion in the Fellowship is taken as a casualty, discard one Free Peoples Character Event card (random from the hand, or from the table). When the Fellowship is declared in a City or Stronghold of a Free Peoples Nation, press Declared in the board tracker and the app asks whether that City or Stronghold is unconquered.",
   },
 ];

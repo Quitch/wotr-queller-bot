@@ -741,14 +741,10 @@ function tableTriggersDiscardOrAsk() {
     to: FP_STANCE.ACTIVE,
   });
   ok(
-    !tableState.cards.table.includes(CARD.WORMTONGUE) && asks.length === 0,
-    "Wormtongue discarded when Rohan activates",
+    !tableState.cards.table.includes(CARD.WORMTONGUE) &&
+      asks.map((pending) => pending.card).join() === CARD.THREATS_AND_PROMISES,
+    "Wormtongue discarded when Rohan activates; only Threats and Promises asks",
   );
-  ok(
-    !tableState.cards.table.includes(CARD.THREATS_AND_PROMISES),
-    "Threats and Promises discarded on a passive→active advance",
-  );
-  tableState.cards.table.push(CARD.THREATS_AND_PROMISES);
   asks = engine.tableTriggers(tableState, {
     key: "nations.gondor",
     from: FP_STANCE.ACTIVE,
@@ -769,16 +765,86 @@ function tableTriggersDiscardOrAsk() {
     !tableState.cards.table.includes(CARD.PALANTIR),
     "Palantír discarded when Saruman is eliminated",
   );
-  tableState.board.fs.revealed = true;
-  tableState.board.fs.inFPSettlement = true;
-  asks = engine.tableTriggers(tableState, {
-    key: "fs.revealed",
-    from: false,
-    to: true,
-  });
+  asks = engine.fellowshipDeclared(tableState);
   ok(
     asks.length === 1 && asks[0].card === CARD.FLOCKS_OF_CREBAIN,
-    "Flocks of Crebain asked about when revealed in a Free Peoples settlement",
+    "Flocks of Crebain asked about when the Fellowship is declared",
+  );
+}
+// RULES-05: a declaration or an enemy Army activates a passive Nation without an attack, so Threats and Promises asks
+// on passive→active instead of discarding itself.
+function threatsAndPromisesAsksOnActivation() {
+  const tableState = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  tableState.cards.table = [CARD.THREATS_AND_PROMISES];
+  const asks = engine.tableTriggers(tableState, {
+    key: "nations.elves",
+    from: FP_STANCE.PASSIVE,
+    to: FP_STANCE.ACTIVE,
+  });
+  ok(
+    tableState.cards.table.includes(CARD.THREATS_AND_PROMISES) &&
+      asks.length === 1 &&
+      asks[0].card === CARD.THREATS_AND_PROMISES &&
+      /Fellowship declaration/.test(asks[0].q),
+    "Threats and Promises stays on the table and asks when a Nation goes from passive to active",
+  );
+}
+// RULES-03: a declaration leaves the Progress counter Hidden, so Flocks of Crebain and Worn with Sorrow and Toil ask on
+// the tracker's Declared button, with the figure in Rivendell (inFPSettlement already true), and not on Revealed.
+function declaringTheFellowshipAsksAboutTableCards() {
+  const declaredState = phase5State({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  declaredState.cards.table = [
+    CARD.FLOCKS_OF_CREBAIN,
+    CARD.WORN_WITH_SORROW,
+    CARD.THREATS_AND_PROMISES,
+  ];
+  ok(
+    engine.declarationMatters(declaredState),
+    "the Declared button is offered with Flocks of Crebain on the table",
+  );
+  const logBefore = declaredState.log.length;
+  const asks = engine.fellowshipDeclared(declaredState);
+  ok(
+    asks.map((pending) => pending.card).join() ===
+      [CARD.FLOCKS_OF_CREBAIN, CARD.WORN_WITH_SORROW].join() &&
+      asks.every((pending) =>
+        /is that City or Stronghold unconquered/.test(pending.q),
+      ) &&
+      declaredState.cards.table.length === 3 &&
+      !declaredState.board.fs.revealed,
+    "the Declared button asks whether the City or Stronghold is unconquered for Flocks of Crebain and Worn with Sorrow and Toil, discards nothing and leaves the Fellowship hidden",
+  );
+  ok(
+    declaredState.log.length === logBefore + 1 &&
+      /^Declared pressed: .*City or Stronghold of a Free Peoples Nation/.test(
+        declaredState.log.at(-1).text,
+      ) &&
+      !/unconquered/.test(declaredState.log.at(-1).text),
+    "the log records the button press, not whether the City or Stronghold was unconquered",
+  );
+  declaredState.cards.table = [CARD.THREATS_AND_PROMISES];
+  ok(
+    !engine.declarationMatters(declaredState),
+    "no Declared button without a card a declaration may discard",
+  );
+  declaredState.board.fs.revealed = true;
+  ok(
+    engine.tableTriggers(declaredState, {
+      key: "fs.revealed",
+      from: false,
+      to: true,
+    }).length === 0,
+    "ticking Revealed asks about neither card",
   );
 }
 // rule 24: Call to Battle cards ignore initiative
@@ -1040,6 +1106,52 @@ function migrateUpgradesOldSaves() {
   ok(
     JSON.stringify(engine.migrate(current)) === before,
     "a current save is unchanged by migrate",
+  );
+}
+// WoME setup: its Shadow Event cards replace Shelob's Lair, Corsairs of Umbar and Rage of the Dunlendings, so a new WoME
+// game deals none of them (nor the WoME-rev versions), and a WoME game saved with them in its draw decks loses them
+// there but keeps a copy already drawn: in hand, or in a discard pile, which is never reshuffled (rule 25). A base game
+// keeps the base cards.
+function womeDecksLeaveOutReplacedCards() {
+  const gone = ["sa034", "sa028", "sa038", "sa028b2", "sa038b2"];
+  const inPiles = (state) =>
+    Object.values(state.cards.decks)
+      .concat(Object.values(state.cards.discards))
+      .flat();
+  const fresh = engine.newState({ wome: true });
+  ok(
+    !inPiles(fresh).some((id) => gone.includes(id)),
+    "a new WoME game deals none of the cards WoME replaces",
+  );
+  const base = engine.newState({ wome: false });
+  ok(
+    ["sa034", "sa028b2", "sa038b2"].every((id) => inPiles(base).includes(id)) &&
+      !inPiles(base).some((id) => id === "sa028" || id === "sa038"),
+    "a base game deals Shelob's Lair and the base Corsairs and Rage",
+  );
+  const old = structuredClone(fresh);
+  old.cards.decks.C.push("sa034");
+  old.cards.decks.S.push("sa028");
+  old.cards.discards.S.push("sa038");
+  old.cards.hand.push("sa028");
+  const migrated = engine.migrate(old);
+  ok(
+    !Object.values(migrated.cards.decks)
+      .flat()
+      .some((id) => gone.includes(id)) &&
+      migrated.cards.hand.includes("sa028") &&
+      migrated.cards.discards.S.includes("sa038"),
+    "migrate takes the replaced cards out of a WoME game's draw decks, not its hand or discards",
+  );
+  const again = JSON.stringify(migrated);
+  ok(
+    JSON.stringify(engine.migrate(migrated)) === again,
+    "migrating the WoME decks twice changes nothing",
+  );
+  const baseBefore = JSON.stringify(base);
+  ok(
+    JSON.stringify(engine.migrate(base)) === baseBefore,
+    "migrate leaves a base game's decks alone",
   );
 }
 // Rule 25: an empty Character or Strategy deck is not rebuilt; the Event page draws from the other one, and with both
@@ -1365,13 +1477,7 @@ function wornWithSorrowAsksAndWormtongueOnSaruman() {
   });
   state.cards.table = [CARD.WORN_WITH_SORROW, CARD.WORMTONGUE];
   state.board.chars.saruman = MINION_STATUS.IN_PLAY;
-  state.board.fs.revealed = true;
-  state.board.fs.inFPSettlement = true;
-  const asks = engine.tableTriggers(state, {
-    key: "fs.inFPSettlement",
-    from: false,
-    to: true,
-  });
+  const asks = engine.fellowshipDeclared(state);
   ok(
     asks.length === 1 &&
       asks[0].card === CARD.WORN_WITH_SORROW &&
@@ -3370,12 +3476,15 @@ const SCENARIOS = [
   ["6.5", huntMinimumAskedOnZeroDicePaths],
   ["6.5", rule34CapsHuntAllocations],
   ["6.6", tableTriggersDiscardOrAsk],
+  ["6.6", threatsAndPromisesAsksOnActivation],
+  ["6.6", declaringTheFellowshipAsksAboutTableCards],
   ["6.7", callToBattleCardsIgnoreInitiative],
   ["7.3/7.4", battleOpenResetAndRunGuard],
   ["7.3/7.4", sideWalkKeepsTheBattleOpen],
   ["ui", openingJumpAddsNoUndoStep],
   ["ui", battleDraftSurvivesRendersNotANewGame],
   ["migrate", migrateUpgradesOldSaves],
+  ["migrate", womeDecksLeaveOutReplacedCards],
   ["decks", emptyEventDecksFallBack],
   ["decks", drawStepWithNoCardKeepsTheDie],
   ["faction", servantsOfSauronCannotDrawItself],

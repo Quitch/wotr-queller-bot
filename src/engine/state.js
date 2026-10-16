@@ -107,14 +107,18 @@ export function newState(settings) {
   buildDecks(state);
   return state;
 }
-// Whether a card goes into this game's decks: Call to Battle cards never do, WoME cards only with the expansion, and the two cards
-// that have a base-game and a WoME version (sa028/sa038 and their b2 twins) contribute whichever version applies.
+// The base cards WoME removes (its setup: Shelob's Lair, Corsairs of Umbar, Rage of the Dunlendings), replaced by its
+// three Shadow Event cards.
+const REPLACED_BY_WOME = new Set(["sa034", "sa028b2", "sa038b2"]);
+// The WoME-rev cards (revised Corsairs and Rage) are in no deck: the WoME setup replaces the base cards with the WoME
+// Shadow Event cards, and these revisions are not among them. Their data stays so that an older WoME game holding one
+// in hand or on the table still shows it.
+const neverDealt = (card) => card.set === "WoME-rev";
+// Whether a card goes into this game's decks: Call to Battle cards never do, WoME cards only with the expansion.
 function inDecks(card, wome) {
-  if (card.deck === DECK.CALL_TO_BATTLE) return false;
-  if (card.set === "WoME" && !wome) return false;
-  if (card.id === "sa028b2" || card.id === "sa038b2") return !wome;
-  if (card.id === "sa028" || card.id === "sa038") return wome;
-  return true;
+  if (card.deck === DECK.CALL_TO_BATTLE || neverDealt(card)) return false;
+  if (card.set === "WoME") return wome;
+  return !(wome && REPLACED_BY_WOME.has(card.id));
 }
 export function buildDecks(state) {
   const wome = state.settings.wome;
@@ -146,6 +150,19 @@ function migrateMinions(chars) {
       chars[key] = chars[key] ? MINION_STATUS.IN_PLAY : MINION_STATUS.AVAILABLE;
     else if (!statuses.has(chars[key])) chars[key] = MINION_STATUS.AVAILABLE;
   }
+}
+// A WoME game built before its decks followed the WoME setup dealt Shelob's Lair and the WoME-rev Corsairs and Rage:
+// they leave the Character and Strategy draw decks. Their discards are never reshuffled (rule 25), so a copy that was
+// drawn, and later played or discarded, stays where it is.
+function migrateWomeDecks(decks) {
+  const removed = new Set(
+    CARDS.filter(
+      (card) => neverDealt(card) || REPLACED_BY_WOME.has(card.id),
+    ).map((card) => card.id),
+  );
+  for (const deckKey of [DECK.CHARACTER, DECK.STRATEGY])
+    if (Array.isArray(decks[deckKey]))
+      decks[deckKey] = decks[deckKey].filter((id) => !removed.has(id));
 }
 // An unfinished walk from the released flowchart resumes on the new graph, so nothing it already did is done twice.
 function migrateWalk(walk) {
@@ -223,6 +240,8 @@ export function migrate(save) {
   if (save.board?.nations) migrateNations(save.board.nations);
   if (save.board?.chars) migrateMinions(save.board.chars);
   if (save.board && save.board.rings === undefined) save.board.rings = 0;
+  if (save.settings?.wome && save.cards?.decks)
+    migrateWomeDecks(save.cards.decks);
   if (save.walk && !save.walk.done) {
     if ((save.walk.flowRev || 1) < FLOW_REV) migrateWalk(save.walk);
     migrateWalkFields(save.walk);

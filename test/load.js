@@ -30,6 +30,8 @@ export {
   DEFAULT_STEP_LIMIT,
   STEP_LIMITS,
   boardValue,
+  fellowshipDeclared,
+  trackerChange,
 } from "../src/ui/tracker.js";
 export { onPhase, trackerValue } from "../src/ui/handlers.js";
 export { undo } from "../src/ui/actions.js";
