@@ -1,4 +1,7 @@
 {
+  "src": ["src"],
+  "all": true,
+  "exclude": ["test", "scripts", "build.js"],
   "lines": 92,
   "statements": 92,
   "functions": 91,
