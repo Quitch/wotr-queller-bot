@@ -2053,6 +2053,31 @@ function messengerMusterDieActsAsArmyOncePerTurn() {
       !musterAfter.messengerUsedThisTurn,
     "a Muster die given up as an Army die and then spent as a Muster die uses no Messenger",
   );
+  // dice off: after a No to the Army die, Messenger is its own question; a Yes and the attack use it for the turn
+  const diceOff = phase5State(
+    { dice: false, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  diceOff.board.chars.mouth = MINION_STATUS.IN_PLAY;
+  const messengerAsks = (attack) => {
+    engine.startPhase(diceOff, PHASE.P5);
+    return driveWalk(diceOff, [
+      [/^Shadow under \*threat\*/, true],
+      [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+      [/^Does Queller have a Muster die to use as an Army die/, true],
+      [/^Does Queller have/, false],
+      [/^Attack using Army die$/, attack],
+      [/^Pass/, "no"],
+      byType(PROMPT.ACTION, "no"),
+    ]).filter((prompt) => prompt?.messenger).length;
+  };
+  const firstAsks = messengerAsks("done");
+  const usedOff = diceOff.messengerUsedThisTurn;
+  const secondAsks = messengerAsks("done");
+  ok(
+    firstAsks === 1 && usedOff && secondAsks === 0,
+    "dice off: the Messenger question comes after a No to the Army die, and once used it is not asked again that turn",
+  );
 }
 // A walk started from the Jump modal holds no die: "Using a Character die and …" asks only about the die and checks the
 // cards from the hand, and "Muster 3" claims a Muster die from the pool instead of carrying a die it does not hold.

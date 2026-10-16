@@ -31,8 +31,10 @@ const walkDieState = (options) => ({
   pendingDie: null,
   fromReserve: false,
   reservedDieIndex: null,
-  // the die held is a Muster die acting as an Army die with Messenger of the Dark Tower (rule 30)
+  // the die held is a Muster die acting as an Army die with Messenger of the Dark Tower (rule 30); with dice off, the
+  // player's answer to the Messenger question (null until asked)
   dieViaMessenger: false,
+  messengerAns: null,
 });
 // Elven Ring state (rules 43-46, walk/rings.js): the dice a bold box lets a ring create, the box a limited use needs or
 // the question that picks the die (and its answer), whether the ring question was put to the player, and a ring use
