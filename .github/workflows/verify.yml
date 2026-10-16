@@ -29,11 +29,13 @@ jobs:
         id: sonar
         run: echo "token=${{ secrets.SONAR_TOKEN != '' }}" >> "$GITHUB_OUTPUT" # the expression is expanded to true or false, so the token never reaches the shell
       - name: SonarQube Cloud scan # waits for the quality gate (sonar.qualitygate.wait) and fails when it fails
+        id: scan
         if: steps.sonar.outputs.token == 'true'
         uses: SonarSource/sonarqube-scan-action@d209202bc7d53ff1cc128f7f907dac145c9d6ae9 # v8.3.0
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }} # this step only, so no npm package run by an earlier step can read it
       - name: Fuzz a seed that changes every run # last, so a seed failure never skips the build or the scan; npm test fuzzes seed 1, and the seed is printed so a failure can be rerun locally
+        if: ${{ !cancelled() && (success() || steps.scan.outcome == 'failure') }} # a failed quality gate still lets the seed run
         run: node test/fuzz.js $((GITHUB_RUN_ID % 2147483648))
   browser:
     name: Browser tests
