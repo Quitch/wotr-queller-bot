@@ -24,12 +24,10 @@ export {
   state,
   history,
   modal,
-  shownCard,
   battleDraft,
   setState,
   restoreState,
   setHistory,
   setModal,
-  setShownCard,
   setBattleDraft,
 } from "./session.js";
