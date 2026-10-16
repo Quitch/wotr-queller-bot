@@ -92,5 +92,9 @@ export {
   handCards,
 } from "./priority.js";
 export { CARD_EFFECTS, resolveCardEffects } from "./effects.js";
-export { fellowshipDeclared, tableTriggers } from "./triggers.js";
+export {
+  declarationMatters,
+  fellowshipDeclared,
+  tableTriggers,
+} from "./triggers.js";
 export { log } from "./log.js";

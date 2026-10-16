@@ -78,7 +78,12 @@ function wireTracker() {
     el.onchange = () => trackerChange(el.dataset.t, trackerValue(el));
   });
   const declaredBtn = find("#t-fs-declared");
-  if (declaredBtn) declaredBtn.onclick = fellowshipDeclared;
+  // once the last card it may discard is gone the button is too, so focus goes to the tracker heading, not the page
+  if (declaredBtn)
+    declaredBtn.onclick = () =>
+      fellowshipDeclared(() =>
+        (find("#t-fs-declared") || find("#h-track"))?.focus(),
+      );
 }
 function wireSteppers() {
   onClickEach("[data-step]", (button) => {

@@ -145,6 +145,7 @@ async function exerciseTrackerTriggers(page) {
   if (askDialog) await page.click(SEL.ASK_OK);
   state = await readState(page);
   console.log("after answer: table", JSON.stringify(state.cards.table));
+  await axeCheck(page, "tracker with the Declared row");
   await page.click(SEL.TRACKER_DECLARED);
   const flocksDialog = await page.$(SEL.MODAL);
   const flocksTitle = flocksDialog

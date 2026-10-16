@@ -52,30 +52,33 @@ const TABLE_TRIGGERS = [
       };
     },
   },
-  {
-    id: CARD.FLOCKS_OF_CREBAIN,
+  ...[
+    [CARD.FLOCKS_OF_CREBAIN, "Flocks of Crebain"],
+    [CARD.WORN_WITH_SORROW, "Worn with Sorrow and Toil"],
+  ].map(([id, title]) => ({
+    id,
     outcome: (state, change) =>
       change.key === FS_DECLARED
         ? {
-            ask: "Flocks of Crebain: was the Fellowship declared in an unconquered Free Peoples City or Stronghold?",
+            ask:
+              title +
+              ": is that City or Stronghold unconquered (never captured by the Shadow, or recaptured by the Free Peoples)?",
           }
         : null,
-  },
-  {
-    id: CARD.WORN_WITH_SORROW,
-    outcome: (state, change) =>
-      change.key === FS_DECLARED
-        ? {
-            ask: "Worn with Sorrow and Toil: was the Fellowship declared in an unconquered Free Peoples City or Stronghold?",
-          }
-        : null,
-  },
+  })),
 ];
-// The tracker's "declared" button: logs the declaration and returns the table cards to ask about.
+// The table cards a declaration may discard: the tracker shows its Declared button only while one of them is in play.
+export const declarationMatters = (state) =>
+  TABLE_TRIGGERS.some(
+    (trigger) =>
+      state.cards.table.includes(trigger.id) &&
+      trigger.outcome(state, { key: FS_DECLARED }),
+  );
+// The tracker's Declared button: logs what the player pressed and returns the table cards to ask about.
 export function fellowshipDeclared(state) {
   log(
     state,
-    "The Fellowship was declared in a Free Peoples City or Stronghold.",
+    "Declared pressed: the Fellowship was declared in a City or Stronghold of a Free Peoples Nation.",
   );
   return tableTriggers(state, { key: FS_DECLARED, from: false, to: true });
 }

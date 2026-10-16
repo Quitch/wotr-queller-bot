@@ -148,10 +148,12 @@ function minimalTrackerHTML() {
   if ((state.settings.cards || state.settings.dice) && state.settings.wome)
     html += minimalFactionsSectionHTML();
   if (state.settings.dice) html += huntSectionHTML();
+  if (engine.declarationMatters(state))
+    html += "<h3>Fellowship</h3>" + declaredRowHTML();
   if (state.settings.cards) html += situationalBlockHTML();
   if (!html) return "";
   return (
-    '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">minimal</span></h2>' +
+    '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track" tabindex="-1">Board tracker <span class="r">minimal</span></h2>' +
     trackerNoticeHTML() +
     '<div class="tracker">' +
     html +
@@ -163,10 +165,10 @@ const trackerNoticeHTML = () =>
   state.settings.cards
     ? '<p class="notice" style="margin:0 0 8px">A change here may ask whether a card on the table is discarded.</p>'
     : "";
-// A one-shot event, not a board field (the Progress counter stays Hidden): only the table cards it discards need it.
+// A one-shot event, not a board field (the Progress counter stays Hidden), shown while a table card it may discard is in play.
 const declaredRowHTML = () =>
-  state.settings.cards
-    ? '<div class="row"><span id="t-fs-declared-what">Fellowship declared in a Free Peoples City or Stronghold</span><button class="btn small" id="t-fs-declared" aria-describedby="t-fs-declared-what">Declared</button></div>'
+  engine.declarationMatters(state)
+    ? '<div class="row"><span id="t-fs-declared-what">Fellowship declared in a City or Stronghold of a Free Peoples Nation</span><button class="btn small" id="t-fs-declared" aria-describedby="t-fs-declared-what">Declared</button></div>'
     : "";
 const scoreSectionHTML = () =>
   "<h3>Score</h3>" +
@@ -213,7 +215,7 @@ const factionsSectionHTML = () =>
 export function trackerHTML() {
   if (!state.settings.tracker) return minimalTrackerHTML();
   return (
-    '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track">Board tracker <span class="r">answers what it can</span></h2>' +
+    '<section class="panel" aria-labelledby="h-track"><h2 class="ph" id="h-track" tabindex="-1">Board tracker <span class="r">answers what it can</span></h2>' +
     trackerNoticeHTML() +
     '<div class="tracker">' +
     scoreSectionHTML() +
@@ -258,27 +260,22 @@ export const STEP_LIMITS = {
   nazgul: [0, 8],
 };
 export const DEFAULT_STEP_LIMIT = [0, 99];
-// A tracker change: apply it and forget the cached card checks it may affect; returns the table cards whose discard
-// condition the app cannot judge itself (the questions to ask).
-function applyTrackerChange(path, value) {
+// Run a tracker action that may trigger table cards, then ask about each card it triggered.
+function actThenAsk(fn, info, onDone) {
   let asks = [];
-  const from = boardValue(path);
-  act(
-    () => {
-      setBoardValue(path, value);
-      if (/^(nations|chars|fs|factions)\./.test(path) || path === "rings")
-        state.playable = {};
-      asks = engine.tableTriggers(state, { key: path, from, to: value });
-    },
-    { action: "tracker", key: path, from, to: value },
-  );
-  return asks;
+  act(() => {
+    asks = fn();
+  }, info);
+  askAboutTriggeredCards(asks, onDone);
 }
 // Ask about each table card the change may have triggered, one dialog after another.
-function askAboutTriggeredCards(asks) {
+function askAboutTriggeredCards(asks, onDone) {
   const askNextTriggeredCard = () => {
     const pending = asks.shift();
-    if (!pending) return;
+    if (!pending) {
+      onDone?.();
+      return;
+    }
     ask({
       title: "Discard “" + cardById[pending.card].title + "”?",
       text: pending.q,
@@ -303,16 +300,25 @@ function askAboutTriggeredCards(asks) {
   };
   askNextTriggeredCard();
 }
+// A tracker change: apply it, forget the cached card checks it may affect, then ask about the table cards whose discard
+// condition the app cannot judge itself.
 export function trackerChange(path, value) {
-  askAboutTriggeredCards(applyTrackerChange(path, value));
-}
-export function fellowshipDeclared() {
-  let asks = [];
-  act(
+  const from = boardValue(path);
+  actThenAsk(
     () => {
-      asks = engine.fellowshipDeclared(state);
+      setBoardValue(path, value);
+      if (/^(nations|chars|fs|factions)\./.test(path) || path === "rings")
+        state.playable = {};
+      return engine.tableTriggers(state, { key: path, from, to: value });
     },
-    { action: "fellowshipDeclared" },
+    { action: "tracker", key: path, from, to: value },
   );
-  askAboutTriggeredCards(asks);
+}
+// The Declared button; onDone runs after the last question (the row is gone once its cards are).
+export function fellowshipDeclared(onDone) {
+  actThenAsk(
+    () => engine.fellowshipDeclared(state),
+    { action: "fellowshipDeclared" },
+    onDone,
+  );
 }

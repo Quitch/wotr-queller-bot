@@ -808,19 +808,34 @@ function declaringTheFellowshipAsksAboutTableCards() {
     CARD.WORN_WITH_SORROW,
     CARD.THREATS_AND_PROMISES,
   ];
+  ok(
+    engine.declarationMatters(declaredState),
+    "the Declared button is offered with Flocks of Crebain on the table",
+  );
   const logBefore = declaredState.log.length;
   const asks = engine.fellowshipDeclared(declaredState);
   ok(
     asks.map((pending) => pending.card).join() ===
       [CARD.FLOCKS_OF_CREBAIN, CARD.WORN_WITH_SORROW].join() &&
+      asks.every((pending) =>
+        /is that City or Stronghold unconquered/.test(pending.q),
+      ) &&
       declaredState.cards.table.length === 3 &&
       !declaredState.board.fs.revealed,
-    "the Declared button asks about Flocks of Crebain and Worn with Sorrow and Toil, discards nothing and leaves the Fellowship hidden",
+    "the Declared button asks whether the City or Stronghold is unconquered for Flocks of Crebain and Worn with Sorrow and Toil, discards nothing and leaves the Fellowship hidden",
   );
   ok(
     declaredState.log.length === logBefore + 1 &&
-      /Fellowship was declared/.test(declaredState.log.at(-1).text),
-    "the declaration is logged",
+      /^Declared pressed: .*City or Stronghold of a Free Peoples Nation/.test(
+        declaredState.log.at(-1).text,
+      ) &&
+      !/unconquered/.test(declaredState.log.at(-1).text),
+    "the log records the button press, not whether the City or Stronghold was unconquered",
+  );
+  declaredState.cards.table = [CARD.THREATS_AND_PROMISES];
+  ok(
+    !engine.declarationMatters(declaredState),
+    "no Declared button without a card a declaration may discard",
   );
   declaredState.board.fs.revealed = true;
   ok(
