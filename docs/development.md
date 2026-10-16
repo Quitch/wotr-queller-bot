@@ -14,7 +14,7 @@ The `overrides` in `package.json` lift two dev-only dependencies past advisories
 ## Scripts
 
 ```text
-npm run build           # bundle src/ into index.html (esbuild, minified with names kept; defines QB_BUILT with the UTC build time)
+npm run build           # bundle src/ into index.html (esbuild, minified with names kept; defines QB_BUILT and QB_COMMIT)
 npm run anchors         # regenerate src/flow/anchors.json from the draw.io flowchart (--check reports whether it is up to date)
 npm run verify          # all linters + all Node tests; run before committing
 npm run lint            # eslint + stylelint + markdownlint + prettier --check
@@ -44,7 +44,7 @@ A behaviour fix gets a scripted scenario in `test/verify.js`: a named function l
 
 ## The build
 
-`build.js` bundles `src/` with esbuild: it follows the imports from `src/main.js` and the `@import`s from `src/styles/index.css` and writes one stylesheet and one classic script (an IIFE, minified with function and class names kept so that stack traces in the debug log still name the function that threw) into `index.html`. `QB_BUILT` is defined into the script as the UTC build time; the debug log shows it. The page is published as a Claude Artifact, whose host adds the doctype, head and body, so the file is a body fragment that starts at `<title>`; it loads its two web fonts from Google Fonts. `index.html` is not tracked. `test/browser.js` wraps the fragment in a document with a UTF-8 charset to serve it to the Playwright scripts.
+`build.js` bundles `src/` with esbuild: it follows the imports from `src/main.js` and the `@import`s from `src/styles/index.css` and writes one stylesheet and one classic script (an IIFE, minified with function and class names kept so that stack traces in the debug log still name the function that threw) into `index.html`. `QB_BUILT` is defined into the script as the UTC build time and `QB_COMMIT` as the short hash of `HEAD`, with `-dirty` when a tracked file differs from it (untracked files do not count, as with `git describe --dirty`), or `null` when the build runs outside a git checkout; the debug log shows both, so a published page can be traced to the commit CI verified. The page is published as a Claude Artifact, whose host adds the doctype, head and body, so the file is a body fragment that starts at `<title>`; it loads its two web fonts from Google Fonts. `index.html` is not tracked. `test/browser.js` wraps the fragment in a document with a UTF-8 charset to serve it to the Playwright scripts.
 
 ## Continuous integration
 

@@ -22,6 +22,7 @@ import {
 // The errors this script raises on purpose, and the console line the app prints when it falls back to the setup screen.
 const DELIBERATE_ERROR = /smoke: deliberate|could not render the saved game/;
 const BUILD_TIME = /^\d{4}-\d\d-\d\dT\d\d:\d\dZ$/; // what build.js defines QB_BUILT as
+const COMMIT = /^[0-9a-f]{7,40}(-dirty)?$/; // QB_COMMIT: build.js runs in a git checkout here, so it is never null
 const AXE_FAILING_IMPACTS = ["serious", "critical"]; // axe-core violations that fail the run
 const debugFailures = [];
 // axe-core over the page as it stands; a serious or critical violation fails the run.
@@ -380,9 +381,16 @@ async function checkDebugLogExport(page) {
     log.dom.prompt !== undefined,
     "built",
     log.environment.built,
+    "commit",
+    log.environment.commit,
   );
   if (!BUILD_TIME.test(log.environment.built || ""))
     debugFailures.push("QB_BUILT was not defined into the bundle");
+  if (
+    !COMMIT.test(log.environment.commit || "") ||
+    log.app.commit !== log.environment.commit
+  )
+    debugFailures.push("QB_COMMIT was not defined into the bundle");
   await page.fill(SEL.DEBUG_REPORT, "smoke report");
   await page.dispatchEvent(SEL.DEBUG_REPORT, "change");
   log = await debugLog(page);

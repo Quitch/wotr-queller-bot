@@ -12,11 +12,16 @@ export default [
   },
   js.configs.recommended,
   {
-    // Browser sources: ES modules that build.js bundles into one classic <script>. QB_BUILT is defined by the bundler.
+    // Browser sources: ES modules that build.js bundles into one classic <script>. QB_BUILT and QB_COMMIT are defined
+    // by the bundler.
     files: ["src/**/*.js"],
     languageOptions: {
       sourceType: "module",
-      globals: { ...globals.browser, QB_BUILT: "readonly" },
+      globals: {
+        ...globals.browser,
+        QB_BUILT: "readonly",
+        QB_COMMIT: "readonly",
+      },
     },
   },
   {
