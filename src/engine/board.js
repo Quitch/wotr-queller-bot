@@ -52,8 +52,8 @@ export function ringAvailable(state) {
     !state.ringUsedThisTurn && (!ringsKnown(state) || state.board.rings > 0)
   );
 }
-// Take an Elven Ring for this turn's use. Returns the rings taken off the count: 1, or 0 when the count was not known
-// (it stays at 0). giveBackRing undoes it.
+// Take an Elven Ring for this turn's use. Returns the rings taken off the count: 1, or 0 when the count is already 0
+// (an untracked count usually is). giveBackRing undoes it.
 export function takeRing(state) {
   const taken = state.board.rings > 0 ? 1 : 0;
   state.board.rings -= taken;
