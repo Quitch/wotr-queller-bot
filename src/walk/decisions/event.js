@@ -6,8 +6,8 @@ import {
   answerAuto,
   answerByPlayableCount,
   ask,
-  characterHand,
   requiringDie,
+  decidePlayableCharacterCard,
 } from "./common.js";
 import { decidePlayableRevealedCard } from "./phase-5.js";
 
@@ -32,18 +32,6 @@ function decideEventDie(state, node, { walk }) {
       node,
       walk.die === DIE_REQUIREMENT.EVENT,
       "using " + dieWithArticle(walk.die) + " die",
-    );
-  ask(state, node);
-}
-// "… holding a *playable* Character card" (the die is checked by requiringDie).
-function decidePlayableCharacterCard(state, node, facts) {
-  if (facts.cardsOn)
-    return answerByPlayableCount(
-      state,
-      node,
-      characterHand(state),
-      "event",
-      "playable Character card",
     );
   ask(state, node);
 }
