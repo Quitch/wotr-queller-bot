@@ -306,15 +306,18 @@ function checkPromptTables() {
   for (const type of rendered)
     if (!types.includes(type)) fail("renderer for unknown prompt " + type);
 }
-// The walker's import cycles stay safe: each module under src/walk/ loads first, in a fresh process, without reading a
-// binding that a cycle has not yet initialised. The processes run side by side.
-async function checkWalkLoadsInAnyOrder() {
-  const walkDir = path.join(SRC_DIR, "walk");
-  const modules = fs
-    .readdirSync(walkDir, { recursive: true })
-    .filter((file) => file.endsWith(".js"));
+// The import cycles stay safe: each module under src/walk/, src/ui/ and src/modals/ loads first, in a fresh process,
+// without reading a binding that a cycle has not yet initialised. The processes run side by side.
+const LOAD_ORDER_DIRS = ["walk", "ui", "modals"];
+async function checkLoadsInAnyOrder() {
+  const modules = LOAD_ORDER_DIRS.flatMap((dir) =>
+    fs
+      .readdirSync(path.join(SRC_DIR, dir), { recursive: true })
+      .filter((file) => file.endsWith(".js"))
+      .map((file) => path.join(dir, file)),
+  );
   const loadFirst = async (file) => {
-    const url = pathToFileURL(path.join(walkDir, file)).href;
+    const url = pathToFileURL(path.join(SRC_DIR, file)).href;
     try {
       await promisify(execFile)(process.execPath, [
         "--input-type=module",
@@ -323,7 +326,7 @@ async function checkWalkLoadsInAnyOrder() {
       ]);
     } catch (error) {
       fail(
-        "src/walk/" +
+        "src/" +
           file.replaceAll(path.sep, "/") +
           " cannot load first: " +
           (error.stderr.match(/\w*Error: .*/) || [error.stderr])[0],
@@ -348,7 +351,7 @@ async function main() {
   const { terms, citations } = checkReferenceText();
   checkAnchors();
   checkPromptTables();
-  const walkModules = await checkWalkLoadsInAnyOrder();
+  const loadedFirst = await checkLoadsInAnyOrder();
   console.log(
     fails
       ? fails + " failure(s)"
@@ -361,8 +364,8 @@ async function main() {
           " rule citations, " +
           anchors.length +
           " anchor records, " +
-          walkModules +
-          " walker modules loaded first)",
+          loadedFirst +
+          " modules loaded first)",
   );
   process.exit(fails ? 1 : 0);
 }

@@ -90,13 +90,13 @@ function renderGame(state, tag) {
 // The modals that read the game: Settings, and the flowchart viewer opened on the walk's page (its SVG marks the walk).
 function renderGameModals(state, tag) {
   ui.setState(state);
-  const flow = fakeWindow.MODAL_REGISTRATIONS[ui.MODAL.FLOW];
+  const flow = fakeWindow.modalRegistrations()[ui.MODAL.FLOW];
   const modal = { name: ui.MODAL.FLOW, arg: { current: true } };
   try {
     flow.beforeRender(modal);
     checkNonEmptyHTML(flow.content(modal).body, "flowchart modal", tag);
     checkNonEmptyHTML(
-      fakeWindow.MODAL_REGISTRATIONS[ui.MODAL.SETTINGS].content({
+      fakeWindow.modalRegistrations()[ui.MODAL.SETTINGS].content({
         name: ui.MODAL.SETTINGS,
       }).body,
       "settings modal",
@@ -135,7 +135,7 @@ const ASK_SPECS = [
 ];
 function renderStatelessModals() {
   ui.setState(null);
-  const registrations = fakeWindow.MODAL_REGISTRATIONS;
+  const registrations = fakeWindow.modalRegistrations();
   ok(
     Object.values(ui.MODAL).every((name) => registrations[name]?.content),
     "every MODAL name has a registration with content()",

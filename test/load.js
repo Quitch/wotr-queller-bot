@@ -27,7 +27,7 @@ export {
   boardValue,
 } from "../src/ui/tracker.js";
 export { trackerValue } from "../src/ui/handlers.js";
-export { MODAL_REGISTRATIONS, svgPage } from "../src/modals/index.js";
+export { modalRegistrations, svgPage } from "../src/modals/index.js";
 export { armyValue } from "../src/modals/calc.js";
 export { route } from "../src/modals/flow/route.js";
 export { NODE_STYLE, SVG_COLOUR } from "../src/modals/flow/svg.js";
