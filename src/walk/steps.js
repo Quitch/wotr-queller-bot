@@ -3,9 +3,15 @@ import * as engine from "../engine/index.js";
 import { DECK, TRAIL, cardById } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
 import { drawStep, promptPlayCard } from "./actions.js";
-import { follow, setPrompt, trail } from "./core.js";
+import { askBoardQuestion, follow, setPrompt, trail } from "./core.js";
 import { normalizeText } from "./graph.js";
-import { FALL_THROUGH, PROMPT, STRATEGY_ROLL, isLowRoll } from "./prompt.js";
+import {
+  FALL_THROUGH,
+  PENDING,
+  PROMPT,
+  STRATEGY_ROLL,
+  isLowRoll,
+} from "./prompt.js";
 
 // A step the app performed itself: record it and move on.
 function continueStep(state, label, why) {
@@ -72,19 +78,54 @@ function discardChosenStep(state, node, { walk, cardsOn, label }) {
   walk.chosen = null;
   continueStep(state, label, "discarded “" + cardById[id].title + "”");
 }
-function rollHuntAllocationStep(state, node, { diceOn, label }) {
-  if (!diceOn) return promptStep(state, node, label);
-  const roll = engine.randomBelow(6) + 1;
-  const placed = isLowRoll(roll) ? 0 : 1;
-  engine.log(
+// The game minimum of 1 Hunt die (rulebook p.20: Fellowship dice were in the Hunt Box at the end of the previous turn),
+// asked once per node when the flowchart gives 0 dice; with dice off, `offStep` is the player's step when it does not
+// apply.
+const huntMinimumPart = (walk) => walk.page + "." + walk.node + ".huntMinimum";
+function zeroHuntDiceOrMinimum(state, node, facts, offStep) {
+  const { diceOn, label } = facts;
+  const minimum = askBoardQuestion(
     state,
-    "Rolled " + roll + " for the hunt allocation → " + placed + " dice.",
+    huntMinimumPart(state.walk),
+    "Did the Free Peoples take a die out of the Hunt Box in Phase 1",
   );
-  engine.assignHunt(state, placed);
-  continueStep(
-    state,
-    label,
-    "rolled " + roll + " → " + placed + " in the Hunt Box",
+  if (minimum === PENDING) return minimum;
+  if (minimum && !diceOn)
+    return promptStep(
+      state,
+      node,
+      "Assign 1 die to the Hunt Box (the game minimum after Free Peoples dice were in the Hunt Box).",
+    );
+  if (!diceOn) return offStep();
+  if (minimum) {
+    engine.assignHunt(state, 1);
+    return continueStep(state, label, "1 in the Hunt Box (the game minimum)");
+  }
+  engine.log(state, "No dice placed in the Hunt Box before rolling.");
+  continueStep(state, label, "0 in the Hunt Box");
+}
+// With dice off the player rolls, so the minimum is asked first (it makes the roll moot); with dice on, only after a
+// 1-3 (the answer re-runs this box, and the question is only ever open after a 1-3).
+function rollHuntAllocationStep(state, node, facts) {
+  const { walk, diceOn, label } = facts;
+  if (diceOn && !(huntMinimumPart(walk) in walk.parts)) {
+    const roll = engine.randomBelow(6) + 1;
+    const placed = isLowRoll(roll) ? 0 : 1;
+    engine.log(
+      state,
+      "Rolled " + roll + " for the hunt allocation → " + placed + " dice.",
+    );
+    if (placed) {
+      engine.assignHunt(state, placed);
+      return continueStep(
+        state,
+        label,
+        "rolled " + roll + " → " + placed + " in the Hunt Box",
+      );
+    }
+  }
+  return zeroHuntDiceOrMinimum(state, node, facts, () =>
+    promptStep(state, node, label),
   );
 }
 function huntMaxStep(state, node, { diceOn, label }) {
@@ -118,11 +159,8 @@ const huntFixedStep = (count) =>
         : undefined,
     );
   };
-function huntNoneStep(state, node, { diceOn, label }) {
-  if (!diceOn) return FALL_THROUGH;
-  engine.log(state, "No dice placed in the Hunt Box before rolling.");
-  continueStep(state, label);
-}
+const huntNoneStep = (state, node, facts) =>
+  zeroHuntDiceOrMinimum(state, node, facts, () => FALL_THROUGH);
 function rollRemainingStep(state, node, { diceOn, label }) {
   if (!diceOn)
     return promptStep(

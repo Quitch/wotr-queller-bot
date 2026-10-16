@@ -183,16 +183,20 @@ export function spendDie(state, die, why) {
   die.status = DIE_STATE.USED;
   log(state, "Used the " + die.face + " die" + (why ? " — " + why : "") + ".");
 }
-// rule 43 / 29 selection: at random from the dice that do not show a preferred result; from all dice if every die does
+// rule 43 / 29 selection: `count` dice at random, first from the dice that do not show a preferred result, then topped
+// up at random from the dice that do
 export function nonPreferredFirst(state, dice, count) {
   const preferredResults = preferredFaces(state);
-  let candidates = dice.filter((die) => !preferredResults.includes(die.face));
-  if (!candidates.length) candidates = dice.slice();
+  const groups = [
+    dice.filter((die) => !preferredResults.includes(die.face)),
+    dice.filter((die) => preferredResults.includes(die.face)),
+  ];
   const out = [];
-  while (out.length < count && candidates.length) {
-    const i = randomBelow(candidates.length);
-    out.push(candidates.splice(i, 1)[0]);
-  }
+  for (const candidates of groups)
+    while (out.length < count && candidates.length) {
+      const i = randomBelow(candidates.length);
+      out.push(candidates.splice(i, 1)[0]);
+    }
   return out;
 }
 // Elven Ring (rule 43): change one non-preferred available die to the required result. Returns {die, from, taken} (the
