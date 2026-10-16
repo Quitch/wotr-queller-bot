@@ -5,6 +5,7 @@ import { NODE } from "../flow/index.js";
 import { exitAction } from "./actions.js";
 import {
   cur,
+  doReturn,
   endWalk,
   follow,
   goto,
@@ -22,7 +23,7 @@ import {
   fpCardByKey,
   payForcedDiscard,
 } from "./forced.js";
-import { PROMPT, WALK_RESULT } from "./prompt.js";
+import { PROMPT, WALK_RESULT, isDrawStep } from "./prompt.js";
 import { ringDeclined, ringUsed } from "./rings.js";
 import { run } from "./run.js";
 
@@ -292,6 +293,14 @@ function answerPlayCard(state, prompt) {
 }
 function answerStep(state, prompt, value) {
   if (prompt.move && value === "no") return notPossible(state, prompt);
+  if (isDrawStep(prompt, state.walk) && value === "no") {
+    trail(state, {
+      kind: TRAIL.STEP,
+      text: prompt.text,
+      answer: "not possible: no card to draw (rule 25)",
+    });
+    return doReturn(state);
+  }
   trail(state, {
     kind: TRAIL.STEP,
     text: prompt.text,
