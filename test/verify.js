@@ -1530,7 +1530,11 @@ function reservedDieSpentWithDiceOff() {
       /sets aside the Muster die it had kept for a minion/.test(
         lastLogText(state),
       ) &&
-      !state.minionReserved,
+      state.log.some(
+        (entry) =>
+          entry.text ===
+          "Queller used a Muster die — set aside for a minion, no action possible.",
+      ),
     "the set-aside Muster die with no action is spent, and the walk is Queller's action",
   );
 }
