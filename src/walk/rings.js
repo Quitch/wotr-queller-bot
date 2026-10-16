@@ -36,7 +36,7 @@ const RING_RESULTS = {
     ask: { question: NAZGUL_OR_MINION, yes: CHARACTER, no: ARMY },
   },
 };
-const PHASE_5_PAGES = ["C5", "M5"];
+const PHASE_5_PAGES = new Set(["C5", "M5"]);
 // What a bold box arms; a main Phase 5 decision resets it. ringDeclined: the dice the player turned the ring down for.
 export const ringBoxState = () => ({
   ringDice: null,
@@ -49,7 +49,7 @@ export const ringBoxState = () => ({
 // turns back, held or not), and a Yes to a bold box arms the dice rule 46 gives it.
 export function armRing(state, key, isMainDecision, answer, ringCondition) {
   const walk = state.walk;
-  if (isMainDecision && PHASE_5_PAGES.includes(walk.page)) {
+  if (isMainDecision && PHASE_5_PAGES.has(walk.page)) {
     settleRing(state, true);
     Object.assign(walk, ringBoxState());
   }
