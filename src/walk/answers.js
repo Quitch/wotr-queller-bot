@@ -1,6 +1,6 @@
 // The player's answers: what each prompt type does with its value, then the walk goes on.
 import * as engine from "../engine/index.js";
-import { CARD, TRAIL, cardById } from "../engine/index.js";
+import { CARD, HAND, TRAIL, cardById } from "../engine/index.js";
 import { NODE } from "../flow/index.js";
 import { exitAction } from "./actions.js";
 import {
@@ -23,6 +23,7 @@ import {
   fpCardByKey,
   payForcedDiscard,
 } from "./forced.js";
+import { eventDiscardPriority } from "./priority.js";
 import { PROMPT, WALK_RESULT, isDrawStep } from "./prompt.js";
 import { ringDeclined, ringUsed } from "./rings.js";
 import { run } from "./run.js";
@@ -273,6 +274,17 @@ function secondArmyMove(state, walk, prompt) {
   follow(state, null);
   return true;
 }
+// A card effect can leave the Event hand above six (the Palantír's draw after a Faction Event card): Queller discards
+// down to it at once, by the Event page's discard priority (rule 16). Returns the text the player acts on, or "".
+function discardAboveHandLimit(state) {
+  const texts = engine
+    .autoDiscard(state, eventDiscardPriority(), HAND.EVENT)
+    .map(
+      (id) => "Discarded “" + cardById[id].title + "” (hand above the limit)",
+    );
+  for (const text of texts) trail(state, { kind: TRAIL.NOTE, text });
+  return texts.map((text) => " " + text + ".").join("");
+}
 function answerPlayCard(state, prompt) {
   const walk = state.walk;
   const palantirBefore = state.cards.table.includes(CARD.PALANTIR),
@@ -292,8 +304,13 @@ function answerPlayCard(state, prompt) {
     palantirBefore,
   }))
     trail(state, entry);
+  const discards = discardAboveHandLimit(state);
   if (prompt.combat) return follow(state, null);
-  endWalk(state, WALK_RESULT.ACTION, "Queller plays “" + card.title + "”.");
+  endWalk(
+    state,
+    WALK_RESULT.ACTION,
+    "Queller plays “" + card.title + "”." + discards,
+  );
 }
 function answerStep(state, prompt, value) {
   if (prompt.move && value === "no") return notPossible(state, prompt);

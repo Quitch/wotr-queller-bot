@@ -14,9 +14,8 @@ import {
   cardById,
   handCardsOfDeck,
 } from "../engine/index.js";
-import { NODE } from "../flow/index.js";
 import { endWalk, releaseCurrentDie, spendCurrentDie, trail } from "./core.js";
-import { nodeByKey } from "./priority.js";
+import { eventDiscardPriority } from "./priority.js";
 import { PROMPT, WALK_RESULT } from "./prompt.js";
 
 export const FP_PROTECTION_CARDS = [
@@ -96,7 +95,7 @@ export function payForcedDiscard(state, key, prompt) {
     armyCards = armyEventCards(state),
     characterCards = handCardsOfDeck(state, DECK.CHARACTER);
   if (!paying || !armyCards.length || !characterCards.length) return false;
-  const criteria = NODE.extra(nodeByKey("EV.discPri")).items;
+  const criteria = eventDiscardPriority();
   const army = engine.applyPriority(state, armyCards, criteria).chosen,
     character = engine.applyPriority(state, characterCards, criteria).chosen;
   const why = "to remove “" + fpCard.title + "” from the table";
