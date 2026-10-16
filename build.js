@@ -53,7 +53,8 @@ async function buildPage(builtAt, commit) {
 }
 
 // The short hash of HEAD, with "-dirty" when a tracked file differs from it or git cannot tell (untracked files are
-// left out, as git describe --dirty does); null outside a git checkout or without git.
+// left out, as git describe --dirty does); null outside a git checkout of this project (a source tree unpacked inside
+// another repository must not take that repository's commit) or without git.
 function commitStamp() {
   const git = (...args) =>
     execFileSync("git", args, {
@@ -63,6 +64,10 @@ function commitStamp() {
     }).trim();
   let hash;
   try {
+    if (
+      path.resolve(git("rev-parse", "--show-toplevel")) !== path.resolve(ROOT)
+    )
+      return null;
     hash = git("rev-parse", "--short", "HEAD");
   } catch {
     return null;
