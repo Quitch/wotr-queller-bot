@@ -1515,6 +1515,29 @@ function reservedDieSpentBeforeDiscardingAnother() {
       " wrong)",
   );
 }
+// Dice off: the set-aside Muster die that finds no action in Muster 2 is spent too, so the walk is an action.
+function reservedDieSpentWithDiceOff() {
+  const state = phase5State(
+    { dice: false, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.board.nations.isengard = 0;
+  state.minionReserved = true;
+  engine.startPhase(state, PHASE.P5);
+  driveWalk(state, [[/^Pass/, "no"], byType(PROMPT.ACTION, "no")]);
+  ok(
+    state.walk.result === WALK_RESULT.ACTION &&
+      /sets aside the Muster die it had kept for a minion/.test(
+        lastLogText(state),
+      ) &&
+      state.log.some(
+        (entry) =>
+          entry.text ===
+          "Queller used a Muster die — set aside for a minion, no action possible.",
+      ),
+    "the set-aside Muster die with no action is spent, and the walk is Queller's action",
+  );
+}
 // The army value calculator counts a Captain of the West once: he adds a combat die, not a point of his own.
 function captainOfTheWestCountsOnce() {
   const inputs = (extra) => ({
@@ -2416,6 +2439,7 @@ const SCENARIOS = [
   ["draft", eventPageChecksTheDie],
   ["migrate", savedWalkFromReleasedFlowchartResumes],
   ["draft", reservedDieSpentBeforeDiscardingAnother],
+  ["draft", reservedDieSpentWithDiceOff],
   ["calc", captainOfTheWestCountsOnce],
   ["rings", ringReturnedWhenItsStepIsNotPossible],
   ["rings", ringUsedOnlyWhereRule46Allows],
