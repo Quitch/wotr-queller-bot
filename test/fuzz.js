@@ -1,24 +1,45 @@
 // Random games across every setting combination (the driver is test/play.js): exceptions, walks left without a prompt,
-// runaway walks, card-count conservation and a game that would not load back from its save are reported; a seed
-// reproduces a run. Exit 1 on any problem.
+// runaway walks, card-count conservation over the whole game, the state invariants (dice, hand sizes, Elven Rings,
+// a finished walk's result, a Phase 5 action's die) and a game that would not load back from its save are reported;
+// a seed reproduces a run. Exit 1 on any problem.
 import crypto from "node:crypto";
 import { QB as engine } from "./load.js";
 import {
   SETTING_COMBINATIONS,
   game,
+  poolText,
   recordProblem,
   reportProblems,
   seedRandom,
   settingsFromBits,
 } from "./play.js";
-const { PROMPT, CARD_EFFECT } = engine;
+const {
+  PROMPT,
+  CARD_EFFECT,
+  DIE_KIND,
+  DIE_STATE,
+  FACE,
+  HAND,
+  HAND_LIMIT,
+  WALK_RESULT,
+} = engine;
 const cardById = engine.cardById;
-seedRandom(+process.argv[2] || 1);
-// --digest: print a sha256 over every final game state, so a refactor that
-// should not change behaviour can be checked against a recorded hash
-const wantDigest = process.argv.includes("--digest");
+// node test/fuzz.js [seed] [--digest], in either order; the seed is any integer (default 1) and is printed first, so a
+// failing run can be repeated. --digest prints a sha256 over every final game state, so a refactor that should not
+// change behaviour can be checked against a recorded hash.
+const args = process.argv.slice(2);
+const seedArgument = args.find((arg) => !arg.startsWith("--"));
+const seed = seedArgument === undefined ? 1 : Number(seedArgument);
+if (!Number.isInteger(seed)) {
+  console.log("the seed must be an integer, not " + seedArgument);
+  process.exit(1);
+}
+seedRandom(seed);
+console.log("seed:", seed);
+const wantDigest = args.includes("--digest");
 const digest = crypto.createHash("sha256");
 const GAMES_PER_SETTING = 25;
+const MAX_RINGS = 3;
 // How many cards the game holds in total, and how many distinct ones (a card duplicated or lost shows up in either).
 function cardTotals(state) {
   const cards = state.cards;
@@ -34,6 +55,11 @@ function cardTotals(state) {
 }
 const totalsText = (totals) => totals.count + ":" + totals.unique;
 const sameTotals = (a, b) => a.count === b.count && a.unique === b.unique;
+const lastLogText = (state) =>
+  state.log
+    .slice(-2)
+    .map((entry) => entry.text)
+    .join(" / ");
 // A walk that is not done must always be waiting on a prompt.
 function checkPromptPresent(state, tag) {
   if (state.walk.prompt) return true;
@@ -54,11 +80,12 @@ function checkPromptPresent(state, tag) {
 }
 // The played card's effect reshuffles the Faction deck, which may legitimately change the totals.
 const reshufflesFactionDeck = (prompt) =>
-  prompt.type === PROMPT.PLAY_CARD &&
+  prompt?.type === PROMPT.PLAY_CARD &&
   [CARD_EFFECT.SERVANTS, CARD_EFFECT.HIS_WILL].includes(
     cardById[prompt.card]?.effect,
   );
-// The card counts after an answer must match the ones before it (the totals expected are kept per walk).
+// The card counts must stay what the game started with (one running total per game, so a change between walks, in
+// nextTurn or startBattle, shows at the next check too).
 let expectedTotals = null;
 function checkCardConservation(state, tag, prompt) {
   const now = cardTotals(state);
@@ -69,13 +96,114 @@ function checkCardConservation(state, tag, prompt) {
   }
   recordProblem(
     "CARD TOTAL CHANGED " + totalsText(expectedTotals) + "->" + totalsText(now),
-    tag +
-      " " +
-      state.log
-        .slice(-2)
-        .map((entry) => entry.text)
-        .join(" / "),
+    tag + " " + lastLogText(state),
   );
+  expectedTotals = now;
+}
+const DIE_STATES = new Set(Object.values(DIE_STATE));
+const DIE_KINDS = new Set(Object.values(DIE_KIND));
+// The pool only changes size when the dice are recovered, which builds a new pool array.
+let expectedPool = { pool: null, size: 0 };
+// With dice on: the pool keeps its size, every die has a known kind and status, the Hunt count matches the dice in the
+// Hunt box, and a die is set aside for a minion exactly when minionReserved says so (rule 34).
+function checkDice(state, tag) {
+  if (!state.settings.dice) return;
+  const dice = state.dice;
+  const where = () =>
+    tag + " pool=" + poolText(state) + " " + lastLogText(state);
+  if (dice.pool !== expectedPool.pool)
+    expectedPool = { pool: dice.pool, size: dice.pool.length };
+  else if (dice.pool.length !== expectedPool.size)
+    recordProblem(
+      "DICE POOL SIZE CHANGED " + expectedPool.size + "->" + dice.pool.length,
+      where(),
+    );
+  if (
+    dice.pool.some(
+      (die) => !DIE_STATES.has(die.status) || !DIE_KINDS.has(die.kind),
+    )
+  )
+    recordProblem("DIE WITH UNKNOWN STATUS OR KIND", where());
+  if (
+    dice.pool.some(
+      (die) => die.status === DIE_STATE.HUNT && die.face !== FACE.EYE,
+    )
+  )
+    recordProblem("HUNT DIE NOT AN EYE", where());
+  const inHunt = dice.pool.filter(
+    (die) => die.status === DIE_STATE.HUNT,
+  ).length;
+  if (dice.hunt !== inHunt)
+    recordProblem(
+      "HUNT COUNT " + dice.hunt + " BUT " + inHunt + " DICE IN THE HUNT BOX",
+      where(),
+    );
+  const setAside = dice.pool.some((die) => die.status === DIE_STATE.RESERVED);
+  if (setAside !== !!state.minionReserved)
+    recordProblem(
+      "minionReserved " +
+        !!state.minionReserved +
+        " BUT A DIE SET ASIDE " +
+        setAside,
+      where(),
+    );
+}
+function checkRings(state, tag) {
+  const rings = state.board.rings;
+  if (!Number.isInteger(rings) || rings < 0 || rings > MAX_RINGS)
+    recordProblem("ELVEN RINGS OUT OF RANGE " + rings, tag);
+}
+// Checked when a walk is done (a draw step may go over the limit until its discard step): the hands are within the
+// limit, and the walk says how it ended.
+function checkWalkEnd(state, tag) {
+  const cards = state.cards;
+  if (cards.hand.length > HAND_LIMIT[HAND.EVENT])
+    recordProblem(
+      "EVENT HAND OVER THE LIMIT " + cards.hand.length,
+      tag + " " + lastLogText(state),
+    );
+  if (cards.factionHand.length > HAND_LIMIT[HAND.FACTION])
+    recordProblem(
+      "FACTION HAND OVER THE LIMIT " + cards.factionHand.length,
+      tag,
+    );
+  if (state.walk && !state.walk.result)
+    recordProblem(
+      "WALK DONE WITHOUT A RESULT",
+      tag + " " + state.walk.page + "." + state.walk.node,
+    );
+}
+const usableDice = (state) =>
+  state.dice.pool.filter(
+    (die) =>
+      die.status === DIE_STATE.AVAIL || die.status === DIE_STATE.RESERVED,
+  ).length;
+// The dice not yet spent when the last walk ended (the walks between two Phase 5 walks, battles, spend none).
+let usableAtLastWalkEnd = 0;
+// With dice on, a Phase 5 walk that ends with an action has spent a die: the driver refuses every Pass after 30 walks,
+// so a die an action forgot to spend would no longer show as a Phase 5 that never ends.
+function checkActionSpentADie(state, tag) {
+  const walk = state.walk,
+    usable = usableDice(state);
+  if (
+    state.settings.dice &&
+    walk?.result === WALK_RESULT.ACTION &&
+    walk.entry.page !== "BA" &&
+    engine.normalizeText(walk.entry.start) === "Phase 5" &&
+    usable >= usableAtLastWalkEnd
+  )
+    recordProblem(
+      "PHASE 5 ACTION SPENT NO DIE",
+      tag + " pool=" + poolText(state) + " " + lastLogText(state),
+    );
+  usableAtLastWalkEnd = usable;
+}
+// Every invariant; the problems are recorded, never returned, so a game always plays to its end.
+function checkState(state, tag, prompt) {
+  checkCardConservation(state, tag, prompt);
+  checkDice(state, tag);
+  checkRings(state, tag);
+  if (!state.walk || state.walk.done) checkWalkEnd(state, tag);
 }
 // The game as saved at a prompt must load back unchanged: migrate (and its validator) accept what the app writes.
 // Checked at every SAVE_CHECK_EVERY-th prompt (a counter, not the game's random numbers) and at the end of each game:
@@ -103,15 +231,20 @@ function checkSaveLoads(state, tag) {
   );
   return false;
 }
-// The invariants, checked around every answer of every walk.
+// The invariants, checked around every answer of every walk and after every phase.
 const INVARIANTS = {
-  onWalkStart: (state) => {
+  onGameStart: (state) => {
     expectedTotals = cardTotals(state);
+    expectedPool = { pool: null, size: 0 };
+    usableAtLastWalkEnd = 0;
   },
+  onWalkStart: (state, tag) => checkState(state, tag, null),
   onPrompt: (state, tag) =>
     checkPromptPresent(state, tag) &&
     (++promptsSeen % SAVE_CHECK_EVERY !== 0 || checkSaveLoads(state, tag)),
-  afterAnswer: checkCardConservation,
+  afterAnswer: checkState,
+  onWalkEnd: checkActionSpentADie,
+  afterPhase: (state, tag) => checkState(state, tag, null),
 };
 function main() {
   let gameNumber = 0;

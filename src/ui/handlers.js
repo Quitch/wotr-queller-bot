@@ -1,19 +1,10 @@
-// What the controls do: answers, die taps, phase buttons, table cards, and what follows a finished walk.
+// What the controls do: answers, die taps, phase buttons and table cards.
 import * as debug from "../debug.js";
 import * as engine from "../qb.js";
-import {
-  DIE_KIND,
-  DIE_STATE,
-  PHASE,
-  WALK_RESULT,
-  YES_NO_PROMPTS,
-  cardById,
-  phaseFromResult,
-} from "../qb.js";
+import { DIE_KIND, DIE_STATE, PHASE, YES_NO_PROMPTS, cardById } from "../qb.js";
 import { act } from "./actions.js";
 import { ask, openModal } from "./ask.js";
 import { MODAL } from "./constants.js";
-import { PHASE_BY_LABEL } from "./header.js";
 import { render } from "./render.js";
 import { setShownCard, shownCard, state } from "./session.js";
 import { PHASE_ACTION } from "./walkthrough.js";
@@ -27,7 +18,7 @@ export function onAnswer(answer) {
       let value = answer;
       if (YES_NO_PROMPTS.includes(prompt.type)) value = answer === "yes";
       engine.answer(state, value);
-      afterWalk();
+      engine.afterWalk(state);
     },
     {
       action: "answer",
@@ -73,27 +64,6 @@ export function spendDieClick(index) {
     },
   });
 }
-// After a walk ends: remember whether a battle is still open, and move the phase on when the walk reached the next start point.
-export function afterWalk() {
-  const walk = state.walk;
-  if (!walk?.done) return;
-  const result = walk.result || "";
-  if (walk.entry.page === "BA") {
-    state.battleOpen = result === WALK_RESULT.BATTLE_NEXT;
-  } else if (
-    result !== "" &&
-    engine.normalizeText(walk.entry.start) === "Phase 5"
-  ) {
-    // only Queller's next Phase 5 walk ends a battle: a walk from the Jump modal (a card's choice, rule 16) does not
-    state.battleOpen = false;
-  }
-  if (result === WALK_RESULT.STRATEGY) {
-    state.phase = PHASE.P1;
-  } else if (phaseFromResult(result)) {
-    const phase = PHASE_BY_LABEL[phaseFromResult(result)];
-    if (phase) state.phase = phase;
-  }
-}
 // Opening Jump changes nothing in the game, so it is not an Undo step (and act's re-render would replace its opener).
 export function onPhase(id) {
   if (id === PHASE_ACTION.JUMP_TO) {
@@ -102,6 +72,7 @@ export function onPhase(id) {
   }
   act(
     () => {
+      const finishedBefore = state.walk?.done ? state.walk : null;
       if (id === PHASE_ACTION.ABANDON) {
         engine.abandonWalk(state);
         engine.log(state, "Walk abandoned.");
@@ -122,21 +93,21 @@ export function onPhase(id) {
       }
       if (id === PHASE_ACTION.BATTLE_1) {
         engine.startBattle(state, 1);
-        afterWalk();
+        engine.afterWalk(state, finishedBefore);
         return;
       }
       if (id === PHASE_ACTION.BATTLE_2) {
         engine.startBattle(state, 2);
-        afterWalk();
+        engine.afterWalk(state, finishedBefore);
         return;
       }
       if (id === PHASE.SETUP) {
         engine.startPhase(state, PHASE.SETUP);
-        afterWalk();
+        engine.afterWalk(state, finishedBefore);
         return;
       }
       engine.startPhase(state, id);
-      afterWalk();
+      engine.afterWalk(state, finishedBefore);
     },
     { action: "phase", id },
   );

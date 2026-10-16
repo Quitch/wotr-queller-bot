@@ -85,16 +85,11 @@ function dieOptions(state, options) {
   );
   return { ...options, die: null };
 }
-// Create the walk at a start point without stepping it; returns false when the start point does not exist.
+// Create the walk at a start point without stepping it; throws when the start point does not exist.
 export function beginWalk(state, page, startName, options = {}) {
   const id = findStart(page, startName);
-  if (!id) {
-    engine.log(
-      state,
-      "No start point “" + startName + "” on " + FLOW[page].name,
-    );
-    return false;
-  }
+  if (!id)
+    throw new Error("No start point “" + startName + "” on " + FLOW[page].name);
   abandonWalk(state);
   state.walk = {
     ...walkPosition(page, id, startName, options),

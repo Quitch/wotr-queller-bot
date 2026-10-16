@@ -4,6 +4,7 @@ export {
   FLOW_REV,
   STRATEGY,
   PHASE,
+  PHASE_LABEL,
   DECK,
   HAND,
   HAND_LIMIT,

@@ -29,8 +29,8 @@ npm run reader          # the optional NVDA screen-reader check (Windows, headed
 Two scripts run by hand only:
 
 ```text
-node test/fuzz.js 7            # 400 random games with seed 7 across all 16 setting combinations; any seed works
-node test/fuzz.js 7 --digest   # also prints a sha256 of every final state: a refactor that preserves behaviour leaves it unchanged
+node test/fuzz.js 7            # 400 random games with seed 7 across all 16 setting combinations; any integer seed works, 0 included
+node test/fuzz.js 7 --digest   # (the arguments in either order) also prints a sha256 of every final state: a refactor that preserves behaviour leaves it unchanged
 node test/shot.js              # Playwright screenshots to test/shot-*.png, desktop plus phone portrait and landscape (build first)
 ```
 
@@ -38,9 +38,9 @@ Any test can be run on its own with `node test/<name>.js`.
 
 ## How the tests are built
 
-The tests are plain Node scripts with no test runner; each exits 1 on failure. The Node tests never touch the DOM: `test/load.js` is the one place they reach into `src/`, and every module under `ui/` and `modals/` imports without a DOM, so `test/render.js` builds the whole page and every modal's content in Node. Only the DOM wiring is left to the Playwright scripts, which `test/browser.js` serves the built page to. `test/play.js` is the random game driver `fuzz.js` and `render.js` share: a seeded `Math.random`, a random answer to every prompt, and hooks around every answer (`onWalkStart`, `onPrompt`, `afterAnswer`, `afterPhase`) for a test's own checks.
+The tests are plain Node scripts with no test runner; each exits 1 on failure. The Node tests never touch the DOM: `test/load.js` is the one place they reach into `src/`, and every module under `ui/` and `modals/` imports without a DOM, so `test/render.js` builds the whole page and every modal's content in Node. Only the DOM wiring is left to the Playwright scripts, which `test/browser.js` serves the built page to. `test/play.js` is the random game driver `fuzz.js` and `render.js` share: a seeded `Math.random`, a random answer to every prompt, the app's `afterWalk` after every walk, and hooks (`onGameStart`, `onWalkStart`, `onPrompt`, `afterAnswer`, `onWalkEnd`, `afterPhase`) for a test's own checks.
 
-A behaviour fix gets a scripted scenario in `test/verify.js`: a named function listed in `SCENARIOS`, typically `phase5State()` plus `driveWalk()` with `[pattern, answer]` rules that answer prompts by regex until the walk finishes. The fuzz test is the safety net for exceptions, walks left without a prompt and card-count conservation, and its `--digest` shows whether a change altered any game's outcome.
+A behaviour fix gets a scripted scenario in `test/verify.js`: a named function listed in `SCENARIOS`, typically `phase5State()` plus `driveWalk()` with `[pattern, answer]` rules that answer prompts by regex until the walk finishes (a walk that does not finish fails the scenario; `{ strict: true }` also fails a prompt no rule answers, for a scenario that asserts something did not happen). The fuzz test is the safety net for exceptions, walks left without a prompt, card-count conservation and the dice, hand, ring and walk-result invariants, and its `--digest` shows whether a change altered any game's outcome.
 
 ## The build
 

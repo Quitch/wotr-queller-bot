@@ -87,7 +87,18 @@ function checkCardCriteriaResolve(state) {
         fail(nodeKey + ': criterionTest cannot resolve "' + criterion + '"');
   }
 }
-// Every grey box has a JUMPS entry; every decision has two arrows; every non-action box has a way out.
+// The labels a decision's two arrows may carry: Yes and No, or one of them and an unlabelled arrow (taken for the
+// other answer, walk/graph.js edgeFor). Two Yes arrows would leave No with no arrow.
+const DECISION_LABELS = ["Yes,No", "Yes,", "No,"];
+function checkDecisionLabels(pageKey, nodeId, outEdges) {
+  const labels = outEdges
+    .map((edge) => EDGE.label(edge) ?? "")
+    .sort((a, b) => b.localeCompare(a))
+    .join(",");
+  if (!DECISION_LABELS.includes(labels))
+    fail(pageKey + "." + nodeId + ' has arrows labelled "' + labels + '"');
+}
+// Every grey box has a JUMPS entry; every decision has two arrows labelled Yes/No; every non-action box has a way out.
 function checkFlowchartShape() {
   for (const pageKey in FLOW)
     for (const nodeId in FLOW[pageKey].nodes) {
@@ -106,17 +117,47 @@ function checkFlowchartShape() {
             engine.normalizeText(NODE.text(node)) +
             '"',
         );
-      if (
-        (kind === NODE_KIND.DECISION || kind === NODE_KIND.FOLLOW_UP) &&
-        outEdges.length !== 2
-      )
-        fail(pageKey + "." + nodeId + " has " + outEdges.length + " arrows");
+      if (kind === NODE_KIND.DECISION || kind === NODE_KIND.FOLLOW_UP) {
+        if (outEdges.length === 2)
+          checkDecisionLabels(pageKey, nodeId, outEdges);
+        else
+          fail(pageKey + "." + nodeId + " has " + outEdges.length + " arrows");
+      }
       if (
         !outEdges.length &&
         ![NODE_KIND.ACTION, NODE_KIND.JUMP, NODE_KIND.NOTE].includes(kind)
       )
         fail(pageKey + "." + nodeId + " (" + kind + ") has no arrow out");
     }
+}
+// The start points the walker names in code: the phase walks and battle rounds (walk/phases.js) and "Muster 2" for a
+// die set aside for a minion (walk/actions.js, walk/jumps.js). beginWalk throws on one that does not exist.
+const CODE_START_POINTS = {
+  C14: ["Start of game", "Phase 1", "Phase 2", "Phase 3", "Phase 4"],
+  M14: ["Phase 1", "Phase 3", "Phase 4"],
+  C5: ["Phase 5"],
+  M5: ["Phase 5"],
+  BA: ["Battle", "Battle (next round)"],
+  MU: ["Muster 2"],
+};
+// Every start point a grey box's JUMPS entry or the code names exists on its page. Returns how many were checked.
+function checkStartPointsResolve() {
+  const named = [];
+  for (const pageKey in FLOW)
+    for (const nodeId in FLOW[pageKey].nodes) {
+      const node = FLOW[pageKey].nodes[nodeId];
+      const spec =
+        NODE.kind(node) === NODE_KIND.JUMP && engine.jumpSpec(NODE.text(node));
+      if (spec?.start)
+        named.push([spec.page, spec.start, pageKey + "." + nodeId]);
+    }
+  for (const page in CODE_START_POINTS)
+    for (const start of CODE_START_POINTS[page])
+      named.push([page, start, "code"]);
+  for (const [page, start, where] of named)
+    if (!FLOW[page] || !engine.findStart(page, start))
+      fail(where + ': no start point "' + start + '" on ' + page);
+  return named.length;
 }
 // The card's pre/cpre keys resolve (the engine throws on an unknown key).
 function checkCardPreconditions(state, card) {
@@ -378,6 +419,7 @@ async function main() {
   const nodeKeys = checkNodeKeysExist();
   checkCardCriteriaResolve(state);
   checkFlowchartShape();
+  const startPoints = checkStartPointsResolve();
   checkCardFlags(state);
   checkCardData();
   checkBuiltDecks();
@@ -391,6 +433,8 @@ async function main() {
       : "all checks passed (" +
           nodeKeys +
           " node keys, " +
+          startPoints +
+          " start points, " +
           terms +
           " glossary markers, " +
           citations +

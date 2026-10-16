@@ -1,6 +1,7 @@
 // Scripted scenarios for the behaviour fixed in version 52. Exit 1 on any failure.
 import { readFileSync } from "node:fs";
 import * as fakeWindow from "./load.js";
+import { seedRandom } from "./play.js";
 const engine = fakeWindow.QB,
   FLOW = fakeWindow.QB_FLOW,
   NODE = fakeWindow.QB_NODE,
@@ -54,6 +55,8 @@ const byType = (type, answer) => ({
   test: (prompt) => prompt.type === type,
   answer,
 });
+// No to every question whose text matches one of the patterns (for a strict walk, which answers nothing by default).
+const answerNo = (...patterns) => patterns.map((pattern) => [pattern, false]);
 function ruleAnswer(prompt, rules) {
   for (const rule of rules) {
     const [test, answer] = Array.isArray(rule)
@@ -70,17 +73,41 @@ function ruleAnswer(prompt, rules) {
   }
   return undefined;
 }
-// Answer prompts by the rules until the walk finishes; returns the prompts seen.
-function driveWalk(state, rules, maxPrompts = 80) {
+const promptWhere = (state) =>
+  state.walk ? " at " + state.walk.page + "." + state.walk.node : "";
+// Answer prompts by the rules until the walk finishes; returns the prompts seen. A walk that is not done after
+// maxPrompts fails the scenario. strict: a prompt no rule matches fails it too, so a rule whose node text has drifted
+// cannot leave the walk to the default answers.
+function driveWalk(state, rules, { strict = false, maxPrompts = 80 } = {}) {
   let guard = 0;
   const seen = [];
   while (state.walk && !state.walk.done && guard++ < maxPrompts) {
     const prompt = state.walk.prompt;
     seen.push(prompt);
     let answer = ruleAnswer(prompt, rules);
-    if (answer === undefined) answer = defaultAnswer(prompt);
+    if (answer === undefined) {
+      if (strict)
+        ok(
+          false,
+          "no rule answers the " +
+            prompt?.type +
+            " prompt “" +
+            String(prompt?.text).slice(0, 60) +
+            "”" +
+            promptWhere(state),
+        );
+      answer = defaultAnswer(prompt);
+    }
     engine.answer(state, answer);
   }
+  if (!state.walk?.done)
+    ok(
+      false,
+      "the walk is not done after " +
+        seen.length +
+        " prompts" +
+        promptWhere(state),
+    );
   return seen;
 }
 // A game at Phase 5 with the given settings and strategy; both hands start empty so a scenario deals exactly the cards it needs.
@@ -322,11 +349,27 @@ function ringUsedOnceOnlyWhenHeld() {
   const ringRules = [
     [/^Shadow under \*threat\*/, true],
     [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+    ...answerNo(
+      /^\*Mobile\* Army \*adjacent\* to \*target\*/,
+      /^\*Mobile\* Army’s route to closest/,
+      /^\*Threat\* is sieging/,
+      /^Can move towards \*exposed\*/,
+      /^Character cards > 0 and ANY condition/,
+      /^Conditions to muster a minion met/,
+      /^Fellowship in region which Nazgûl/,
+      /^Move can create \*mobile\* Army/,
+      /^Move can increase the \*value\*/,
+      /^Southrons & Easterlings not At War/,
+      /^Stronghold under \*threat\* is valid/,
+      /^Witch-king is in play and not in a/,
+    ),
+    [/^Pass$/, "done"],
+    [/^Attack using Character die$/, "done"],
   ];
   const noRingState = stateWithEventAndMusterDice();
   noRingState.board.rings = 0;
   engine.startPhase(noRingState, PHASE.P5);
-  driveWalk(noRingState, ringRules);
+  driveWalk(noRingState, ringRules, { strict: true });
   ok(
     !noRingState.ringUsedThisTurn &&
       !noRingState.log.some((entry) => /Elven Ring/.test(entry.text)),
@@ -335,7 +378,7 @@ function ringUsedOnceOnlyWhenHeld() {
   const oneRingState = stateWithEventAndMusterDice();
   oneRingState.board.rings = 1;
   engine.startPhase(oneRingState, PHASE.P5);
-  driveWalk(oneRingState, ringRules);
+  driveWalk(oneRingState, ringRules, { strict: true });
   ok(
     oneRingState.ringUsedThisTurn &&
       oneRingState.board.rings === 0 &&
@@ -890,7 +933,6 @@ function callToBattleCardsIgnoreInitiative() {
 // Between two combat rounds, a walk from the Jump modal (a card's choice, rule 16) leaves the battle open; Queller's
 // next Phase 5 walk closes it.
 function sideWalkKeepsTheBattleOpen() {
-  const ui = fakeWindow.QB_UI;
   const state = phase5State({
     dice: false,
     cards: false,
@@ -898,15 +940,14 @@ function sideWalkKeepsTheBattleOpen() {
     wome: false,
   });
   state.battleOpen = true;
-  ui.setState(state);
   engine.startWalk(state, "EV", "Event card discard");
   driveWalk(state, []);
-  ui.afterWalk();
+  engine.afterWalk(state);
   const sideWalk = state.walk.result,
     keptOpen = state.battleOpen;
   engine.startPhase(state, PHASE.P5);
   driveWalk(state, []);
-  ui.afterWalk();
+  engine.afterWalk(state);
   ok(
     !!sideWalk && keptOpen && state.walk.done && !state.battleOpen,
     "a Jump-modal walk (" +
@@ -952,6 +993,44 @@ function withFakeDocument(fn) {
     fakeWindow.QB_UI.setState(null);
     fakeWindow.QB_UI.setHistory([]);
   }
+}
+// A phase button that starts no walk (Phase 2 under the Military strategy) leaves the last walk in place: its end point
+// is not applied again, so the phase stays the one pressed and a finished battle round does not reopen the battle.
+function phaseWithoutAWalkKeepsThePhase() {
+  const ui = fakeWindow.QB_UI;
+  const military = () =>
+    phase5State(
+      { dice: false, cards: false, tracker: false, wome: false },
+      STRATEGY.MILITARY,
+    );
+  withFakeDocument(() => {
+    const state = military();
+    engine.startPhase(state, PHASE.P4);
+    driveWalk(state, []);
+    state.walk.result = engine.phaseResult("Phase 5");
+    engine.afterWalk(state);
+    const afterPhase4 = state.phase;
+    ui.setState(state);
+    fakeWindow.onPhase(PHASE.P2);
+    const battle = military();
+    engine.startBattle(battle, 1);
+    driveWalk(battle, []);
+    battle.walk.result = WALK_RESULT.BATTLE_NEXT;
+    battle.battleOpen = false;
+    ui.setState(battle);
+    fakeWindow.onPhase(PHASE.P2);
+    ok(
+      afterPhase4 === PHASE.P5 &&
+        state.phase === PHASE.P2 &&
+        battle.phase === PHASE.P2 &&
+        !battle.battleOpen,
+      "Phase 2 under Military stays Phase 2 after a walk that ended at Phase 5 (" +
+        state.phase +
+        "), and a finished battle round stays closed (" +
+        battle.battleOpen +
+        ")",
+    );
+  });
 }
 // Opening the Jump modal changes nothing in the game, so it is not an Undo step.
 function openingJumpAddsNoUndoStep() {
@@ -3736,19 +3815,41 @@ function exposedMoveFallsBackToCharacterDie() {
     state.dice.pool = [die("Character")];
     setUp(state);
     engine.startPhase(state, PHASE.P5);
-    const seen = driveWalk(state, [
-      [/^Shadow under \*threat\*/, true],
-      [/^Can move towards \*exposed\*$/, true],
-      [/contain a Nazgûl or a minion/, hasNazgul],
-      // the threat moves are not for the Character die: this Yes must never be asked
-      [/^\*Threat\* exists$/, true],
-      [/^\*Exposed\* \*target\* exists$/, true],
-      [/^Does Queller have an Army die/, false],
-      [/^Does Queller have a Character die/, true],
-      [/^Move nearest Army towards/, "done"],
-      [/^Pass/, "no"],
-      byType(PROMPT.ACTION, "no"),
-    ]);
+    const seen = driveWalk(
+      state,
+      [
+        [/^Shadow under \*threat\*/, true],
+        [/^Can move towards \*exposed\*$/, true],
+        [/contain a Nazgûl or a minion/, hasNazgul],
+        // the threat moves are not for the Character die: this Yes must never be asked
+        [/^\*Threat\* exists$/, true],
+        [/^\*Exposed\* \*target\* exists$/, true],
+        [/^Does Queller have an Army die/, false],
+        [/^Does Queller have a Character die/, true],
+        [/^Move nearest Army towards/, "done"],
+        [/^Pass/, "no"],
+        byType(PROMPT.ACTION, "no"),
+        ...answerNo(
+          /^\*Mobile\* Army \*adjacent\* to \*t/,
+          /^\*Mobile\* Army with Leadership/,
+          /^\*Mobile\* Army’s route to closest/,
+          /^\*Playable\* Muster Strategy cards/,
+          /^\*Threat\* is sieging/,
+          /^Army \*aggressive\* against/,
+          /^Character cards > 0 and ANY condition/,
+          /^Conditions to muster a minion met/,
+          /^Holding a \*playable\* \*preferred\* card/,
+          /^Move can create \*mobile\* Army/,
+          /^Move can increase the \*value\*/,
+          /^Nazgûl or Witch-king in play/,
+          /^Southrons & Easterlings not At War/,
+          /^Stronghold under \*threat\* is valid/,
+          /^Using a Character die and holding a \*playable\* Character/,
+          /^Witch-king is in play and not in a/,
+        ),
+      ],
+      { strict: true },
+    );
     return { state, seen };
   };
   const characterJump = (state) =>
@@ -3804,6 +3905,75 @@ function exposedMoveFallsBackToCharacterDie() {
     "with the tracker showing no Nazgûl and no minion in play, the question is not asked",
   );
 }
+// "Phase 5 (use an Elven Ring …)" restarts the walk from its entry, which comes from the saved game: an entry whose
+// start point is not on the page skips the jump with a reason instead of throwing at every answer.
+function ringJumpSkipsAStartPointThatIsGone() {
+  const walkToTheRingJump = (start) => {
+    const state = phase5State({
+      dice: true,
+      cards: false,
+      tracker: false,
+      wome: false,
+    });
+    state.dice.pool = [die("Event"), die("Muster")];
+    state.board.rings = 1;
+    engine.startPhase(state, PHASE.P5);
+    state.walk.entry.start = start;
+    let error = null;
+    try {
+      driveWalk(state, [
+        [/^Pass/, "no"],
+        byType(PROMPT.ACTION, "no"),
+        byType(PROMPT.STEP, "no"),
+      ]);
+    } catch (thrown) {
+      error = thrown;
+    }
+    const ringJump = state.walk.trail.find((entry) =>
+      /use an Elven Ring/.test(entry.text || ""),
+    );
+    return { state, error, ringJump };
+  };
+  const kept = walkToTheRingJump("Phase 5");
+  const gone = walkToTheRingJump("Phase 9");
+  ok(
+    kept.state.walk.mode === "ringAny" &&
+      !gone.error &&
+      gone.state.walk.mode !== "ringAny" &&
+      gone.state.walk.done &&
+      gone.ringJump?.kind === TRAIL.SKIP &&
+      /“Phase 9” is not on its page/.test(gone.ringJump.why),
+    "the ring jump restarts from a known entry, and skips one whose start point is gone (" +
+      (gone.error?.message || gone.ringJump?.why) +
+      ")",
+  );
+}
+// A start point that does not exist throws (so act() rolls the action back) and leaves the walk in progress alone,
+// instead of logging and letting a battle round's prompt land on the previous walk.
+function unknownStartPointThrows() {
+  const state = phase5State({
+    dice: false,
+    cards: false,
+    tracker: false,
+    wome: false,
+  });
+  engine.startPhase(state, PHASE.P5);
+  const walkBefore = state.walk;
+  let error = null;
+  try {
+    engine.startWalk(state, "AR", "Army 9");
+  } catch (thrown) {
+    error = thrown;
+  }
+  ok(
+    /No start point “Army 9”/.test(error?.message) &&
+      state.walk === walkBefore &&
+      !walkBefore.done,
+    "an unknown start point throws and keeps the walk in progress (" +
+      error?.message +
+      ")",
+  );
+}
 // A walk started from the Jump modal with a die (no pool index) holds a matching pool die and spends it; with no
 // matching die it holds none.
 function jumpModalDieComesFromThePool() {
@@ -3847,9 +4017,14 @@ function walkWithoutADie() {
     STRATEGY.MILITARY,
   );
   engine.startWalk(event, "EV", "Event", {});
-  const asked = driveWalk(event, [
-    [/^Is Queller using a Character die$/, true],
-  ]).map((prompt) => prompt?.text || "");
+  const asked = driveWalk(
+    event,
+    [
+      [/^Is Queller using a Character die$/, true],
+      ...answerNo(/^Using an Event die/),
+    ],
+    { strict: true },
+  ).map((prompt) => prompt?.text || "");
   ok(
     asked.includes("Is Queller using a Character die") &&
       !asked.some((text) =>
@@ -3868,10 +4043,29 @@ function walkWithoutADie() {
   );
   army.dice.pool = [die("Muster")];
   engine.startWalk(army, "AR", "Army", {});
-  driveWalk(army, [
-    [/^Using an Army\/Muster die$/, true],
-    [/^Shadow is able to muster$/, true],
-  ]);
+  driveWalk(
+    army,
+    [
+      [/^Using an Army\/Muster die$/, true],
+      [/^Shadow is able to muster$/, true],
+      ...answerNo(
+        /^\*Exposed\* \*target\* exists/,
+        /^\*Mobile\* Army \*adjacent\* to \*target\*/,
+        /^\*Mobile\* Army can move or attack towards closest/,
+        /^\*Threat\* exists/,
+        /^Able to create an \*exposed\*/,
+        /^Army can move into Fellowship region/,
+        /^Army can move into a Free Peoples’ Settlement/,
+        /^Fellowship \*adjacent\* to Shadow Settlement/,
+        /^Less than six Nazgûl in play/,
+        /^Muster possible in region containing a Shadow Army/,
+        /^Two Shadow Armies able to merge/,
+      ),
+      [/^Muster$/, "done"],
+      byType(PROMPT.PRIORITY, "ok"),
+    ],
+    { strict: true },
+  );
   ok(
     army.walk.result === WALK_RESULT.ACTION &&
       army.dice.pool[0].status === DIE_STATE.USED,
@@ -3901,6 +4095,7 @@ const SCENARIOS = [
   ["6.7", callToBattleCardsIgnoreInitiative],
   ["7.3/7.4", battleOpenResetAndRunGuard],
   ["7.3/7.4", sideWalkKeepsTheBattleOpen],
+  ["ui", phaseWithoutAWalkKeepsThePhase],
   ["ui", openingJumpAddsNoUndoStep],
   ["ui", battleDraftSurvivesRendersNotANewGame],
   ["migrate", migrateUpgradesOldSaves],
@@ -3953,10 +4148,13 @@ const SCENARIOS = [
   ["rings", ringSettledAtTheNextBoldBox],
   ["rings", ringChangedHeldDieIsNotRestored],
   ["migrate", ringStateFromRevision2Migrates],
+  ["draft", unknownStartPointThrows],
+  ["draft", ringJumpSkipsAStartPointThatIsGone],
   ["draft", jumpModalDieComesFromThePool],
   ["draft", walkWithoutADie],
 ];
 function main() {
+  seedRandom(1);
   for (const [number, scenario] of SCENARIOS) {
     scenarioNumber = number;
     scenario();

@@ -23,6 +23,10 @@ export const TURNS_PER_GAME = 4;
 const MAX_PROMPTS_PER_WALK = 400;
 const PHASE5_WALKS_WITHOUT_DICE = 12; // with dice off nothing runs out, so Phase 5 stops after this many walks
 const PHASE5_WALK_LIMIT = 60; // with dice on the dice must run out well before this
+// After this many Phase 5 walks every Pass is refused: a real game bounds the passes by the Free Peoples' dice, which the
+// driver does not model, and a die that only a refused Pass spends would otherwise outlast the limit now and then.
+const PHASE5_WALKS_BEFORE_REFUSING_PASS = 30;
+let refusePass = false;
 const CHANCE = {
   YES: 0.5,
   ACTION_DONE: 0.8,
@@ -72,6 +76,19 @@ function randomBattleForm() {
     attackingSiege: coinFlip(),
   };
 }
+const pickOne = (values) => values[Math.floor(rnd() * values.length)];
+// An action carried out: the first move of an Army die may also move a second Army or attack (rule 9), as the UI offers.
+function actionDone(prompt) {
+  if (!prompt.armyMove) return "done";
+  return pickOne(
+    prompt.moveOrAttack
+      ? ["done", "movedBoth", "attacked"]
+      : ["done", "movedBoth"],
+  );
+}
+// The pool as problem reports show it: each die's face and status.
+export const poolText = (state) =>
+  JSON.stringify(state.dice.pool.map((die) => die.face + "/" + die.status));
 const onlyReservedDiceLeft = (state) =>
   state.settings.dice &&
   state.dice.pool.some((die) => die.status === DIE_STATE.RESERVED) &&
@@ -89,8 +106,9 @@ export function randomAnswer(state) {
       return prompt.options[Math.floor(rnd() * prompt.options.length)].value;
     case PROMPT.ACTION:
       // only refusing the pass spends a die set aside for a minion, so passing with nothing else left never ends Phase 5
-      if (prompt.pass && onlyReservedDiceLeft(state)) return "no";
-      return rnd() < CHANCE.ACTION_DONE ? "done" : "no";
+      if (prompt.pass && (refusePass || onlyReservedDiceLeft(state)))
+        return "no";
+      return rnd() < CHANCE.ACTION_DONE ? actionDone(prompt) : "no";
     case PROMPT.PLAY_CARD:
       return "done";
     case PROMPT.STEP:
@@ -102,7 +120,9 @@ export function randomAnswer(state) {
     case PROMPT.BATTLE_FORM:
       return randomBattleForm();
     case PROMPT.BLOCKED:
-      return rnd() < CHANCE.BLOCKED_BY_CARD ? "powerTooGreat" : "no";
+      return rnd() < CHANCE.BLOCKED_BY_CARD
+        ? pickOne(engine.FP_PROTECTION_CARDS).key
+        : "no";
   }
   throw new Error("unknown prompt " + prompt.type);
 }
@@ -119,9 +139,10 @@ function answerPrompt(state, tag) {
     return false;
   }
 }
-// Answer prompts at random until the walk is done; false when it had to stop on a problem. The hooks run around every
-// answer: onWalkStart(state, tag) once, onPrompt(state, tag) before each answer and afterAnswer(state, tag, prompt)
-// after it; onPrompt and afterAnswer stop the walk by returning false.
+// Answer prompts at random until the walk is done, then do what the app does after a walk (afterWalk: the phase and
+// the open battle); false when it had to stop on a problem. The hooks run around every answer: onWalkStart(state, tag)
+// once, onPrompt(state, tag) before each answer and afterAnswer(state, tag, prompt) after it; onPrompt and afterAnswer
+// stop the walk by returning false. onWalkEnd(state, tag) runs once the walk is done.
 function driveWalk(state, tag, hooks) {
   let prompts = 0;
   hooks.onWalkStart?.(state, tag);
@@ -138,6 +159,8 @@ function driveWalk(state, tag, hooks) {
       return false;
     }
   }
+  hooks.onWalkEnd?.(state, tag);
+  engine.afterWalk(state);
   return true;
 }
 export function randomBoard(state) {
@@ -171,8 +194,11 @@ function playSetup(state, tag, hooks) {
 }
 function playPhases1to4(state, tag, hooks) {
   for (const phase of [PHASE.P1, PHASE.P2, PHASE.P3, PHASE.P4]) {
+    const previousWalk = state.walk;
     engine.startPhase(state, phase);
-    if (state.walk && !driveWalk(state, tag + " " + phase, hooks)) return false;
+    // a phase that starts no walk (Phase 2 under the Military strategy) leaves the last one, already handled, in place
+    const walked = state.walk && state.walk !== previousWalk;
+    if (walked && !driveWalk(state, tag + " " + phase, hooks)) return false;
     hooks.afterPhase?.(state, tag + " " + phase);
   }
   return true;
@@ -208,16 +234,17 @@ function playPhase5(state, tag, hooks) {
           " left=" +
           left +
           " pool=" +
-          JSON.stringify(
-            state.dice.pool.map((die) => die.face + "/" + die.status),
-          ) +
+          poolText(state) +
           " last=" +
           state.walk.result,
       );
       break;
     }
+    refusePass = walks >= PHASE5_WALKS_BEFORE_REFUSING_PASS;
     engine.startPhase(state, PHASE.P5);
-    if (!driveWalk(state, tag + " p5#" + walks, hooks)) return false;
+    const walked = driveWalk(state, tag + " p5#" + walks, hooks);
+    refusePass = false;
+    if (!walked) return false;
     walks++;
     if (!maybeBattle(state, tag, hooks)) return false;
     if (rnd() < CHANCE.RANDOM_BOARD_AFTER_WALK) randomBoard(state);
@@ -225,10 +252,11 @@ function playPhase5(state, tag, hooks) {
   return true;
 }
 // One game: setup, then `turns` turns of every phase; returns the final state (early when a problem stopped it).
-// hooks: see driveWalk, plus afterPhase(state, tag) after each phase of a turn.
+// hooks: see driveWalk, plus onGameStart(state) on the new game and afterPhase(state, tag) after each phase of a turn.
 export function game(settings, gameNumber, hooks = {}, turns = TURNS_PER_GAME) {
   const state = engine.newState(settings);
   const gameTag = JSON.stringify(settings) + " g" + gameNumber;
+  hooks.onGameStart?.(state);
   if (!playSetup(state, gameTag, hooks)) return state;
   for (let turn = 0; turn < turns; turn++) {
     const tag = gameTag + " T" + state.turn;

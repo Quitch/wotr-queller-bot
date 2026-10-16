@@ -27,6 +27,16 @@ export const PHASE = {
   P5: "p5",
   P6: "p6",
 };
+// A phase as the header shows it; "Phase 1" to "Phase 5" are also the flowchart start points a walk can end at.
+export const PHASE_LABEL = {
+  [PHASE.SETUP]: "Setup",
+  [PHASE.P1]: "Phase 1",
+  [PHASE.P2]: "Phase 2",
+  [PHASE.P3]: "Phase 3",
+  [PHASE.P4]: "Phase 4",
+  [PHASE.P5]: "Phase 5",
+  [PHASE.P6]: "Phase 6",
+};
 // Card decks (the `deck` field of a card and the keys of cards.decks / cards.discards).
 export const DECK = {
   CHARACTER: "C",

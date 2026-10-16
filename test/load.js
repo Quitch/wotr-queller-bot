@@ -24,7 +24,6 @@ export {
 export { battleDraft, setBattleDraft } from "../src/ui/session.js";
 export { setupHTML } from "../src/ui/setup.js";
 export { resultHTML, trailHTML } from "../src/ui/trail.js";
-export { PHASE_BY_LABEL } from "../src/ui/header.js";
 export { PHASE_ACTION } from "../src/ui/walkthrough.js";
 export {
   boardValue,

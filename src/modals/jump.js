@@ -56,7 +56,7 @@ function wireJumpModal(modal, el) {
           NODE.text(FLOW[pageKey].nodes[id]),
           { die },
         );
-        ui.afterWalk();
+        engine.afterWalk(ui.state);
         closeModal();
       },
       { action: "jump", page: pageKey, start: id, die },

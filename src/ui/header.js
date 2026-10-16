@@ -1,22 +1,9 @@
 // The game header: turn, phase and strategy chips, the tool buttons.
-import { PHASE, strategyName } from "../qb.js";
+import { PHASE_LABEL, strategyName } from "../qb.js";
 import { MODAL } from "./constants.js";
 import { escapeHTML } from "./dom.js";
 import { history, state } from "./session.js";
 
-const PHASE_LABEL = {
-  [PHASE.SETUP]: "Setup",
-  [PHASE.P1]: "Phase 1",
-  [PHASE.P2]: "Phase 2",
-  [PHASE.P3]: "Phase 3",
-  [PHASE.P4]: "Phase 4",
-  [PHASE.P5]: "Phase 5",
-  [PHASE.P6]: "Phase 6",
-};
-// The phase a walk's end point names ("Phase 5" → p5).
-export const PHASE_BY_LABEL = Object.fromEntries(
-  Object.entries(PHASE_LABEL).map(([phase, label]) => [label, phase]),
-);
 // The header's tool buttons: [modal, label, extra class]. On a narrow screen they fold into the Tools menu (modals/tools.js).
 export const TOOL_BUTTONS = [
   [MODAL.SAVE, "Save / Load"],

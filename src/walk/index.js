@@ -21,6 +21,7 @@ export { answer } from "./answers.js";
 export {
   startPhase,
   startBattle,
+  afterWalk,
   nextTurn,
   phase5Page,
   phasePage,
