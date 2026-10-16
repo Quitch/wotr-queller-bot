@@ -187,10 +187,9 @@ export function spendDie(state, die, why) {
 // up at random from the dice that do
 export function nonPreferredFirst(state, dice, count) {
   const preferredResults = preferredFaces(state);
-  const groups = [
-    dice.filter((die) => !preferredResults.includes(die.face)),
-    dice.filter((die) => preferredResults.includes(die.face)),
-  ];
+  const groups = [[], []];
+  for (const die of dice)
+    groups[preferredResults.includes(die.face) ? 1 : 0].push(die);
   const out = [];
   for (const candidates of groups)
     while (out.length < count && candidates.length) {

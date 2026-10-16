@@ -435,9 +435,9 @@ function lidlessEyeTopsUpToThree() {
     "a count of one (the Elven Ring) still takes the non-preferred die",
   );
 }
-// The game minimum of 1 Hunt die (rulebook p.18) on the flowchart's 0-dice paths, asked of the player.
+// The game minimum of 1 Hunt die (rulebook p.20) on the flowchart's 0-dice paths, asked of the player after turn 1.
 function huntMinimumAskedOnZeroDicePaths() {
-  const phase3State = (strategy, dice) => {
+  const phase3State = (strategy, dice, turn = 2) => {
     const state = engine.newState({
       dice,
       cards: false,
@@ -445,6 +445,7 @@ function huntMinimumAskedOnZeroDicePaths() {
       wome: false,
     });
     state.strategy = strategy;
+    state.turn = turn;
     state.dice.pool = Array.from({ length: 7 }, () =>
       die(null, DIE_STATE.POOL),
     );
@@ -452,6 +453,20 @@ function huntMinimumAskedOnZeroDicePaths() {
     return state;
   };
   const minimumQuestion = /take a die out of the Hunt Box/;
+  const wasAsked = (prompts) =>
+    prompts.some((prompt) => minimumQuestion.test(prompt.text));
+  const rollsLogged = (state) =>
+    state.log.filter((entry) => /for the hunt allocation/.test(entry.text))
+      .length;
+  const stepWhy = (state) =>
+    state.walk.trail.find(
+      (entry) => entry.kind === TRAIL.STEP && /^Roll a die/.test(entry.text),
+    )?.why;
+  const stepPrompt = (prompts) =>
+    prompts.find(
+      (prompt) =>
+        prompt.type === PROMPT.STEP && /Hunt Box/.test(prompt.text || ""),
+    )?.text;
   for (const [answer, hunt] of [
     [true, 1],
     [false, 0],
@@ -459,8 +474,7 @@ function huntMinimumAskedOnZeroDicePaths() {
     const militaryState = phase3State(STRATEGY.MILITARY, true);
     const asked = driveWalk(militaryState, [[minimumQuestion, answer]]);
     ok(
-      asked.some((prompt) => minimumQuestion.test(prompt.text)) &&
-        militaryState.dice.hunt === hunt,
+      wasAsked(asked) && militaryState.dice.hunt === hunt,
       "Military “Assign 0 dice”, answered " +
         (answer ? "Yes" : "No") +
         ": " +
@@ -468,30 +482,76 @@ function huntMinimumAskedOnZeroDicePaths() {
         " in the Hunt Box",
     );
   }
+  const firstTurnState = phase3State(STRATEGY.MILITARY, true, 1);
+  ok(
+    !wasAsked(driveWalk(firstTurnState, [[minimumQuestion, true]])) &&
+      firstTurnState.dice.hunt === 0,
+    "turn 1 has no previous turn: not asked, 0 in the Hunt Box",
+  );
   const realRandom = Math.random;
   try {
-    for (const [roll, answer, hunt, asks] of [
-      [0, true, 1, true],
-      [0, false, 0, true],
-      [0.9, false, 1, false],
+    for (const [roll, answer, hunt, why] of [
+      [0, true, 1, "rolled 1 → 1 in the Hunt Box (the game minimum)"],
+      [0, false, 0, "rolled 1 → 0 in the Hunt Box"],
+      [0.9, false, 1, "rolled 6 → 1 in the Hunt Box"],
     ]) {
       Math.random = () => roll;
       const corruptionState = phase3State(STRATEGY.CORRUPTION, true);
       const asked = driveWalk(corruptionState, [[minimumQuestion, answer]]);
       ok(
-        asked.some((prompt) => minimumQuestion.test(prompt.text)) === asks &&
+        wasAsked(asked) === (roll === 0) &&
           corruptionState.dice.hunt === hunt &&
-          corruptionState.log.filter((entry) =>
-            /for the hunt allocation/.test(entry.text),
-          ).length === 1,
-        "Corruption roll " +
-          (roll ? "4-6" : "1-3") +
-          (asks ? ", answered " + (answer ? "Yes" : "No") : ", not asked") +
-          ": " +
-          hunt +
-          " in the Hunt Box, rolled once",
+          rollsLogged(corruptionState) === 1 &&
+          stepWhy(corruptionState) === why,
+        "Corruption, dice on: " +
+          why +
+          (roll ? ", not asked" : "") +
+          ", rolled once",
       );
     }
+    // dice switched off while the question is open after the app's roll: the roll stands
+    for (const [answer, text] of [
+      [true, "Assign 1 die to the Hunt Box (rolled 1; the game minimum)."],
+      [false, "Assign 0 dice to the Hunt Box (rolled 1)."],
+    ]) {
+      Math.random = () => 0;
+      const toggledState = phase3State(STRATEGY.CORRUPTION, true);
+      const asked = driveWalk(toggledState, [
+        {
+          test: (prompt) => minimumQuestion.test(prompt.text),
+          answer: () => {
+            toggledState.settings.dice = false;
+            return answer;
+          },
+        },
+      ]);
+      ok(
+        stepPrompt(asked) === text && rollsLogged(toggledState) === 1,
+        "dice switched off after the roll, answered " +
+          (answer ? "Yes" : "No") +
+          ": “" +
+          text +
+          "”, no second roll",
+      );
+    }
+    // dice switched on while the question is open before the player's roll: the app rolls once
+    Math.random = () => 0;
+    const switchedOnState = phase3State(STRATEGY.CORRUPTION, false);
+    const switchedOnPrompts = driveWalk(switchedOnState, [
+      {
+        test: (prompt) => minimumQuestion.test(prompt.text),
+        answer: () => {
+          switchedOnState.settings.dice = true;
+          return false;
+        },
+      },
+    ]);
+    ok(
+      wasAsked(switchedOnPrompts) &&
+        rollsLogged(switchedOnState) === 1 &&
+        stepWhy(switchedOnState) === "rolled 1 → 0 in the Hunt Box",
+      "dice switched on after the question, answered No: one roll, 0 in the Hunt Box",
+    );
   } finally {
     Math.random = realRandom;
   }
@@ -499,11 +559,7 @@ function huntMinimumAskedOnZeroDicePaths() {
     const diceOffState = phase3State(strategy, false);
     const asked = driveWalk(diceOffState, [[minimumQuestion, true]]);
     ok(
-      asked.some(
-        (prompt) =>
-          prompt.type === PROMPT.STEP &&
-          /^Assign 1 die to the Hunt Box \(the game minimum/.test(prompt.text),
-      ),
+      stepPrompt(asked) === "Assign 1 die to the Hunt Box (the game minimum).",
       strategy + " with dice off, answered Yes: the player assigns 1 die",
     );
   }

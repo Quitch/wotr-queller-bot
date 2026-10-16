@@ -79,54 +79,70 @@ function discardChosenStep(state, node, { walk, cardsOn, label }) {
   continueStep(state, label, "discarded “" + cardById[id].title + "”");
 }
 // The game minimum of 1 Hunt die (rulebook p.20: Fellowship dice were in the Hunt Box at the end of the previous turn),
-// asked once per node when the flowchart gives 0 dice; with dice off, `offStep` is the player's step when it does not
-// apply.
-const huntMinimumPart = (walk) => walk.page + "." + walk.node + ".huntMinimum";
-function zeroHuntDiceOrMinimum(state, node, facts, offStep) {
-  const { diceOn, label } = facts;
-  const minimum = askBoardQuestion(
+// asked once per node when the flowchart gives 0 dice; turn 1 has no previous turn. True, false, or PENDING.
+const huntPart = (walk, name) => walk.page + "." + walk.node + "." + name;
+function huntMinimumApplies(state) {
+  if (state.turn === 1) return false;
+  return askBoardQuestion(
     state,
-    huntMinimumPart(state.walk),
+    huntPart(state.walk, "huntMinimum"),
     "Did the Free Peoples take a die out of the Hunt Box in Phase 1",
   );
-  if (minimum === PENDING) return minimum;
-  if (minimum && !diceOn)
+}
+// Place `count` dice (dice on) or tell the player to (dice off); `roll` is the app's hunt allocation roll, if any.
+function placeHuntDice(state, node, { diceOn, label }, count, roll, minimum) {
+  const notes = [
+    roll == null ? "" : "rolled " + roll,
+    minimum ? "the game minimum" : "",
+  ].filter(Boolean);
+  if (!diceOn)
     return promptStep(
       state,
       node,
-      "Assign 1 die to the Hunt Box (the game minimum after Free Peoples dice were in the Hunt Box).",
+      "Assign " +
+        count +
+        (count === 1 ? " die" : " dice") +
+        " to the Hunt Box" +
+        (notes.length ? " (" + notes.join("; ") + ")" : "") +
+        ".",
     );
-  if (!diceOn) return offStep();
-  if (minimum) {
-    engine.assignHunt(state, 1);
-    return continueStep(state, label, "1 in the Hunt Box (the game minimum)");
-  }
-  engine.log(state, "No dice placed in the Hunt Box before rolling.");
-  continueStep(state, label, "0 in the Hunt Box");
+  if (count) engine.assignHunt(state, count);
+  else engine.log(state, "No dice placed in the Hunt Box before rolling.");
+  continueStep(
+    state,
+    label,
+    (roll == null ? "" : "rolled " + roll + " → ") +
+      count +
+      " in the Hunt Box" +
+      (minimum ? " (the game minimum)" : ""),
+  );
 }
-// With dice off the player rolls, so the minimum is asked first (it makes the roll moot); with dice on, only after a
-// 1-3 (the answer re-runs this box, and the question is only ever open after a 1-3).
+// The flowchart's 0 dice, unless the minimum applies; `offStep` (dice off, nothing placed) is the player's step.
+function zeroHuntDiceOrMinimum(state, node, facts, roll, offStep) {
+  const minimum = huntMinimumApplies(state);
+  if (minimum === PENDING) return minimum;
+  if (!minimum && !facts.diceOn && offStep) return offStep();
+  placeHuntDice(state, node, facts, minimum ? 1 : 0, roll, minimum);
+}
+// The app's roll is kept in walk.parts, so a re-run (after the minimum question, or after dice were switched on or off
+// mid-walk) never rolls again. With dice off and no roll, the minimum is asked first (it makes the player's roll moot).
 function rollHuntAllocationStep(state, node, facts) {
   const { walk, diceOn, label } = facts;
-  if (diceOn && !(huntMinimumPart(walk) in walk.parts)) {
-    const roll = engine.randomBelow(6) + 1;
-    const placed = isLowRoll(roll) ? 0 : 1;
+  const rollPart = huntPart(walk, "huntRoll");
+  if (diceOn && !(rollPart in walk.parts)) {
+    walk.parts[rollPart] = engine.randomBelow(6) + 1;
     engine.log(
       state,
-      "Rolled " + roll + " for the hunt allocation → " + placed + " dice.",
+      "Rolled " + walk.parts[rollPart] + " for the hunt allocation.",
     );
-    if (placed) {
-      engine.assignHunt(state, placed);
-      return continueStep(
-        state,
-        label,
-        "rolled " + roll + " → " + placed + " in the Hunt Box",
-      );
-    }
   }
-  return zeroHuntDiceOrMinimum(state, node, facts, () =>
-    promptStep(state, node, label),
-  );
+  const roll = walk.parts[rollPart];
+  if (roll == null)
+    return zeroHuntDiceOrMinimum(state, node, facts, null, () =>
+      promptStep(state, node, label),
+    );
+  if (!isLowRoll(roll)) return placeHuntDice(state, node, facts, 1, roll);
+  return zeroHuntDiceOrMinimum(state, node, facts, roll);
 }
 function huntMaxStep(state, node, { diceOn, label }) {
   if (!diceOn)
@@ -160,7 +176,7 @@ const huntFixedStep = (count) =>
     );
   };
 const huntNoneStep = (state, node, facts) =>
-  zeroHuntDiceOrMinimum(state, node, facts, () => FALL_THROUGH);
+  zeroHuntDiceOrMinimum(state, node, facts, null, () => FALL_THROUGH);
 function rollRemainingStep(state, node, { diceOn, label }) {
   if (!diceOn)
     return promptStep(
