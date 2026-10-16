@@ -38,3 +38,8 @@ export {
   restoreScroll,
 } from "../src/ui/render.js";
 export { slots, saveToSlot } from "../src/modals/save.js";
+export {
+  canShareFile,
+  downloadText,
+  shareFile,
+} from "../src/modals/transfer.js";

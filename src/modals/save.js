@@ -5,7 +5,7 @@ import { MODAL } from "../ui/constants.js";
 import { escapeHTML as esc } from "../ui/dom.js";
 import * as ui from "../ui/index.js";
 import { closeModal, renderModal } from "./framework.js";
-import { copyText, downloadText } from "./transfer.js";
+import { canShareFile, copyText, downloadText, shareFile } from "./transfer.js";
 
 const saveContent = () => ({
   title: "Save and load",
@@ -39,7 +39,7 @@ function saveHTML() {
       })
       .join("");
   html +=
-    '<h3>Transfer</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="dlBtn">Download save file</button><button class="btn" id="copyBtn">Copy save code</button></div><div id="dlNote" class="notice" role="status" aria-live="polite"></div>';
+    '<h3>Transfer</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="dlBtn">Download save file</button><button type="button" class="btn" id="shareBtn" hidden>Share save file</button><button class="btn" id="copyBtn">Copy save code</button></div><div id="dlNote" class="notice" role="status" aria-live="polite"></div>';
   html += "<h3>Load</h3>" + loadHTML() + "</div>";
   return html;
 }
@@ -157,9 +157,21 @@ function wireSaveModal(modal, el) {
     },
     el,
   );
+  const saveFileName = () => "queller-turn" + ui.state.turn + ".json";
+  const shareButton = el.querySelector("#shareBtn");
+  shareButton.hidden = !canShareFile(saveFileName());
   el.querySelector("#dlBtn").onclick = () =>
-    downloadText({
-      fileName: "queller-turn" + ui.state.turn + ".json",
+    void downloadText({
+      fileName: saveFileName(),
+      data: JSON.stringify(ui.state),
+      noteEl: el.querySelector("#dlNote"),
+      fallbackLabel: shareButton.hidden
+        ? "Copy save code"
+        : "Share save file or Copy save code",
+    });
+  shareButton.onclick = () =>
+    void shareFile({
+      fileName: saveFileName(),
       data: JSON.stringify(ui.state),
       noteEl: el.querySelector("#dlNote"),
       fallbackLabel: "Copy save code",

@@ -1,6 +1,6 @@
 // Unit tests for the UI's pure logic (src/ui/, no DOM): the text helpers and glossary markup, the tracker's board
 // paths, tracker values, the storage wrappers and save loading, the row widgets, the phase tables, the trail and
-// result renderers and the card faces. Exit 1 on any failure.
+// result renderers, the card faces and the transfer helpers. Exit 1 on any failure.
 import * as fakeWindow from "./load.js";
 const engine = fakeWindow.QB,
   ui = fakeWindow.QB_UI,
@@ -443,7 +443,163 @@ function checkSlotSave() {
   ui.setState(null);
   delete globalThis.localStorage;
 }
-function main() {
+// The transfer helpers with a stubbed host, document and navigator: the viewer's refusals stop the download, any
+// other host refusal falls through to the Blob link, and the share sheet's outcomes reach the note.
+async function checkTransfer() {
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "navigator",
+  );
+  const setNavigator = (value) =>
+    Object.defineProperty(globalThis, "navigator", {
+      value,
+      configurable: true,
+    });
+  const clicks = [];
+  globalThis.document = {
+    createElement: () => ({
+      click() {
+        clicks.push(this.download);
+      },
+    }),
+  };
+  const host = (save) => {
+    globalThis.window = { claude: { use: async () => ({ save }) } };
+  };
+  const download = async () => {
+    const noteEl = { textContent: "" };
+    const outcome = await fakeWindow.downloadText({
+      fileName: "log.json",
+      data: "{}",
+      noteEl,
+      fallbackLabel: "Copy",
+    });
+    return { outcome, note: noteEl.textContent };
+  };
+  const refuse = (code) => () => Promise.reject({ code, message: "m" });
+
+  host(async () => ({ status: "saved" }));
+  let result = await download();
+  ok(
+    result.outcome === "saved" &&
+      result.note === "Saved log.json." &&
+      !clicks.length,
+    "a host save needs no link",
+  );
+  host(refuse("declined"));
+  result = await download();
+  ok(
+    result.outcome === "declined" &&
+      result.note === "Download cancelled." &&
+      !clicks.length,
+    "a declined host save stops without a link",
+  );
+  host(refuse("rate_limited"));
+  result = await download();
+  ok(
+    result.outcome === "busy" &&
+      /already open/.test(result.note) &&
+      !clicks.length,
+    "a rate-limited host save stops without a link",
+  );
+  for (const code of [
+    "unavailable",
+    "not_granted",
+    "too_large",
+    "odd_new_code",
+  ]) {
+    clicks.length = 0;
+    host(refuse(code));
+    result = await download();
+    ok(
+      result.outcome === "link" &&
+        clicks[0] === "log.json" &&
+        result.note.includes("(" + code + ")") &&
+        result.note.endsWith("use Copy."),
+      "a host refusal of " + code + " falls through to the Blob link",
+    );
+  }
+  clicks.length = 0;
+  globalThis.window = {
+    claude: {
+      use: async () => {
+        throw new Error("no host");
+      },
+    },
+  };
+  result = await download();
+  ok(
+    result.outcome === "link" &&
+      clicks.length === 1 &&
+      result.note === "If nothing downloaded, use Copy.",
+    "a throwing use() counts as no host",
+  );
+  globalThis.document = {
+    createElement: () => {
+      throw new Error("blocked");
+    },
+  };
+  result = await download();
+  ok(
+    result.outcome === "blocked" && /not available here/.test(result.note),
+    "a blocked link points at the fallback",
+  );
+
+  const share = async (shareImpl) => {
+    setNavigator({ share: shareImpl });
+    const noteEl = { textContent: "" };
+    const outcome = await fakeWindow.shareFile({
+      fileName: "log.json",
+      data: "{}",
+      noteEl,
+      fallbackLabel: "Copy",
+    });
+    return { outcome, note: noteEl.textContent };
+  };
+  let shared;
+  result = await share(async (data) => {
+    shared = data.files[0];
+  });
+  ok(
+    result.outcome === "shared" &&
+      shared.name === "log.json" &&
+      (await shared.text()) === "{}",
+    "share hands the sheet the file",
+  );
+  const named = (name) => async () => {
+    const error = new Error(name);
+    error.name = name;
+    throw error;
+  };
+  result = await share(named("AbortError"));
+  ok(
+    result.outcome === "cancelled" && result.note === "Share cancelled.",
+    "a dismissed share sheet says so",
+  );
+  result = await share(named("NotAllowedError"));
+  ok(
+    result.outcome === "NotAllowedError" && result.note.endsWith("use Copy."),
+    "a refused share points at the fallback",
+  );
+  setNavigator({ canShare: () => true });
+  ok(fakeWindow.canShareFile("log.json"), "canShareFile reads canShare");
+  setNavigator({});
+  ok(!fakeWindow.canShareFile("log.json"), "no canShare means no share");
+  setNavigator({
+    canShare: () => {
+      throw new Error("x");
+    },
+  });
+  ok(
+    !fakeWindow.canShareFile("log.json"),
+    "a throwing canShare means no share",
+  );
+
+  Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+  delete globalThis.window;
+  delete globalThis.document;
+}
+async function main() {
   checkTextHelpers();
   checkBoardPaths();
   checkStorage();
@@ -454,6 +610,7 @@ function main() {
   checkPhaseTables();
   checkTrailAndResult();
   checkCardFaces();
+  await checkTransfer();
   console.log(fails ? fails + " failure(s)" : "all UI checks passed");
   process.exit(fails ? 1 : 0);
 }

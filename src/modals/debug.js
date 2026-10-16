@@ -2,7 +2,7 @@
 import * as debug from "../debug.js";
 import { MODAL } from "../ui/constants.js";
 import * as ui from "../ui/index.js";
-import { copyText, downloadText } from "./transfer.js";
+import { canShareFile, copyText, downloadText, shareFile } from "./transfer.js";
 
 const debugContent = () => ({
   title: "Debug log",
@@ -108,7 +108,7 @@ function debugHTML() {
     debug.LIMITS.actions +
     " actions, the trails of recent walks and any errors the app recorded, so that a problem can be traced from a report. It contains no personal details, but it does show Queller’s hidden cards — only read it if you do not mind seeing them.</p>" +
     '<p style="margin-top:12px"><label for="dbgReport"><b>What went wrong?</b> <span class="notice" style="display:inline">(optional — saved into the log: what you did, what you expected, what happened)</span></label><textarea id="dbgReport" style="min-height:80px" placeholder="For example: after answering Yes to “Witch-king in play” the walk jumped to the Army page instead of Character 2."></textarea></p>' +
-    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn primary" id="dbgDl">Download debug log</button><button type="button" class="btn" id="dbgCopy">Copy debug log</button></div><div id="dbgNote" class="notice" role="status" aria-live="polite" style="margin-top:6px"></div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"><button type="button" class="btn primary" id="dbgDl">Download debug log</button><button type="button" class="btn" id="dbgShare" hidden>Share debug log file</button><button type="button" class="btn" id="dbgCopy">Copy debug log</button></div><div id="dbgNote" class="notice" role="status" aria-live="polite" style="margin-top:6px"></div>' +
     '<p style="margin-top:12px"><label for="dbgTxt" class="notice">The log (select all and copy if the buttons do not work)</label><textarea id="dbgTxt" readonly spellcheck="false" style="min-height:200px"></textarea></p></div>'
   );
 }
@@ -128,18 +128,30 @@ function wireDebug(modal, el) {
   };
   refresh();
   el.querySelector("#dbgReport").onchange = refresh;
+  const noteEl = el.querySelector("#dbgNote");
+  const shareButton = el.querySelector("#dbgShare");
+  shareButton.hidden = !canShareFile(debug.fileName(ui.state));
+  const recordExport = (how, bytes) => (outcome) =>
+    debug.action({ action: "debugExport", how, bytes, outcome }, ui.state);
   el.querySelector("#dbgDl").onclick = () => {
     const data = refresh();
-    debug.action(
-      { action: "debugExport", how: "download", bytes: data.length },
-      ui.state,
-    );
     void downloadText({
       fileName: debug.fileName(ui.state),
       data,
-      noteEl: el.querySelector("#dbgNote"),
+      noteEl,
+      fallbackLabel: shareButton.hidden
+        ? "Copy debug log"
+        : "Share debug log file or Copy debug log",
+    }).then(recordExport("download", data.length));
+  };
+  shareButton.onclick = () => {
+    const data = refresh();
+    void shareFile({
+      fileName: debug.fileName(ui.state),
+      data,
+      noteEl,
       fallbackLabel: "Copy debug log",
-    });
+    }).then(recordExport("share", data.length));
   };
   el.querySelector("#dbgCopy").onclick = () => {
     const data = refresh();
@@ -149,7 +161,7 @@ function wireDebug(modal, el) {
     );
     void copyText({
       data,
-      noteEl: el.querySelector("#dbgNote"),
+      noteEl,
       label: "Debug log",
       textarea,
     });
