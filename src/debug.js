@@ -208,7 +208,8 @@ function action(info, state) {
 // Something that happened during the open action (a refused autosave) goes on its record; with none open, its own.
 function note(info, state) {
   if (!store.inflight) return action({ action: "note", ...info }, state);
-  (store.inflight.notes ??= []).push(info);
+  store.inflight.notes ??= [];
+  store.inflight.notes.push(info);
   return store.inflight;
 }
 function error(thrown, info, state) {

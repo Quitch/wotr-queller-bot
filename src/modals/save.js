@@ -101,7 +101,7 @@ function showLoadError(text) {
 // A save refused by loadJSON (not JSON, or migrate's checks: "not a Queller save (field)"), and one that loaded but
 // could not be drawn.
 const refusedText = (error) =>
-  /^not a Queller save/.test(error.message)
+  error.message.startsWith("not a Queller save")
     ? "That is " + error.message + "."
     : "That is not a Queller save: " + error.message;
 const notDrawnText = (error) =>
