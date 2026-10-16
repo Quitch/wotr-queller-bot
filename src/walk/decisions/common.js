@@ -98,13 +98,39 @@ export function answerAuto(state, node, answer, why) {
     why,
   });
 }
-// A "Using a <die> die and …" box: asked when the walk holds no die, No when it holds another, otherwise `decide`.
+// A "Using a <die> die and …" box: No when the walk holds another die; with no die held (a walk started from the Jump
+// modal), the player says whether Queller uses that die; then `decide` answers the rest of the box.
 export const requiringDie = (required, decide) =>
   function decideWithDie(state, node, facts) {
-    if (!facts.walk.die) return ask(state, node);
     if (answerIfOtherDie(state, node, required)) return;
+    if (!facts.walk.die) {
+      const using = askDiePart(state, required);
+      if (using === PENDING) return;
+      if (!using)
+        return answerAuto(
+          state,
+          node,
+          false,
+          "not using " + dieWithArticle(required) + " die",
+        );
+    }
     return decide(state, node, facts);
   };
+// The die half of a "Using a <die> die and …" box, asked once per node: true, false, or PENDING while it is open.
+function askDiePart(state, required) {
+  const walk = state.walk,
+    partKey = walk.page + "." + walk.node + ".usingDie";
+  if (partKey in walk.parts) return walk.parts[partKey];
+  setPrompt(state, {
+    type: PROMPT.YES_NO,
+    text: "Is Queller using " + dieWithArticle(required) + " die",
+    part: partKey,
+    node: walk.node,
+    page: walk.page,
+    kind: NODE_KIND.FOLLOW_UP,
+  });
+  return PENDING;
+}
 // A decision that needs a given die: No, naming the die, when the walk holds another one. Returns true when it answered.
 export function answerIfOtherDie(state, node, required) {
   const die = state.walk.die;
@@ -143,6 +169,18 @@ export function decisionFacts(state) {
     walk: state.walk,
     handCount: engine.handCounts(state),
   };
+}
+// "… holding a *playable* Character card": counted from the hand when the app holds the cards, otherwise asked.
+export function decidePlayableCharacterCard(state, node, { cardsOn }) {
+  if (cardsOn)
+    return answerByPlayableCount(
+      state,
+      node,
+      characterHand(state),
+      "event",
+      "playable Character card",
+    );
+  ask(state, node);
 }
 export const characterHand = (state) =>
   engine.handCardsOfDeck(state, DECK.CHARACTER);

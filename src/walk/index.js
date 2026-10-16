@@ -7,6 +7,7 @@ export {
   phaseResult,
   phaseFromResult,
   STRATEGY_ROLL,
+  strategyName,
 } from "./prompt.js";
 export {
   CARD_CRITERIA_NODES,
