@@ -19,7 +19,6 @@ export { PROMPT_RENDERERS, promptHTML } from "../src/ui/prompts.js";
 export { battleFormHTML, dieHelpText } from "../src/ui/battle-form.js";
 export { setupHTML } from "../src/ui/setup.js";
 export { resultHTML, trailHTML } from "../src/ui/trail.js";
-export { PHASE_BY_LABEL } from "../src/ui/header.js";
 export { PHASE_ACTION } from "../src/ui/walkthrough.js";
 export {
   DEFAULT_STEP_LIMIT,

@@ -2,7 +2,6 @@
 export { showErrBar, boot } from "./boot.js";
 export { ringIcon, RING_PATH } from "./dice.js";
 export { act, commit } from "./actions.js";
-export { afterWalk } from "./handlers.js";
 export { render } from "./render.js";
 export {
   find,

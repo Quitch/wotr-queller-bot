@@ -119,9 +119,10 @@ function answerPrompt(state, tag) {
     return false;
   }
 }
-// Answer prompts at random until the walk is done; false when it had to stop on a problem. The hooks run around every
-// answer: onWalkStart(state, tag) once, onPrompt(state, tag) before each answer and afterAnswer(state, tag, prompt)
-// after it; onPrompt and afterAnswer stop the walk by returning false.
+// Answer prompts at random until the walk is done, then do what the app does after a walk (afterWalk: the phase and
+// the open battle); false when it had to stop on a problem. The hooks run around every answer: onWalkStart(state, tag)
+// once, onPrompt(state, tag) before each answer and afterAnswer(state, tag, prompt) after it; onPrompt and afterAnswer
+// stop the walk by returning false.
 function driveWalk(state, tag, hooks) {
   let prompts = 0;
   hooks.onWalkStart?.(state, tag);
@@ -138,6 +139,7 @@ function driveWalk(state, tag, hooks) {
       return false;
     }
   }
+  engine.afterWalk(state);
   return true;
 }
 export function randomBoard(state) {

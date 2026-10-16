@@ -819,7 +819,6 @@ function callToBattleCardsIgnoreInitiative() {
 // Between two combat rounds, a walk from the Jump modal (a card's choice, rule 16) leaves the battle open; Queller's
 // next Phase 5 walk closes it.
 function sideWalkKeepsTheBattleOpen() {
-  const ui = fakeWindow.QB_UI;
   const state = phase5State({
     dice: false,
     cards: false,
@@ -827,15 +826,14 @@ function sideWalkKeepsTheBattleOpen() {
     wome: false,
   });
   state.battleOpen = true;
-  ui.setState(state);
   engine.startWalk(state, "EV", "Event card discard");
   driveWalk(state, []);
-  ui.afterWalk();
+  engine.afterWalk(state);
   const sideWalk = state.walk.result,
     keptOpen = state.battleOpen;
   engine.startPhase(state, PHASE.P5);
   driveWalk(state, []);
-  ui.afterWalk();
+  engine.afterWalk(state);
   ok(
     !!sideWalk && keptOpen && state.walk.done && !state.battleOpen,
     "a Jump-modal walk (" +

@@ -208,11 +208,13 @@ function checkWidgets() {
 function checkPhaseTables() {
   const phases = Object.values(PHASE),
     actions = Object.values(fakeWindow.PHASE_ACTION);
+  // afterWalk reads a walk's end point through the inverse of PHASE_LABEL, so every phase needs its own label
+  const phaseByLabel = Object.fromEntries(
+    Object.entries(engine.PHASE_LABEL).map(([phase, label]) => [label, phase]),
+  );
   ok(
-    phases.every((phase) =>
-      Object.values(fakeWindow.PHASE_BY_LABEL).includes(phase),
-    ),
-    "PHASE_BY_LABEL names every phase",
+    phases.every((phase) => Object.values(phaseByLabel).includes(phase)),
+    "PHASE_LABEL gives every phase a label of its own",
   );
   ok(
     new Set(phases.concat(actions)).size === phases.length + actions.length,
