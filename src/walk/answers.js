@@ -198,17 +198,22 @@ function answerBlocked(state, prompt, value) {
       : "not possible",
   );
 }
+// The answers that carry out an action, as the trail records them (the Army die's first move: rule 9).
+const ACTION_DONE_ANSWERS = {
+  done: "done",
+  movedBoth: "moved two Armies",
+  attacked: "attacked",
+};
 function answerAction(state, prompt, value) {
   const walk = state.walk;
-  if (value !== "done" && value !== "attacked")
-    return notPossible(state, prompt);
+  if (!ACTION_DONE_ANSWERS[value]) return notPossible(state, prompt);
   trail(state, {
     kind: TRAIL.ACTION,
     text: prompt.text,
-    answer: value === "attacked" ? "attacked" : "done",
+    answer: ACTION_DONE_ANSWERS[value],
   });
-  if (value === "done" && prompt.armyMove && !walk.armyMoves && walk.armyStart)
-    return secondArmyMove(state, walk);
+  if (value === "done" && prompt.armyMove && !walk.armyMoves)
+    return secondArmyMove(state, walk, prompt);
   if (prompt.pass) {
     endWalk(state, WALK_RESULT.PASS, "Queller passes.");
     engine.log(state, "Queller passes.");
@@ -221,8 +226,11 @@ function answerAction(state, prompt, value) {
 }
 // Rule 9: after the first move of an Army die, walk the Army page again from the same start point for the second move,
 // by another Army.
-function secondArmyMove(state, walk) {
+function secondArmyMove(state, walk, prompt) {
   walk.armyMoves = 1;
+  // the die has acted: it can no longer pay to remove a Free Peoples card (rule 19)
+  walk.dieUsed = true;
+  engine.log(state, "Queller: " + prompt.text + " (first Army move).");
   engine.log(
     state,
     "First Army move made: the Army page again from “" +

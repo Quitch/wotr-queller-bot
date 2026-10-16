@@ -641,26 +641,33 @@ function emptyEventDecksFallBack() {
       die: DIE_REQUIREMENT.EVENT,
       dieIndex: 0,
     });
-    driveWalk(walkState, []);
-    return walkState;
+    return { state: walkState, seen: driveWalk(walkState, []) };
   };
   const fallback = drawEvent2((walkState) => {
     walkState.cards.decks.C = [];
   });
   ok(
-    fallback.cards.hand.length === 1 &&
-      engine.cardById[fallback.cards.hand[0]].deck === engine.DECK.STRATEGY &&
-      fallback.walk.result === WALK_RESULT.ACTION,
-    '"Draw a Character Event card" draws a Strategy card when the Character deck is empty',
+    fallback.state.cards.hand.length === 1 &&
+      engine.cardById[fallback.state.cards.hand[0]].deck ===
+        engine.DECK.STRATEGY &&
+      fallback.state.walk.result === WALK_RESULT.ACTION &&
+      fallback.seen.some((prompt) =>
+        /the Character deck is empty: Queller drew a Strategy card/.test(
+          prompt?.text || "",
+        ),
+      ),
+    '"Draw a Character Event card" draws a Strategy card when the Character deck is empty, and says so',
   );
   const bothEmpty = drawEvent2((walkState) => {
     walkState.cards.decks.C = [];
     walkState.cards.decks.S = [];
   });
   ok(
-    bothEmpty.cards.hand.length === 0 &&
-      bothEmpty.dice.pool[0].status === DIE_STATE.AVAIL &&
-      bothEmpty.walk.trail.some((entry) => /rule 25/.test(entry.why || "")),
+    bothEmpty.state.cards.hand.length === 0 &&
+      bothEmpty.state.dice.pool[0].status === DIE_STATE.AVAIL &&
+      bothEmpty.state.walk.trail.some((entry) =>
+        /rule 25/.test(entry.why || ""),
+      ),
     "with both Event decks empty the draw is not possible and the die is kept",
   );
   const phase1 = engine.newState({
@@ -697,6 +704,44 @@ function emptyEventDecksFallBack() {
       state.cards.decks.F.length === factionCards.length - 1 &&
       entries.some((entry) => /keep one of 3 cards/.test(entry.text)),
     "Servants of Sauron topped the two-card Faction deck up from the discards and looked at three",
+  );
+  const faction = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  faction.cards.discards.F = faction.cards.decks.F.splice(0);
+  const factionDiscards = faction.cards.discards.F.slice();
+  const drawnFaction = engine.drawCard(faction, engine.DECK.FACTION);
+  ok(
+    factionDiscards.includes(drawnFaction) &&
+      faction.cards.factionHand.length === 1 &&
+      faction.cards.discards.F.length === 0 &&
+      faction.cards.decks.F.length === factionDiscards.length - 1,
+    "an empty Faction Event deck is rebuilt from its discards before the draw",
+  );
+  const palantir = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  palantir.strategy = STRATEGY.CORRUPTION;
+  palantir.cards.decks.C = [];
+  const played = engine.CARDS.find(
+    (card) => card.deck === engine.DECK.CHARACTER,
+  );
+  const palantirEntries = engine.resolveCardEffects(palantir, played.id, {
+    combat: false,
+    die: DIE_REQUIREMENT.EVENT,
+    palantirBefore: true,
+  });
+  ok(
+    palantir.cards.hand.length === 1 &&
+      engine.cardById[palantir.cards.hand[0]].deck === engine.DECK.STRATEGY &&
+      palantirEntries.some((entry) => /drew a Strategy card/.test(entry.text)),
+    "the Palantír draws from the Strategy deck when the Character deck is empty",
   );
 }
 // The tracker's table triggers: Worn with Sorrow and Toil asks like Flocks of Crebain; Wormtongue leaves when Saruman does.
@@ -1136,6 +1181,8 @@ function forcedDiscardPaysArmyCharacterAndActionDie() {
     die("Character"),
   ];
   factionWild.walk.dieIndex = null;
+  // Character is preferred under Corruption: the non-preferred fallback would pay with the Muster die
+  factionWild.strategy = STRATEGY.CORRUPTION;
   notPossibleThen(factionWild, "powerTooGreat");
   ok(
     factionWild.dice.pool[2].status === DIE_STATE.USED &&
@@ -1896,8 +1943,9 @@ function ringStateFromRevision2Migrates() {
     "ringArmed becomes ringDice, with no ring use pending",
   );
 }
-// Rule 31: a Wild result serves only to play a Faction Event card; it is no Army, Muster, Character or Event die.
-function wildResultOnlyForFactionEvents() {
+// Rule 31 and the WoME rules: a Wild result on the Faction die recruits, plays or draws for the Factions; it is no Army,
+// Muster, Character or Event die.
+function wildResultOnlyForFactionSteps() {
   const state = phase5State(
     { dice: true, cards: false, tracker: true, wome: true },
     STRATEGY.MILITARY,
@@ -1912,11 +1960,36 @@ function wildResultOnlyForFactionEvents() {
     DIE_REQUIREMENT.EVENT,
     DIE_REQUIREMENT.CHAR_OR_MUSTER,
   ];
+  const factionSteps = [
+    DIE_REQUIREMENT.FACTION_RECRUIT,
+    DIE_REQUIREMENT.FACTION_PLAY,
+    DIE_REQUIREMENT.FACTION_DRAW,
+  ];
   ok(
     actionSteps.every((req) => !engine.findDie(state, req)) &&
-      engine.findDie(state, DIE_REQUIREMENT.FACTION_PLAY) ===
-        state.dice.pool[0],
-    "the Faction die's Wild result plays a Faction Event card and nothing else",
+      factionSteps.every(
+        (req) => engine.findDie(state, req) === state.dice.pool[0],
+      ),
+    "the Faction die's Wild result recruits, plays or draws for the Factions, and serves no Action step",
+  );
+  const diceOff = phase5State(
+    { dice: false, cards: false, tracker: true, wome: true },
+    STRATEGY.MILITARY,
+  );
+  engine.startPhase(diceOff, PHASE.P5);
+  const factionQuestions = driveWalk(diceOff, [
+    [/^All factions in play/, true],
+    byType(PROMPT.ACTION, "no"),
+  ]).filter(
+    (prompt) =>
+      prompt?.type === PROMPT.DIE_CHECK && /Faction/.test(prompt.text),
+  );
+  ok(
+    factionQuestions.length > 0 &&
+      factionQuestions.every((prompt) =>
+        /a Wild result on the Faction die counts/.test(prompt.text),
+      ),
+    "dice off: the question for a Faction die says a Wild result counts",
   );
 }
 // Rule 30, Messenger of the Dark Tower: with the Mouth of Sauron in play and no Army or Army/Muster die, a Muster die
@@ -1941,12 +2014,13 @@ function messengerMusterDieActsAsArmyOncePerTurn() {
   const offeredThenNotPossible =
     firstTry.some((prompt) => /Attack using Army/.test(prompt?.text || "")) &&
     !state.messengerUsedThisTurn;
+  // the first walk found no action and set a die aside (rule 39); the attack spends exactly one more
+  const usedDice = () =>
+    state.dice.pool.filter((pooled) => pooled.status === DIE_STATE.USED).length;
+  const usedBefore = usedDice();
   engine.startPhase(state, PHASE.P5);
   attackThreat("done");
-  const usedOnce =
-    state.messengerUsedThisTurn &&
-    state.dice.pool.filter((pooled) => pooled.status === DIE_STATE.USED)
-      .length >= 1;
+  const usedOnce = state.messengerUsedThisTurn && usedDice() === usedBefore + 1;
   engine.startPhase(state, PHASE.P5);
   const third = attackThreat("done");
   ok(
@@ -1957,18 +2031,40 @@ function messengerMusterDieActsAsArmyOncePerTurn() {
   );
   engine.nextTurn(state);
   ok(!state.messengerUsedThisTurn, "the next turn makes it available again");
+  // the Army attack claims the Muster die through Messenger and is not possible; the Muster page then spends that die
+  // as a Muster die, which uses no Messenger
+  const musterAfter = phase5State(
+    { dice: true, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  musterAfter.board.chars.mouth = MINION_STATUS.IN_PLAY;
+  musterAfter.dice.pool = [die("Muster")];
+  engine.startPhase(musterAfter, PHASE.P5);
+  driveWalk(musterAfter, [
+    [/^Shadow under \*threat\*/, true],
+    [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+    [/^Attack using Army die$/, "no"],
+    [/is valid for muster$/, true],
+    [/able to muster$/, true],
+    byType(PROMPT.ACTION, "done"),
+  ]);
+  ok(
+    musterAfter.dice.pool[0].status === DIE_STATE.USED &&
+      !musterAfter.messengerUsedThisTurn,
+    "a Muster die given up as an Army die and then spent as a Muster die uses no Messenger",
+  );
 }
 // Rule 9: an Army die moves two different Armies. After the first move the Army page is walked again from the same start
 // point; the die is spent after the second move, or when the second walk finds none. An attack uses the whole die, and a
 // Character die makes one move.
 function armyDieMovesTwoArmies() {
-  const armyWalk = (face, req, rules) => {
+  const armyWalk = (face, req, rules, start = "Army 4") => {
     const state = phase5State(
       { dice: true, cards: false, tracker: false, wome: false },
       STRATEGY.MILITARY,
     );
     state.dice.pool = [die(face)];
-    engine.startWalk(state, "AR", "Army 4", { die: req, dieIndex: 0 });
+    engine.startWalk(state, "AR", start, { die: req, dieIndex: 0 });
     const seen = driveWalk(state, rules);
     const moveAsks = seen.filter((prompt) => prompt?.text === "Move/Attack");
     return { state, moveAsks };
@@ -2023,6 +2119,89 @@ function armyDieMovesTwoArmies() {
   ok(
     character.moveAsks.length === 1 && !character.moveAsks[0].moveOrAttack,
     "a Character die makes one move",
+  );
+  const second = armyWalk("Army", DIE_REQUIREMENT.ARMY, [
+    toMove,
+    [/^Move\/Attack$/, "done"],
+  ]);
+  ok(
+    second.moveAsks.length === 2 &&
+      second.moveAsks[0].armyMove &&
+      !second.moveAsks[1].armyMove &&
+      !second.moveAsks[1].moveOrAttack &&
+      second.state.log.some((entry) =>
+        /^Queller: Move\/Attack \(first Army move\)\.$/.test(entry.text),
+      ),
+    "the second move offers neither another first move nor an attack, and the log names the first move",
+  );
+  const both = armyWalk("Army", DIE_REQUIREMENT.ARMY, [
+    toMove,
+    [/^Move\/Attack$/, "movedBoth"],
+  ]);
+  ok(
+    both.moveAsks.length === 1 &&
+      both.state.dice.pool[0].status === DIE_STATE.USED &&
+      both.state.walk.result === WALK_RESULT.ACTION &&
+      both.state.walk.trail.some(
+        (entry) => entry.answer === "moved two Armies",
+      ),
+    "“Moved two Armies” uses the die without a second walk",
+  );
+  // the first walk moves; the second finds a threat with an adjacent mobile Army, and skips the attack
+  let walkNumber = 0;
+  const secondWalkActions = [];
+  const noAttack = armyWalk(
+    "Army",
+    DIE_REQUIREMENT.ARMY,
+    [
+      {
+        test: (prompt) => /^\*Threat\* exists$/.test(prompt.text),
+        answer: () => ++walkNumber > 1,
+      },
+      [/^\*Mobile\* Army \*adjacent\* to \*threat\*$/, true],
+      {
+        test: (prompt) => prompt.type === PROMPT.ACTION,
+        answer: (prompt) => {
+          if (walkNumber > 1) secondWalkActions.push(prompt.text);
+          return walkNumber > 1 ? "no" : "done";
+        },
+      },
+      toMove,
+    ],
+    "Army",
+  );
+  ok(
+    walkNumber === 2 &&
+      !secondWalkActions.includes("Attack") &&
+      noAttack.state.walk.trail.some(
+        (entry) =>
+          entry.kind === TRAIL.SKIP &&
+          entry.text === "Attack" &&
+          /rule 9/.test(entry.why || ""),
+      ),
+    "on the second walk an Attack box is skipped: the die's second use is a move (" +
+      secondWalkActions.join() +
+      ")",
+  );
+  // after the first move the die has acted, so it cannot pay to remove a Free Peoples card (rule 19)
+  const moved = phase5State(
+    { dice: true, cards: false, tracker: false, wome: false },
+    STRATEGY.MILITARY,
+  );
+  moved.dice.pool = [die("Army")];
+  engine.startWalk(moved, "AR", "Army 4", {
+    die: DIE_REQUIREMENT.ARMY,
+    dieIndex: 0,
+  });
+  for (let guard = 0; guard < 20 && !moved.walk.armyMoves; guard++)
+    engine.answer(
+      moved,
+      moved.walk.prompt.type === PROMPT.YES_NO ? true : "done",
+    );
+
+  ok(
+    moved.walk.armyMoves === 1 && moved.walk.dieUsed === true,
+    "the first Army move marks the die used, so a blocked second move cannot pay with it",
   );
 }
 // Rule 11: with no Army or Army/Muster die, the move towards an exposed target uses a Character die when the Army
@@ -2120,7 +2299,7 @@ const SCENARIOS = [
   ["7.3/7.4", battleOpenResetAndRunGuard],
   ["migrate", migrateUpgradesOldSaves],
   ["decks", emptyEventDecksFallBack],
-  ["dice", wildResultOnlyForFactionEvents],
+  ["dice", wildResultOnlyForFactionSteps],
   ["dice", messengerMusterDieActsAsArmyOncePerTurn],
   ["army", armyDieMovesTwoArmies],
   ["army", exposedMoveFallsBackToCharacterDie],

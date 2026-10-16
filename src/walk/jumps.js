@@ -159,7 +159,11 @@ function jumpWithDie(state, spec, label) {
     return;
   }
   letGoOtherRingDie(state, spec.die);
-  const before = { die: walk.die, dieIndex: walk.dieIndex };
+  const before = {
+    die: walk.die,
+    dieIndex: walk.dieIndex,
+    dieViaMessenger: walk.dieViaMessenger,
+  };
   const characterDie = exposedCharacterDie(state, walk);
   if (characterDie === PENDING) return;
   if (characterDie !== null) {
@@ -170,6 +174,7 @@ function jumpWithDie(state, spec, label) {
       before,
     );
     state.walk.dieIndex = characterDie;
+    state.walk.dieViaMessenger = false;
     return;
   }
   const dieResult = ensureDie(state, spec.die, label);
@@ -187,7 +192,7 @@ function jumpWithDie(state, spec, label) {
     state,
     spec,
     label,
-    sameDie ? { die: null, dieIndex: null } : before,
+    sameDie ? { die: null, dieIndex: null, dieViaMessenger: false } : before,
   );
 }
 // Rule 11: the move towards an exposed target uses an Army die, else an Army/Muster die, else a Character die with an
@@ -230,12 +235,6 @@ export function ensureDie(state, req, label) {
   if (state.settings.dice) return ensureDieFromPool(state, walk, req, label);
   return askForDie(state, walk, req, label);
 }
-// What else counts as the die asked about, without dice rolled by the app.
-const DIE_QUESTION_NOTE = {
-  [DIE_REQUIREMENT.ARMY]:
-    " (an Army/Muster die counts; so does a Muster die once per turn with Messenger of the Dark Tower when the Mouth of Sauron is in play, rule 30)",
-  [DIE_REQUIREMENT.MUSTER]: " (an Army/Muster die counts)",
-};
 // Messenger of the Dark Tower (rule 30): with the Mouth of Sauron in play, once per turn, a Muster die may act as an
 // Army die when Queller has no Army or Army/Muster die.
 const messengerAvailable = (state) =>
@@ -243,10 +242,11 @@ const messengerAvailable = (state) =>
 // With dice rolled by the app: take a matching die from the pool, changing one with an Elven Ring when that is armed.
 function ensureDieFromPool(state, walk, req, label) {
   let die = engine.findDie(state, req);
+  let viaMessenger = false;
   if (!die && req === DIE_REQUIREMENT.ARMY && messengerAvailable(state)) {
     die = engine.findDie(state, DIE_REQUIREMENT.MUSTER);
     if (die) {
-      walk.messengerDieIndex = state.dice.pool.indexOf(die);
+      viaMessenger = true;
       trail(state, {
         kind: TRAIL.NOTE,
         text: "Messenger of the Dark Tower: the Muster die acts as an Army die (rule 30)",
@@ -282,7 +282,28 @@ function ensureDieFromPool(state, walk, req, label) {
     return false;
   }
   walk.dieIndex = state.dice.pool.indexOf(die);
+  walk.dieViaMessenger = viaMessenger;
   return true;
+}
+// What counts as the die, added to the dice-off question.
+const DIE_QUESTION_NOTE = {
+  [DIE_REQUIREMENT.ARMY]: " (an Army/Muster die counts)",
+  [DIE_REQUIREMENT.MUSTER]: " (an Army/Muster die counts)",
+  [DIE_REQUIREMENT.FACTION_RECRUIT]:
+    " (a Wild result on the Faction die counts, rule 31)",
+  [DIE_REQUIREMENT.FACTION_PLAY]:
+    " (a Wild result on the Faction die counts, rule 31)",
+  [DIE_REQUIREMENT.FACTION_DRAW]:
+    " (a Wild result on the Faction die counts, rule 31)",
+};
+// The Army question names Messenger of the Dark Tower unless the tracker shows it cannot apply.
+function dieQuestionNote(state, req) {
+  if (
+    req === DIE_REQUIREMENT.ARMY &&
+    (!state.settings.tracker || messengerAvailable(state))
+  )
+    return " (an Army/Muster die counts; so does a Muster die once per turn with Messenger of the Dark Tower when the Mouth of Sauron is in play, rule 30)";
+  return DIE_QUESTION_NOTE[req] || "";
 }
 // Without dice: ask the player whether Queller has the die (once per type per walk), then offer an Elven Ring before giving up.
 function askForDie(state, walk, req, label) {
@@ -295,7 +316,7 @@ function askForDie(state, walk, req, label) {
         "Does Queller have " +
         dieWithArticle(req) +
         " die available" +
-        (DIE_QUESTION_NOTE[req] || "") +
+        dieQuestionNote(state, req) +
         (req === DIE_REQUIREMENT.ARMY &&
         EXPOSED_ARMY_JUMPS.has(walk.page + "." + walk.node)
           ? " (for this move a Character die counts too, if the Army that moves contains a Nazgûl or a minion, rule 11)"
@@ -344,6 +365,7 @@ function enterPage(state, spec, label, before) {
     node: walk.node,
     die: before ? before.die : walk.die,
     dieIndex: before ? before.dieIndex : walk.dieIndex,
+    dieViaMessenger: before ? before.dieViaMessenger : walk.dieViaMessenger,
     dieUsed: walk.dieUsed,
   });
   if (spec.held) ringDieHeldAs(state, spec.die);

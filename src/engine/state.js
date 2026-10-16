@@ -188,8 +188,6 @@ export function migrate(save) {
   if (save.board?.nations) migrateNations(save.board.nations);
   if (save.board?.chars) migrateMinions(save.board.chars);
   if (save.board && save.board.rings === undefined) save.board.rings = 0;
-  if (save.messengerUsedThisTurn === undefined)
-    save.messengerUsedThisTurn = false;
   if (save.walk && !save.walk.done && save.walk.flowRev !== FLOW_REV)
     migrateWalk(save.walk);
   delete save.shownCard;

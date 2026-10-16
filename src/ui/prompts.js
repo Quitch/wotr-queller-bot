@@ -21,9 +21,15 @@ export const NODE_KIND_NAME = {
 const YES_NO_BUTTONS =
   '<button class="btn yes" data-ans="yes">Yes</button><button class="btn no" data-ans="no">No</button>';
 const DONE_BUTTON = '<button class="btn yes" data-ans="done">Done</button>';
-// "Move/Attack" with an Army die: a move leaves a second move (rule 9), an attack uses the die
-const MOVED_OR_ATTACKED_BUTTONS =
-  '<button class="btn yes" data-ans="done">Moved</button><button class="btn yes" data-ans="attacked">Attacked</button>';
+// The first move of an Army die: one Army leaves the second move (rule 9), two use the die; "Move/Attack" may attack
+const FIRST_ARMY_MOVE_BUTTONS =
+  '<button class="btn yes" data-ans="done">Moved one Army</button><button class="btn yes" data-ans="movedBoth">Moved two Armies</button>';
+const ATTACKED_BUTTON =
+  '<button class="btn yes" data-ans="attacked">Attacked</button>';
+function actionDoneButtons(prompt) {
+  if (!prompt.armyMove) return DONE_BUTTON;
+  return FIRST_ARMY_MOVE_BUTTONS + (prompt.moveOrAttack ? ATTACKED_BUTTON : "");
+}
 const orderedListHTML = (items) =>
   items
     ? "<ol>" +
@@ -140,18 +146,19 @@ function renderRingPrompt(prompt) {
       '<button class="btn yes" data-ans="yes">Elven Ring used</button><button class="btn no" data-ans="no">No Elven Ring available</button>',
   };
 }
+// A prompt's help line, when it has one.
+const helpHTML = (help) =>
+  help ? '<div class="help">' + formatText(help) + "</div>" : "";
 function renderActionPrompt(prompt, walk) {
   return {
     body:
       '<p class="q">Queller: ' +
       formatText(prompt.text) +
       "</p>" +
-      (prompt.help
-        ? '<div class="help">' + formatText(prompt.help) + "</div>"
-        : "") +
+      helpHTML(prompt.help) +
       (prompt.pass ? "" : '<div class="help">' + dieHelpText(walk) + "</div>"),
     answers:
-      (prompt.moveOrAttack ? MOVED_OR_ATTACKED_BUTTONS : DONE_BUTTON) +
+      actionDoneButtons(prompt) +
       (engine.offersNotPossible(prompt)
         ? '<button class="btn no" data-ans="no">Not possible (rule 36)</button>'
         : ""),
@@ -178,9 +185,7 @@ function renderStepPrompt(prompt) {
     body:
       questionHTML(prompt.text) +
       orderedListHTML(prompt.items) +
-      (prompt.help
-        ? '<div class="help">' + formatText(prompt.help) + "</div>"
-        : ""),
+      helpHTML(prompt.help),
     answers: engine.offersNotPossible(prompt)
       ? DONE_BUTTON +
         '<button class="btn no" data-ans="no">Not possible</button>'
@@ -198,9 +203,7 @@ function renderBlockedPrompt(prompt) {
           "” not possible because a Free Peoples card on the table blocked it?",
       ) +
       orderedListHTML(original.items) +
-      (original.help
-        ? '<div class="help">' + formatText(original.help) + "</div>"
-        : "") +
+      helpHTML(original.help) +
       '<div class="help">If so, Queller must remove the card (rule 19): it uses one Action die and discards one Army Event card and one Character card, chosen by the Event page discard priority, and that is its action. If Queller cannot pay, the action is not possible.</div>',
     answers:
       engine.FP_PROTECTION_CARDS.map(
