@@ -5,7 +5,7 @@ import * as engine from "../qb.js";
 import { showErrBar, showStorageNotice } from "./boot.js";
 import { STORAGE_KEY, UNDO_DEPTH } from "./constants.js";
 import { gameHTML, render } from "./render.js";
-import { history, setState, state } from "./session.js";
+import { history, restoreState, state } from "./session.js";
 import { storageSet } from "./storage.js";
 
 function snapshot() {
@@ -33,7 +33,7 @@ export function act(fn, info) {
     commit();
   } catch (error) {
     const brokenState = state;
-    setState(JSON.parse(history.pop()));
+    restoreState(JSON.parse(history.pop()));
     debug.error(
       error,
       { action: "actionFailed", rolledBack: true },
@@ -49,7 +49,7 @@ export function act(fn, info) {
 export function undo() {
   if (!history.length) return;
   debug.begin({ action: "undo" }, state);
-  setState(JSON.parse(history.pop()));
+  restoreState(JSON.parse(history.pop()));
   debug.finishAction(state);
   commit();
 }

@@ -51,9 +51,14 @@ export function loadHTML() {
   return '<p class="notice" style="margin:0 0 6px">Paste a save code, or choose a save file.</p><label for="loadTxt" class="notice">Save code</label><textarea id="loadTxt" placeholder="Paste the save code here"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="loadTxtBtn">Load from code</button><label class="btn filebtn">Save file <input type="file" id="loadFile" accept=".json,.txt,application/json,text/plain"></label></div><div id="loadErr" class="notice" role="alert" style="color:var(--bad)"></div>';
 }
 // Replace the game with a parsed save. A save that cannot be drawn throws before the autosave is written (ui.commit):
-// the game in progress and its Undo steps come back, and so does the save modal it was loaded from.
+// the game in progress, its Undo steps and its battle form draft come back, and so does the save modal it was loaded
+// from.
 function replaceGame(save, title) {
-  const previous = { state: ui.state, history: ui.history };
+  const previous = {
+    state: ui.state,
+    history: ui.history,
+    battleDraft: ui.battleDraft,
+  };
   debug.begin(
     { action: "load", title, turn: save.turn, version: save.appVersion },
     ui.state,
@@ -64,8 +69,9 @@ function replaceGame(save, title) {
   try {
     ui.commit();
   } catch (error) {
-    ui.setState(previous.state);
+    ui.restoreState(previous.state);
     ui.setHistory(previous.history);
+    ui.setBattleDraft(previous.battleDraft);
     debug.error(error, { action: "loadFailed", rolledBack: true }, save);
     if (previous.state) ui.openModal(MODAL.SAVE);
     throw error;

@@ -47,7 +47,7 @@ const SEL = {
   ERROR_BAR_CLOSE: "#errbarClose",
   TRACKER_SARUMAN: "#t-chars-saruman",
   TRACKER_GONDOR: "#t-nations-gondor",
-  TRACKER_REVEALED: "#t-fs-revealed",
+  TRACKER_DECLARED: "#t-fs-declared",
   TABLE_CARD_DETAILS: '[data-card="show"]',
   TABLE_CARD_SHOWN: ".tablecards .card",
   TABLE_CARD_REMINDER: ".tablecards .rem",

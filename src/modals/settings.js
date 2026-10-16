@@ -2,7 +2,6 @@
 import * as engine from "../qb.js";
 import { MODAL } from "../ui/constants.js";
 import * as ui from "../ui/index.js";
-import { renderModal } from "./framework.js";
 
 const settingsContent = () => ({
   title: "Settings",
@@ -69,13 +68,11 @@ function wireSettingsModal(modal, el) {
   el.querySelectorAll("[data-set]").forEach(
     (input) =>
       (input.onchange = () =>
-        ui.act(
-          () => {
-            applySetting(input.dataset.set, input.checked);
-            renderModal();
-          },
-          { action: "setting", key: input.dataset.set, value: input.checked },
-        )),
+        ui.act(() => applySetting(input.dataset.set, input.checked), {
+          action: "setting",
+          key: input.dataset.set,
+          value: input.checked,
+        })),
   );
 }
 

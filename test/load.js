@@ -16,14 +16,25 @@ export * as QB_UI from "../src/ui/index.js";
 // The panels and tables the render and unit tests build or check without a DOM.
 export { gameHTML } from "../src/ui/render.js";
 export { PROMPT_RENDERERS, promptHTML } from "../src/ui/prompts.js";
-export { battleFormHTML, dieHelpText } from "../src/ui/battle-form.js";
+export {
+  battleFormHTML,
+  dieHelpText,
+  settleBattleDraft,
+} from "../src/ui/battle-form.js";
+export { battleDraft, setBattleDraft } from "../src/ui/session.js";
 export { setupHTML } from "../src/ui/setup.js";
 export { resultHTML, trailHTML } from "../src/ui/trail.js";
 export { PHASE_BY_LABEL } from "../src/ui/header.js";
 export { PHASE_ACTION } from "../src/ui/walkthrough.js";
-export { boardValue } from "../src/ui/tracker.js";
+export {
+  boardValue,
+  fellowshipDeclared,
+  trackerChange,
+} from "../src/ui/tracker.js";
 export { DEFAULT_STEP_LIMIT, STEP_LIMITS } from "../src/engine/constants.js";
-export { trackerValue } from "../src/ui/handlers.js";
+export { onPhase, trackerValue } from "../src/ui/handlers.js";
+export { undo } from "../src/ui/actions.js";
+export { closeModal } from "../src/modals/framework.js";
 export { modalRegistrations, svgPage } from "../src/modals/index.js";
 export { armyValue } from "../src/modals/calc.js";
 export { route } from "../src/modals/flow/route.js";

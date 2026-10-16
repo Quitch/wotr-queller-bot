@@ -1,6 +1,6 @@
 // The accessibility checks the mobile / WCAG 2.2 audit left manual, automated as far as Chromium on a PC allows: the
 // live region before and after a keyboard answer, a keyboard pass through the flowchart modal (focus order, tab
-// activation, the Tab trap, Escape), dark-scheme native controls, scroll chaining out of the scrolling regions and the
+// activation, the Tab trap, Escape), where focus lands after a re-render or a modal closes, dark-scheme native controls, scroll chaining out of the scrolling regions and the
 // modals, and on a 360px touch screen the tap pipeline, a double-tap zoom probe and the modals' scroll containment.
 // docs/testing.md records what these checks cannot cover. Fails on any FAIL line or page error.
 import {
@@ -13,6 +13,7 @@ import {
   openFromToolsMenu,
   readState,
   startGameAtSetupPrompt,
+  startGameWithEverythingOn,
 } from "./browser.js";
 
 const SETTLE_MS = 500; // long enough for a wheel scroll to land (smooth scrolling included)
@@ -40,6 +41,10 @@ const focused = (page) =>
       id: el.id || null,
       fp: el.dataset?.fp ?? null,
       modalName: el.dataset?.modal ?? null,
+      phase: el.dataset?.phase ?? null,
+      set: el.dataset?.set ?? null,
+      gl: el.dataset?.gl ?? null,
+      promptOrResult: el.matches(".prompt, .result"),
       inModal: !!el.closest("#modal"),
       role: el.getAttribute("role"),
       pressed: el.getAttribute("aria-pressed"),
@@ -127,9 +132,10 @@ async function checkLiveRegionOnSetupScreen(page) {
       ")",
   );
 }
-// The last focusable element of the modal, by the same query the Tab trap uses.
-const focusLastInModal = (page) =>
-  page.evaluate(() => {
+// The last focusable element of the modal, by the same query the Tab trap uses: focused, or (focus false) only checked
+// for focus. Returns its name, or with focus false whether it has focus.
+const focusLastInModal = (page, focus = true) =>
+  page.evaluate((focus) => {
     const focusable = [
       ...window.document.querySelectorAll(
         '#modal button,#modal [href],#modal input,#modal select,#modal textarea,#modal [tabindex]:not([tabindex="-1"])',
@@ -138,9 +144,10 @@ const focusLastInModal = (page) =>
       (candidate) => !candidate.disabled && candidate.offsetParent !== null,
     );
     const last = focusable.at(-1);
+    if (!focus) return window.document.activeElement === last;
     last.focus();
     return last.id || last.dataset.fp || last.tagName.toLowerCase();
-  });
+  }, focus);
 const svgLabel = (page) =>
   page.$eval("#modal svg", (el) => el.getAttribute("aria-label"));
 const pressedTabs = (page) =>
@@ -283,6 +290,149 @@ async function checkFlowModalKeyboard(page) {
     f?.modalName === "flow" && !f.inModal,
     "Escape: focus back on the Flowcharts button (" + JSON.stringify(f) + ")",
   );
+}
+const undoDepth = (page) => page.evaluate(() => window.QBUI.history.length);
+// Focus a control and press Enter.
+async function pressOn(page, selector) {
+  await page.focus(selector);
+  await page.keyboard.press("Enter");
+}
+// After a re-render removed or disabled the focused control, focus is on the prompt or result, else the walkthrough.
+async function checkFocusFallsBack(page, what) {
+  const f = await focused(page);
+  check(
+    !!f && (f.promptOrResult || f.id === "main"),
+    what +
+      ": focus on the prompt, the result or the walkthrough (" +
+      JSON.stringify(f) +
+      ")",
+  );
+}
+// Shift+Tab from the title a modal opens on stays in the modal; a Settings toggle keeps focus on it although the page
+// behind re-renders, and Escape returns focus to the Settings button.
+async function checkSettingsFocus(page) {
+  await pressOn(page, SEL.modal("settings"));
+  await page.waitForSelector(SEL.MODAL);
+  let f = await focused(page);
+  check(
+    f?.id === "mtitle",
+    "Settings opened: focus on the title (" + JSON.stringify(f) + ")",
+  );
+  await page.keyboard.press("Shift+Tab");
+  f = await focused(page);
+  check(
+    f?.inModal && (await focusLastInModal(page, false)),
+    "Shift+Tab from the title wraps to the modal's last control (" +
+      JSON.stringify(f) +
+      ")",
+  );
+  for (let i = 0; i < 2; i++) {
+    await page.focus('#modal [data-set="dice"]');
+    await page.keyboard.press("Space");
+    f = await focused(page);
+    check(
+      f?.set === "dice" && f.inModal,
+      "a Settings toggle keeps focus on it (" + JSON.stringify(f) + ")",
+    );
+  }
+  await page.keyboard.press("Escape");
+  f = await focused(page);
+  check(
+    f?.modalName === "settings" && !f.inModal,
+    "Escape after a Settings toggle: focus back on the Settings button (" +
+      JSON.stringify(f) +
+      ")",
+  );
+}
+// Opening Jump is not an Undo step, and Escape or a walk started from it returns focus to its button (the first start
+// point's walk ends at once, so the button stays).
+async function checkJumpFocus(page) {
+  const depth = await undoDepth(page);
+  await pressOn(page, SEL.phase("jumpto"));
+  await page.waitForSelector(SEL.MODAL);
+  const opened = await undoDepth(page);
+  check(
+    opened === depth,
+    "opening Jump adds no Undo step (" + depth + " → " + opened + ")",
+  );
+  for (const how of ["Escape", "Walk"]) {
+    if (how === "Escape") await page.keyboard.press("Escape");
+    else {
+      await pressOn(page, SEL.phase("jumpto"));
+      await pressOn(page, SEL.JUMP_GO);
+    }
+    const f = await focused(page);
+    check(
+      f?.phase === "jumpto" && !f.inModal,
+      how + " from Jump: focus back on its button (" + JSON.stringify(f) + ")",
+    );
+  }
+}
+// A table card's Details toggle keeps focus when it flips to Hide and back.
+async function checkTableCardToggleFocus(page) {
+  const toggleId =
+    "tcd-" +
+    (await page.evaluate(() => {
+      const card = window.QB.CARD.PALANTIR;
+      window.QBUI.act(() => window.QBUI.state.cards.table.push(card));
+      return card;
+    }));
+  for (const label of ["Details", "Hide"]) {
+    await pressOn(page, "#" + toggleId);
+    const f = await focused(page);
+    check(
+      f?.id === toggleId,
+      label + " pressed: focus stays on the toggle (" + JSON.stringify(f) + ")",
+    );
+  }
+}
+// A glossary term pressed in another modal opens the glossary on that term.
+async function checkGlossaryFromModal(page) {
+  await pressOn(page, SEL.modal("rules"));
+  await page.waitForSelector(SEL.MODAL);
+  const term = await page.getAttribute("#modal .term", "data-term");
+  await pressOn(page, "#modal .term");
+  const f = await focused(page);
+  check(
+    !!term && f?.gl === term,
+    "a term pressed in the rules modal: the glossary opens with focus on " +
+      term +
+      " (" +
+      JSON.stringify(f) +
+      ")",
+  );
+  await page.keyboard.press("Escape");
+}
+// 6. Where focus lands after a re-render or a modal: a phase button, Undo, the battle form's button, a table card's
+// toggle, Settings, Jump and a glossary term in another modal (a fresh page, so the game is in a known state).
+async function checkFocusAfterRenders() {
+  const { page, errors, close } = await launchBuiltPage({
+    captureErrors: true,
+  });
+  await startGameWithEverythingOn(page);
+  await pressOn(page, SEL.phase("setup"));
+  await checkFocusFallsBack(page, "a phase button pressed");
+  await pressOn(page, SEL.UNDO);
+  await checkFocusFallsBack(page, "Undo pressed and disabled");
+  await page.click(SEL.phase("setup"));
+  await answerAll(page);
+  await checkSettingsFocus(page);
+  await checkJumpFocus(page);
+  await page.evaluate(() => {
+    window.QBUI.act(() => {
+      const { QB } = window,
+        state = window.QBUI.state;
+      QB.abandonWalk(state);
+      state.phase = QB.PHASE.P5;
+      QB.startBattle(state, 1);
+    });
+  });
+  await pressOn(page, SEL.BATTLE_FORM_OK);
+  await checkFocusFallsBack(page, "the battle form's button pressed");
+  await checkTableCardToggleFocus(page);
+  await checkGlossaryFromModal(page);
+  await close();
+  return errors;
 }
 // Focus the next button and press Enter until the game log grows. Returns whether it did.
 async function answerByKeyboardUntilLogGrows(page) {
@@ -674,7 +824,9 @@ async function main() {
   await checkDarkNativeControls(desktop.page);
   await checkScrollChainingDesktop(desktop.page);
   await desktop.close();
-  const errors = desktop.errors.concat(await checkTouch());
+  const errors = desktop.errors
+    .concat(await checkFocusAfterRenders())
+    .concat(await checkTouch());
   const problems = failures.map((failure) => "FAIL " + failure).concat(errors);
   console.log(
     problems.length
