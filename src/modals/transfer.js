@@ -20,7 +20,7 @@ export async function downloadText({ fileName, data, noteEl, fallbackLabel }) {
   if (downloads) {
     try {
       const result = await downloads.save({ filename: fileName, data });
-      noteEl.textContent = "Saved " + fileName + ".";
+      noteEl.textContent = "File saved.";
       return result?.status || "saved";
     } catch (error) {
       const code = error?.code || "unknown";
@@ -30,7 +30,7 @@ export async function downloadText({ fileName, data, noteEl, fallbackLabel }) {
       }
       if (code === "rate_limited") {
         noteEl.textContent =
-          "A download prompt is already open; finish it or try again.";
+          "A download prompt is already open, or there were too many in a row; wait, then try again.";
         return "busy";
       }
       reason = "The app could not save the file here (" + code + "). ";
@@ -52,23 +52,29 @@ export async function downloadText({ fileName, data, noteEl, fallbackLabel }) {
     return "blocked";
   }
 }
-// Whether this browser (and the frame's permission policy) lets the share sheet take a file.
-export function canShareFile(fileName) {
+// The file the share sheet takes: the JSON file, or the same text as a .txt file where the browser's share list has
+// no JSON; null where the browser (or the frame's permission policy) shares no files.
+function shareableFile(fileName, data) {
+  const choices = [
+    [fileName, FILE_TYPE],
+    [fileName.replace(/\.json$/, ".txt"), "text/plain"],
+  ];
   try {
-    return !!navigator.canShare?.({
-      files: [new File([""], fileName, { type: FILE_TYPE })],
-    });
+    for (const [name, type] of choices) {
+      const file = new File([data], name, { type });
+      if (navigator.canShare?.({ files: [file] })) return file;
+    }
   } catch {
-    return false;
+    // No File or no navigator: nothing to share.
   }
+  return null;
 }
 // navigator.share needs the click's user activation, so it is called before anything is awaited.
-export async function shareFile({ fileName, data, noteEl, fallbackLabel }) {
+async function shareFile({ fileName, data, noteEl, fallbackLabel }) {
   try {
-    await navigator.share({
-      files: [new File([data], fileName, { type: FILE_TYPE })],
-    });
-    noteEl.textContent = "Shared " + fileName + ".";
+    const file = shareableFile(fileName, data);
+    await navigator.share({ files: [file] });
+    noteEl.textContent = "Shared " + file.name + ".";
     return "shared";
   } catch (error) {
     if (error?.name === "AbortError") {
@@ -79,6 +85,20 @@ export async function shareFile({ fileName, data, noteEl, fallbackLabel }) {
       "Sharing is not available here — use " + fallbackLabel + ".";
     return error?.name || "failed";
   }
+}
+// Shows the Share button only where the share sheet takes a file, and shares data() on a click; done gets the outcome.
+export function wireShare(
+  button,
+  { fileName, data, noteEl, fallbackLabel, done },
+) {
+  button.hidden = !shareableFile(fileName(), "");
+  button.onclick = () =>
+    void shareFile({
+      fileName: fileName(),
+      data: data(),
+      noteEl,
+      fallbackLabel,
+    }).then(done);
 }
 export async function copyText({ data, noteEl, label, textarea }) {
   try {

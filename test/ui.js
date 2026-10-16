@@ -482,7 +482,7 @@ async function checkTransfer() {
   let result = await download();
   ok(
     result.outcome === "saved" &&
-      result.note === "Saved log.json." &&
+      result.note === "File saved." &&
       !clicks.length,
     "a host save needs no link",
   );
@@ -545,27 +545,58 @@ async function checkTransfer() {
     "a blocked link points at the fallback",
   );
 
-  const share = async (shareImpl) => {
-    setNavigator({ share: shareImpl });
-    const noteEl = { textContent: "" };
-    const outcome = await fakeWindow.shareFile({
-      fileName: "log.json",
-      data: "{}",
-      noteEl,
-      fallbackLabel: "Copy",
+  // The share sheet through wireShare, with a fake button; canShare(types) accepts the listed MIME types only.
+  const share = async (
+    shareImpl,
+    types = ["application/json", "text/plain"],
+  ) => {
+    setNavigator({
+      canShare: (data) => types.includes(data.files[0].type),
+      share: shareImpl,
     });
-    return { outcome, note: noteEl.textContent };
+    const button = {};
+    const noteEl = { textContent: "" };
+    let outcome;
+    const settled = new Promise((resolve) => {
+      fakeWindow.wireShare(button, {
+        fileName: () => "log.json",
+        data: () => "{}",
+        noteEl,
+        fallbackLabel: "Copy",
+        done: (value) => resolve((outcome = value)),
+      });
+    });
+    if (!button.hidden) {
+      button.onclick();
+      await settled;
+    }
+    return { outcome, note: noteEl.textContent, hidden: button.hidden };
   };
   let shared;
-  result = await share(async (data) => {
+  const keep = async (data) => {
     shared = data.files[0];
-  });
+  };
+  result = await share(keep);
+  ok(
+    !result.hidden &&
+      result.outcome === "shared" &&
+      shared.name === "log.json" &&
+      shared.type === "application/json" &&
+      (await shared.text()) === "{}" &&
+      result.note === "Shared log.json.",
+    "share hands the sheet the JSON file",
+  );
+  result = await share(keep, ["text/plain"]);
   ok(
     result.outcome === "shared" &&
-      shared.name === "log.json" &&
-      (await shared.text()) === "{}",
-    "share hands the sheet the file",
+      shared.name === "log.txt" &&
+      shared.type === "text/plain" &&
+      (await shared.text()) === "{}" &&
+      result.note === "Shared log.txt.",
+    "a share list without JSON gets the same text as a .txt file",
   );
+  result = await share(keep, []);
+  ok(result.hidden, "the Share button is hidden where no file can be shared");
   const named = (name) => async () => {
     const error = new Error(name);
     error.name = name;
@@ -581,19 +612,24 @@ async function checkTransfer() {
     result.outcome === "NotAllowedError" && result.note.endsWith("use Copy."),
     "a refused share points at the fallback",
   );
-  setNavigator({ canShare: () => true });
-  ok(fakeWindow.canShareFile("log.json"), "canShareFile reads canShare");
-  setNavigator({});
-  ok(!fakeWindow.canShareFile("log.json"), "no canShare means no share");
-  setNavigator({
-    canShare: () => {
-      throw new Error("x");
+  for (const navigatorValue of [
+    {},
+    {
+      canShare: () => {
+        throw new Error("x");
+      },
     },
-  });
-  ok(
-    !fakeWindow.canShareFile("log.json"),
-    "a throwing canShare means no share",
-  );
+  ]) {
+    setNavigator(navigatorValue);
+    const button = {};
+    fakeWindow.wireShare(button, {
+      fileName: () => "log.json",
+      data: () => "{}",
+      noteEl: {},
+      fallbackLabel: "Copy",
+    });
+    ok(button.hidden, "no canShare, or a throwing one, hides the Share button");
+  }
 
   Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
   delete globalThis.window;

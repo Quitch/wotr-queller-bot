@@ -300,15 +300,15 @@ async function checkDebugLogExport(page) {
     "bytes, note:",
     await page.textContent(SEL.DEBUG_NOTE),
   );
-  if (!/^queller-debug-.*.json$/.test(download.suggestedFilename()))
+  if (!/^queller-debug-.*\.json$/.test(download.suggestedFilename()))
     debugFailures.push("download named " + download.suggestedFilename());
   if (body !== (await page.inputValue(SEL.DEBUG_TEXT)))
     debugFailures.push("downloaded file differs from the log in the box");
-  const canShare = await page.evaluate(
-    () =>
-      !!navigator.canShare?.({
-        files: [new File([""], "x.json", { type: "application/json" })],
-      }),
+  const canShare = await page.evaluate(() =>
+    ["application/json", "text/plain"].some(
+      (type) =>
+        !!navigator.canShare?.({ files: [new File([""], "x", { type })] }),
+    ),
   );
   const shareShown = await page.isVisible(SEL.DEBUG_SHARE);
   console.log("canShare files:", canShare, "share button shown:", shareShown);
@@ -319,12 +319,13 @@ async function checkDebugLogExport(page) {
   await page.click(SEL.MODAL_CLOSE);
   await checkDebugLogShare(page);
 }
-// Headless Chromium shares no files, so a stubbed share sheet shows the Share button for axe and a click.
+// Headless Chromium shares no files, so a stubbed share sheet shows the Share button for axe and a click. It takes
+// plain text only, as a share list without JSON would, so the log goes as a .txt file.
 async function checkDebugLogShare(page) {
   await page.evaluate(() => {
     window.sharedFiles = [];
     Object.defineProperty(navigator, "canShare", {
-      value: () => true,
+      value: (data) => data.files[0].type === "text/plain",
       configurable: true,
     });
     Object.defineProperty(navigator, "share", {
@@ -343,7 +344,7 @@ async function checkDebugLogShare(page) {
   const shared = await page.evaluate(() => window.sharedFiles[0]);
   console.log("shared:", shared, "note:", note);
   if (
-    !/^queller-debug-.*.json$/.test(shared) ||
+    !/^queller-debug-.*\.txt$/.test(shared) ||
     note !== "Shared " + shared + "."
   )
     debugFailures.push("share sent " + shared + ", note " + note);

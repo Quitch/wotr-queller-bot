@@ -2,7 +2,7 @@
 import * as debug from "../debug.js";
 import { MODAL } from "../ui/constants.js";
 import * as ui from "../ui/index.js";
-import { canShareFile, copyText, downloadText, shareFile } from "./transfer.js";
+import { copyText, downloadText, wireShare } from "./transfer.js";
 
 const debugContent = () => ({
   title: "Debug log",
@@ -129,36 +129,35 @@ function wireDebug(modal, el) {
   refresh();
   el.querySelector("#dbgReport").onchange = refresh;
   const noteEl = el.querySelector("#dbgNote");
-  const shareButton = el.querySelector("#dbgShare");
-  shareButton.hidden = !canShareFile(debug.fileName(ui.state));
-  const recordExport = (how, bytes) => (outcome) =>
-    debug.action({ action: "debugExport", how, bytes, outcome }, ui.state);
-  el.querySelector("#dbgDl").onclick = () => {
+  const fileName = () => debug.fileName(ui.state);
+  // The click is recorded at once and the route's outcome when it settles, so a page closed mid-prompt keeps the click.
+  const exportData = (how) => {
     const data = refresh();
+    debug.action({ action: "debugExport", how, bytes: data.length }, ui.state);
+    return data;
+  };
+  const recordOutcome = (how) => (outcome) =>
+    debug.action({ action: "debugExportResult", how, outcome }, ui.state);
+  const shareButton = el.querySelector("#dbgShare");
+  wireShare(shareButton, {
+    fileName,
+    data: () => exportData("share"),
+    noteEl,
+    fallbackLabel: "Copy debug log",
+    done: recordOutcome("share"),
+  });
+  el.querySelector("#dbgDl").onclick = () => {
     void downloadText({
-      fileName: debug.fileName(ui.state),
-      data,
+      fileName: fileName(),
+      data: exportData("download"),
       noteEl,
       fallbackLabel: shareButton.hidden
         ? "Copy debug log"
         : "Share debug log file or Copy debug log",
-    }).then(recordExport("download", data.length));
-  };
-  shareButton.onclick = () => {
-    const data = refresh();
-    void shareFile({
-      fileName: debug.fileName(ui.state),
-      data,
-      noteEl,
-      fallbackLabel: "Copy debug log",
-    }).then(recordExport("share", data.length));
+    }).then(recordOutcome("download"));
   };
   el.querySelector("#dbgCopy").onclick = () => {
-    const data = refresh();
-    debug.action(
-      { action: "debugExport", how: "copy", bytes: data.length },
-      ui.state,
-    );
+    const data = exportData("copy");
     void copyText({
       data,
       noteEl,
