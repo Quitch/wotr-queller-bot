@@ -1,4 +1,5 @@
 // Scripted scenarios for the behaviour fixed in version 52. Exit 1 on any failure.
+import { readFileSync } from "node:fs";
 import * as fakeWindow from "./load.js";
 const engine = fakeWindow.QB,
   FLOW = fakeWindow.QB_FLOW,
@@ -399,21 +400,24 @@ function lidlessEyeMovesDiceNotItsOwn() {
   );
   const eventDie = lidlessEyeState.dice.pool[3];
   ok(
-    huntDice.length === 2 &&
-      lidlessEyeState.dice.hunt === 2 &&
+    huntDice.length === 3 &&
+      lidlessEyeState.dice.hunt === 3 &&
       huntDice.every((pooledDie) => pooledDie.face === "Eye"),
-    "the two non-preferred dice changed to Eye and placed in the Hunt box",
+    "three dice changed to Eye and placed in the Hunt box",
   );
   ok(
     eventDie.status === DIE_STATE.USED,
     "the Event die that played the card was spent, not changed",
   );
   ok(
-    lidlessEyeState.dice.pool.filter(
-      (pooledDie) =>
-        pooledDie.face === "Character" && pooledDie.status === DIE_STATE.AVAIL,
-    ).length === 2,
-    "preferred (Character) dice left alone while non-preferred ones existed",
+    lidlessEyeState.dice.pool[1].status === DIE_STATE.HUNT &&
+      lidlessEyeState.dice.pool[2].status === DIE_STATE.HUNT &&
+      lidlessEyeState.dice.pool.filter(
+        (pooledDie) =>
+          pooledDie.face === "Character" &&
+          pooledDie.status === DIE_STATE.AVAIL,
+      ).length === 1,
+    "both non-preferred dice taken, topped up with one preferred (Character) die",
   );
   const singleDieState = phase5State({
     dice: true,
@@ -433,6 +437,158 @@ function lidlessEyeMovesDiceNotItsOwn() {
     engine.precondition(singleDieState, "sa043") === true,
     "…and playable once another unused die exists",
   );
+}
+// "Up to three": one non-preferred die does not cut the count to one (rule 29 orders the dice, it does not limit them).
+function lidlessEyeTopsUpToThree() {
+  const topUpState = phase5State(
+    { dice: true, cards: true, tracker: true, wome: false },
+    STRATEGY.CORRUPTION,
+  );
+  topUpState.dice.pool = [
+    die("Character"),
+    die("Character"),
+    die("Character"),
+    die("Army"),
+  ];
+  const chosen = engine.nonPreferredFirst(topUpState, topUpState.dice.pool, 3);
+  ok(
+    chosen.length === 3 && chosen[0].face === "Army",
+    "[Character ×3, Army] gives three dice, the Army die first",
+  );
+  ok(
+    engine.nonPreferredFirst(topUpState, topUpState.dice.pool, 1)[0].face ===
+      "Army",
+    "a count of one (the Elven Ring) still takes the non-preferred die",
+  );
+}
+// The game minimum of 1 Hunt die (rulebook p.20) on the flowchart's 0-dice paths, asked of the player after turn 1.
+function huntMinimumAskedOnZeroDicePaths() {
+  const phase3State = (strategy, dice, turn = 2) => {
+    const state = engine.newState({
+      dice,
+      cards: false,
+      tracker: true,
+      wome: false,
+    });
+    state.strategy = strategy;
+    state.turn = turn;
+    state.dice.pool = Array.from({ length: 7 }, () =>
+      die(null, DIE_STATE.POOL),
+    );
+    engine.startPhase(state, PHASE.P3);
+    return state;
+  };
+  const minimumQuestion = /take a die out of the Hunt Box/;
+  const wasAsked = (prompts) =>
+    prompts.some((prompt) => minimumQuestion.test(prompt.text));
+  const rollsLogged = (state) =>
+    state.log.filter((entry) => /for the hunt allocation/.test(entry.text))
+      .length;
+  const stepWhy = (state) =>
+    state.walk.trail.find(
+      (entry) => entry.kind === TRAIL.STEP && /^Roll a die/.test(entry.text),
+    )?.why;
+  const stepPrompt = (prompts) =>
+    prompts.find(
+      (prompt) =>
+        prompt.type === PROMPT.STEP && /Hunt Box/.test(prompt.text || ""),
+    )?.text;
+  for (const [answer, hunt] of [
+    [true, 1],
+    [false, 0],
+  ]) {
+    const militaryState = phase3State(STRATEGY.MILITARY, true);
+    const asked = driveWalk(militaryState, [[minimumQuestion, answer]]);
+    ok(
+      wasAsked(asked) && militaryState.dice.hunt === hunt,
+      "Military “Assign 0 dice”, answered " +
+        (answer ? "Yes" : "No") +
+        ": " +
+        hunt +
+        " in the Hunt Box",
+    );
+  }
+  const firstTurnState = phase3State(STRATEGY.MILITARY, true, 1);
+  ok(
+    !wasAsked(driveWalk(firstTurnState, [[minimumQuestion, true]])) &&
+      firstTurnState.dice.hunt === 0,
+    "turn 1 has no previous turn: not asked, 0 in the Hunt Box",
+  );
+  const realRandom = Math.random;
+  try {
+    for (const [roll, answer, hunt, why] of [
+      [0, true, 1, "rolled 1 → 1 in the Hunt Box (the game minimum)"],
+      [0, false, 0, "rolled 1 → 0 in the Hunt Box"],
+      [0.9, false, 1, "rolled 6 → 1 in the Hunt Box"],
+    ]) {
+      Math.random = () => roll;
+      const corruptionState = phase3State(STRATEGY.CORRUPTION, true);
+      const asked = driveWalk(corruptionState, [[minimumQuestion, answer]]);
+      ok(
+        wasAsked(asked) === (roll === 0) &&
+          corruptionState.dice.hunt === hunt &&
+          rollsLogged(corruptionState) === 1 &&
+          stepWhy(corruptionState) === why,
+        "Corruption, dice on: " +
+          why +
+          (roll ? ", not asked" : "") +
+          ", rolled once",
+      );
+    }
+    // dice switched off while the question is open after the app's roll: the roll stands
+    for (const [answer, text] of [
+      [true, "Assign 1 die to the Hunt Box (rolled 1; the game minimum)."],
+      [false, "Assign 0 dice to the Hunt Box (rolled 1)."],
+    ]) {
+      Math.random = () => 0;
+      const toggledState = phase3State(STRATEGY.CORRUPTION, true);
+      const asked = driveWalk(toggledState, [
+        {
+          test: (prompt) => minimumQuestion.test(prompt.text),
+          answer: () => {
+            toggledState.settings.dice = false;
+            return answer;
+          },
+        },
+      ]);
+      ok(
+        stepPrompt(asked) === text && rollsLogged(toggledState) === 1,
+        "dice switched off after the roll, answered " +
+          (answer ? "Yes" : "No") +
+          ": “" +
+          text +
+          "”, no second roll",
+      );
+    }
+    // dice switched on while the question is open before the player's roll: the app rolls once
+    Math.random = () => 0;
+    const switchedOnState = phase3State(STRATEGY.CORRUPTION, false);
+    const switchedOnPrompts = driveWalk(switchedOnState, [
+      {
+        test: (prompt) => minimumQuestion.test(prompt.text),
+        answer: () => {
+          switchedOnState.settings.dice = true;
+          return false;
+        },
+      },
+    ]);
+    ok(
+      wasAsked(switchedOnPrompts) &&
+        rollsLogged(switchedOnState) === 1 &&
+        stepWhy(switchedOnState) === "rolled 1 → 0 in the Hunt Box",
+      "dice switched on after the question, answered No: one roll, 0 in the Hunt Box",
+    );
+  } finally {
+    Math.random = realRandom;
+  }
+  for (const strategy of [STRATEGY.MILITARY, STRATEGY.CORRUPTION]) {
+    const diceOffState = phase3State(strategy, false);
+    const asked = driveWalk(diceOffState, [[minimumQuestion, true]]);
+    ok(
+      stepPrompt(asked) === "Assign 1 die to the Hunt Box (the game minimum).",
+      strategy + " with dice off, answered Yes: the player assigns 1 die",
+    );
+  }
 }
 function rule34CapsHuntAllocations() {
   const oneCompanionState = phase5State({
@@ -1605,6 +1761,233 @@ function savedWalkFromReleasedFlowchartResumes() {
     "a finished walk from the released flowchart is kept",
   );
 }
+// test/fixtures/v61-army-walk.json is a game saved by version 61 (commit 10960ec) part-way through the Army page,
+// entered from M5's "Army" jump with an Army die: it resumes with the walk fields added since, and its Army die makes
+// both moves (rule 9). It was made with v61's own code: dice on, cards off, Military, one Army die, startPhase(P5),
+// then Yes to "Shadow under threat", No to "Mobile army adjacent", Yes to "Move can create" (the Character move is
+// skipped and jArmyT enters AR), saved at AR.threatEx.
+const V61_ARMY_WALK = readFileSync(
+  new URL("./fixtures/v61-army-walk.json", import.meta.url),
+  "utf8",
+);
+const V61_ARMY_RULES = [
+  [/adjacent\* to \*threat/, false],
+  byType(PROMPT.YES_NO, true),
+];
+function toArmyMove(state) {
+  for (
+    let guard = 0;
+    guard < 20 && state.walk.prompt && state.walk.prompt.type !== PROMPT.ACTION;
+    guard++
+  )
+    engine.answer(state, ruleAnswer(state.walk.prompt, V61_ARMY_RULES));
+  return state.walk.prompt;
+}
+function answerWithoutThrowing(state, value) {
+  try {
+    engine.answer(state, value);
+    return true;
+  } catch (error) {
+    console.log("     threw:", error.message);
+    return false;
+  }
+}
+function version61ArmyWalkResumesAndEnds() {
+  const saved = JSON.parse(V61_ARMY_WALK);
+  ok(
+    saved.appVersion === 61 &&
+      saved.walk.page === "AR" &&
+      !("armyStart" in saved.walk) &&
+      !("flowRev" in saved.walk),
+    "the fixture is a version 61 walk on the Army page, without the fields added since",
+  );
+  const state = engine.migrate(JSON.parse(V61_ARMY_WALK));
+  const walk = state.walk;
+  ok(
+    walk.armyStart === "Army" &&
+      walk.armyMoves === 0 &&
+      walk.messengerAns === null &&
+      walk.dieViaMessenger === false &&
+      walk.stack.every((frame) => frame.dieViaMessenger === false) &&
+      walk.flowRev === engine.FLOW_REV,
+    "migrate gives the walk its Army start point (from the trail's Army jump) and the defaults of the newer fields",
+  );
+  const move = toArmyMove(state);
+  const answered = move.armyMove && answerWithoutThrowing(state, "done");
+  ok(
+    answered && state.walk.armyMoves === 1 && !state.walk.done,
+    "the first Army move of the resumed walk walks the Army page again for the second",
+  );
+  if (answered && !state.walk.done) {
+    toArmyMove(state);
+    engine.answer(state, "done");
+  }
+  ok(
+    state.walk.done &&
+      state.walk.result === WALK_RESULT.ACTION &&
+      state.dice.pool[0].status === DIE_STATE.USED,
+    "the resumed walk ends after the second move, with the Army die spent",
+  );
+  const back = engine.migrate(JSON.parse(V61_ARMY_WALK));
+  let returned = true;
+  try {
+    driveWalk(back, []);
+  } catch (error) {
+    console.log("     threw:", error.message);
+    returned = false;
+  }
+  ok(
+    returned && back.walk.done,
+    "answered No throughout, the resumed walk returns to M5 through its saved frame and ends",
+  );
+  const lost = engine.migrate(JSON.parse(V61_ARMY_WALK));
+  const lostMove = toArmyMove(lost);
+  lost.walk.armyStart = "Nowhere";
+  ok(
+    lostMove.armyMove &&
+      answerWithoutThrowing(lost, "done") &&
+      lost.walk.done &&
+      lost.dice.pool[0].status === DIE_STATE.USED,
+    "with an Army start point that does not exist, the move ends the walk and spends the die",
+  );
+  const fromArmy = JSON.parse(V61_ARMY_WALK);
+  fromArmy.walk.entry = { page: "AR", start: "Army 2" };
+  fromArmy.walk.trail = fromArmy.walk.trail.filter(
+    (entry) => entry.kind !== TRAIL.JUMP,
+  );
+  fromArmy.walk.stack = [];
+  ok(
+    engine.migrate(fromArmy).walk.armyStart === "Army 2",
+    "a walk that began on the Army page takes its own start point",
+  );
+  const newer = JSON.parse(V61_ARMY_WALK);
+  newer.walk.flowRev = engine.FLOW_REV + 1;
+  ok(
+    engine.migrate(newer).walk.flowRev === engine.FLOW_REV + 1,
+    "a walk from a newer flowchart keeps its revision",
+  );
+  const onMuster = JSON.parse(V61_ARMY_WALK);
+  onMuster.walk.stack.push({
+    page: "AR",
+    node: "jMuster3",
+    die: null,
+    dieIndex: null,
+    dieUsed: false,
+  });
+  onMuster.walk.trail.push({
+    kind: TRAIL.JUMP,
+    text: "Muster 3",
+    page: "AR",
+    node: "jMuster3",
+  });
+  onMuster.walk.page = "MU";
+  onMuster.walk.node = "start3";
+  const offArmy = JSON.parse(V61_ARMY_WALK);
+  offArmy.walk.page = "M5";
+  offArmy.walk.stack = [];
+  ok(
+    engine.migrate(onMuster).walk.armyStart === "Army" &&
+      engine.migrate(offArmy).walk.armyStart === null,
+    "a walk on the Muster page that returns to the Army page takes its Army start point; one that does not, none",
+  );
+}
+// test/fixtures/v61-army-move.json is the same v61 walk saved at the Army page's "Move" action (No to both
+// "adjacent to threat" questions, Yes to the rest), whose prompt v61 drew without the second-move flags.
+function version61ArmyMovePromptGetsBothMoves() {
+  const state = engine.migrate(
+    JSON.parse(
+      readFileSync(
+        new URL("./fixtures/v61-army-move.json", import.meta.url),
+        "utf8",
+      ),
+    ),
+  );
+  ok(
+    state.walk.prompt.type === PROMPT.ACTION &&
+      state.walk.prompt.armyMove === true &&
+      !state.walk.prompt.moveOrAttack,
+    "the saved Move prompt takes the flags that ask about the second Army move",
+  );
+  const first = answerWithoutThrowing(state, "done");
+  ok(
+    first && state.walk.armyMoves === 1 && !state.walk.done,
+    "its first move walks the Army page again for the second",
+  );
+  if (first && !state.walk.done) {
+    toArmyMove(state);
+    engine.answer(state, "done");
+  }
+  ok(
+    state.walk.done && state.dice.pool[0].status === DIE_STATE.USED,
+    "the second move ends the walk with the Army die spent",
+  );
+}
+// The walk of a current game at the point the v61 fixture was saved, for the fields a migrated walk must have.
+function currentArmyWalk() {
+  const state = phase5State(
+    { dice: true, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.dice.pool = [die("Army")];
+  engine.startPhase(state, PHASE.P5);
+  for (let guard = 0; guard < 20 && state.walk.page !== "AR"; guard++)
+    engine.answer(
+      state,
+      /^Shadow under|^Move can create/.test(state.walk.prompt.text),
+    );
+  return state.walk;
+}
+// A field added to the walk or its stack frames without a migrate default fails here.
+function migratedWalkHasEveryField() {
+  const fresh = currentArmyWalk();
+  const migrated = engine.migrate(JSON.parse(V61_ARMY_WALK)).walk;
+  const missing = (current, old) =>
+    Object.keys(current).filter((key) => !(key in old));
+  const walkGaps = missing(fresh, migrated);
+  const frameGaps =
+    fresh.page === "AR" && fresh.stack.length
+      ? missing(fresh.stack[0], migrated.stack[0])
+      : ["(no fresh frame)"];
+  ok(
+    walkGaps.length === 0 && frameGaps.length === 0,
+    "the migrated v61 walk and its frame have every field a current one has" +
+      (walkGaps.length + frameGaps.length
+        ? " (missing: " + [...walkGaps, ...frameGaps].join(", ") + ")"
+        : ""),
+  );
+}
+// Every grey box that enters the Army page, as its trail entry reads, gives a migrated walk that box's start point.
+function migratedArmyStartForEveryArmyJump() {
+  const wrong = [];
+  let boxes = 0;
+  for (const [pageKey, page] of Object.entries(FLOW))
+    for (const [nodeId, node] of Object.entries(page.nodes)) {
+      if (NODE.kind(node) !== fakeWindow.QB_NODE_KIND.JUMP) continue;
+      const spec = engine.jumpSpec(NODE.text(node));
+      if (spec?.page !== "AR") continue;
+      boxes++;
+      const save = JSON.parse(V61_ARMY_WALK);
+      save.walk.trail = [
+        save.walk.trail[0],
+        {
+          kind: TRAIL.JUMP,
+          text: engine.normalizeText(NODE.text(node)),
+          page: pageKey,
+          node: nodeId,
+        },
+      ];
+      if (engine.migrate(save).walk.armyStart !== spec.start)
+        wrong.push(pageKey + "." + nodeId);
+    }
+  ok(
+    boxes > 0 && wrong.length === 0,
+    "every Army jump's trail text migrates to its start point (" +
+      boxes +
+      " boxes" +
+      (wrong.length ? "; wrong: " + wrong.join(", ") : "") +
+      ")",
+  );
+}
 // Draft flowchart: "Use Muster die set aside for minion" now comes before "Discard unplayable die". When Muster 2
 // finds nothing for the die brought back, that die is spent (rule 34); "Discard unplayable die" does not pick another.
 function reservedDieSpentBeforeDiscardingAnother() {
@@ -2613,6 +2996,8 @@ const SCENARIOS = [
   ["6.3", actionsUpdateTheTracker],
   ["faction", recruitCardKeepsFactionOutOfPlay],
   ["6.4", lidlessEyeMovesDiceNotItsOwn],
+  ["6.4", lidlessEyeTopsUpToThree],
+  ["6.5", huntMinimumAskedOnZeroDicePaths],
   ["6.5", rule34CapsHuntAllocations],
   ["6.6", tableTriggersDiscardOrAsk],
   ["6.7", callToBattleCardsIgnoreInitiative],
@@ -2641,6 +3026,10 @@ const SCENARIOS = [
   ["draft", noSetAsideDieFallsThroughToDiscard],
   ["draft", eventPageChecksTheDie],
   ["migrate", savedWalkFromReleasedFlowchartResumes],
+  ["migrate", version61ArmyWalkResumesAndEnds],
+  ["migrate", version61ArmyMovePromptGetsBothMoves],
+  ["migrate", migratedWalkHasEveryField],
+  ["migrate", migratedArmyStartForEveryArmyJump],
   ["draft", reservedDieSpentBeforeDiscardingAnother],
   ["draft", reservedDieSpentWithDiceOff],
   ["calc", captainOfTheWestCountsOnce],
