@@ -2,12 +2,19 @@
 import * as engine from "../engine/index.js";
 import { DECK, DIE_REQUIREMENT, STRATEGY, TRAIL } from "../engine/index.js";
 import { NODE, NODE_KIND } from "../flow/index.js";
-import { doReturn, endWalk, follow, goto, setPrompt, trail } from "./core.js";
+import {
+  doReturn,
+  endWalk,
+  follow,
+  goto,
+  setPrompt,
+  spendCurrentDie,
+  trail,
+} from "./core.js";
 import { findStart, normalizeText } from "./graph.js";
-import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
 import { ensureDie } from "./jumps.js";
 import { SHADOW_NATION_KEY } from "./nations.js";
-import { letGoOtherRingDie, ringDieSpent } from "./rings.js";
+import { letGoOtherRingDie } from "./rings.js";
 import {
   FALL_THROUGH,
   PENDING,
@@ -340,37 +347,27 @@ export function handleAction(state, node) {
     if (result !== FALL_THROUGH) return result;
   }
   if (isEndBox(label)) return endAction(state, walk);
-  promptAction(state, node, label, { help: NODE.extra(node).help });
-}
-// The walk no longer holds a die (spent, or given up unspent).
-export function releaseCurrentDie(state) {
-  state.walk.die = null;
-  state.walk.dieIndex = null;
-  state.walk.dieViaMessenger = false;
-}
-export function spendCurrentDie(state, why) {
-  const walk = state.walk;
-  if (!walk?.die) return;
-  ringDieSpent(state);
-  if (walk.dieViaMessenger) {
-    state.messengerUsedThisTurn = true;
-    engine.log(
-      state,
-      "Messenger of the Dark Tower used: a Muster die acted as an Army die (rule 30).",
-    );
+  if (walk.page === "AR" && walk.armyMoves && label === "Attack") {
+    trail(state, {
+      kind: TRAIL.SKIP,
+      text: label,
+      why: "the Army die has made a move: its second use is a move by another Army (rule 9)",
+    });
+    return exitAction(state);
   }
-  if (state.settings.dice && walk.dieIndex != null) {
-    engine.spendDie(state, state.dice.pool[walk.dieIndex], why);
-  } else
-    engine.log(
-      state,
-      "Queller used a " +
-        DIE_REQUIREMENT_NAME[walk.die] +
-        " die" +
-        (why ? " — " + why : "") +
-        ".",
-    );
-  releaseCurrentDie(state);
+  promptAction(state, node, label, {
+    help: NODE.extra(node).help,
+    ...armyMoveFlags(walk, label),
+  });
+}
+// An Army die gives two moves by two different Armies (rule 9): on the Army page the first move action asks whether it
+// moved one Army (the second move follows) or two ("if both are not used for one condition"), and "Move/Attack" also
+// whether it attacked, which uses the whole die. The second move is a plain move.
+function armyMoveFlags(walk, label) {
+  if (walk.page !== "AR" || walk.die !== DIE_REQUIREMENT.ARMY) return {};
+  if (walk.armyMoves) return {};
+  if (label === "Move/Attack") return { armyMove: true, moveOrAttack: true };
+  return label.startsWith("Move") ? { armyMove: true } : {};
 }
 // Rule 36: an action Queller cannot take is skipped — follow the arrow out of the box, or return to the page that sent us here.
 export function exitAction(state) {

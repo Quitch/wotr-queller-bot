@@ -3,8 +3,9 @@ import * as engine from "../engine/index.js";
 import { TRAIL } from "../engine/index.js";
 import { EDGE, FLOW, NODE, NODE_KIND } from "../flow/index.js";
 import { edgeFor, findStart, normalizeText } from "./graph.js";
+import { DIE_REQUIREMENT_NAME } from "./jumps-table.js";
 import { PENDING, PROMPT, WALK_RESULT } from "./prompt.js";
-import { ringBoxState, settleRing } from "./rings.js";
+import { ringBoxState, ringDieSpent, settleRing } from "./rings.js";
 
 // The parts of a walk (state.walk is the flat union of them).
 // Where the walk is: its page and node, the start point it began at, the pages it will return to, its record and its prompt.
@@ -35,6 +36,9 @@ const walkDieState = (options) => ({
   // player's answer to the Messenger question (null until asked)
   dieViaMessenger: false,
   messengerAns: null,
+  // an Army die on the Army page (rule 9): the start point it entered at, and the moves it has made (0 or 1)
+  armyStart: null,
+  armyMoves: 0,
 });
 // Elven Ring state (rules 43-46, walk/rings.js): the dice a bold box lets a ring create, the box a limited use needs or
 // the question that picks the die (and its answer), whether the ring question was put to the player, and a ring use
@@ -86,6 +90,7 @@ export function beginWalk(state, page, startName, options = {}) {
     ...walkChoiceState(),
     ...walkDecisionState(),
   };
+  if (page === "AR") state.walk.armyStart = startName;
   trail(state, { kind: TRAIL.START, text: startName, page });
   engine.log(
     state,
@@ -153,6 +158,15 @@ export function exitJump(state) {
 }
 export function doReturn(state) {
   const walk = state.walk;
+  if (walk.page === "AR" && walk.armyMoves === 1) {
+    spendCurrentDie(state, "one Army move; no second move was possible");
+    endWalk(
+      state,
+      WALK_RESULT.ACTION,
+      "No second Army move is possible: the Army die is used (rule 9).",
+    );
+    return;
+  }
   if (!walk.stack.length) {
     // A die brought back from "set aside for a minion" that found no action is spent, not set aside again (rule 34: it cannot be used for anything else).
     if (
@@ -196,4 +210,34 @@ export function doReturn(state) {
     text: normalizeText(NODE.text(cur(state))),
   });
   exitJump(state);
+}
+export function spendCurrentDie(state, why) {
+  const walk = state.walk;
+  if (!walk?.die) return;
+  ringDieSpent(state);
+  if (walk.dieViaMessenger) {
+    state.messengerUsedThisTurn = true;
+    engine.log(
+      state,
+      "Messenger of the Dark Tower used: a Muster die acted as an Army die (rule 30).",
+    );
+  }
+  if (state.settings.dice && walk.dieIndex != null) {
+    engine.spendDie(state, state.dice.pool[walk.dieIndex], why);
+  } else
+    engine.log(
+      state,
+      "Queller used a " +
+        DIE_REQUIREMENT_NAME[walk.die] +
+        " die" +
+        (why ? " — " + why : "") +
+        ".",
+    );
+  releaseCurrentDie(state);
+}
+// The walk no longer holds a die (spent, or given up unspent).
+export function releaseCurrentDie(state) {
+  state.walk.die = null;
+  state.walk.dieIndex = null;
+  state.walk.dieViaMessenger = false;
 }

@@ -352,6 +352,10 @@ function enterPage(state, spec, label, before) {
   walk.cands = null;
   walk.chosen = null;
   walk.steps = null;
+  if (spec.page === "AR") {
+    walk.armyStart = spec.start;
+    walk.armyMoves = 0;
+  }
   goto(state, spec.page, findStart(spec.page, spec.start));
   follow(state, null);
 }

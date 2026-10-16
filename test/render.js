@@ -18,7 +18,7 @@ const engine = fakeWindow.QB,
   { PROMPT } = engine;
 const SEED = 2;
 const GAMES_PER_SETTING = 2;
-const TURNS_PER_GAME = 2;
+const TURNS_PER_GAME = 3;
 const MAX_FAILURES_SHOWN = 25;
 const CONTEXT_CHARS = 60; // of output shown around a suspect word
 const ON_BORDER_TOLERANCE = 0.51; // an arrow end this far outside a box still touches it
@@ -384,8 +384,61 @@ function checkSituationalPrompt() {
     "a situational card question is raised and rendered",
   );
 }
+// The Army die's first move (rule 9) offers one Army, two Armies or an attack; the second move is a plain Done under an
+// eyebrow that says which move it is. The random games stop at the first action, so both are raised here.
+function checkArmyMovePrompts() {
+  const state = engine.newState({
+    dice: true,
+    cards: false,
+    tracker: false,
+    wome: false,
+  });
+  state.phase = engine.PHASE.P5;
+  state.strategy = engine.STRATEGY.MILITARY;
+  state.dice.pool = [
+    { kind: engine.DIE_KIND.ACTION, face: "Army", status: "avail" },
+  ];
+  engine.startWalk(state, "AR", "Army 4", {
+    die: engine.DIE_REQUIREMENT.ARMY,
+    dieIndex: 0,
+  });
+  const toMoveAttack = () => {
+    for (
+      let guard = 0;
+      guard < 20 && state.walk.prompt?.text !== "Move/Attack";
+      guard++
+    )
+      engine.answer(
+        state,
+        state.walk.prompt.type === engine.PROMPT.YES_NO ? true : "done",
+      );
+    ui.setState(state);
+    return fakeWindow.promptHTML(state.walk);
+  };
+  const first = toMoveAttack();
+  engine.answer(state, "done");
+  const second = toMoveAttack();
+  const buttons = (html) =>
+    [
+      ...html.matchAll(
+        /<button class="btn [a-z]+" data-ans="[a-zA-Z]+">([^<]+)</g,
+      ),
+    ].map(([, name]) => name);
+  ok(
+    buttons(first).join() ===
+      "Moved one Army,Moved two Armies,Attacked,Not possible (rule 36)" &&
+      buttons(second).join() === "Done,Not possible (rule 36)" &&
+      second.includes("second Army move"),
+    "the first Army move offers one Army, two Armies or an attack; the second is a plain Done (" +
+      buttons(first).join() +
+      " | " +
+      buttons(second).join() +
+      ")",
+  );
+}
 function main() {
   playGames();
+  checkArmyMovePrompts();
   checkSituationalPrompt();
   checkConditionListPrompt();
   checkBlockedQuestionHidesHand();
