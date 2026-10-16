@@ -1515,6 +1515,29 @@ function reservedDieSpentBeforeDiscardingAnother() {
       " wrong)",
   );
 }
+// Dice off: the set-aside Muster die that finds no action in Muster 2 is spent too, so the walk is an action.
+function reservedDieSpentWithDiceOff() {
+  const state = phase5State(
+    { dice: false, cards: false, tracker: true, wome: false },
+    STRATEGY.MILITARY,
+  );
+  state.board.nations.isengard = 0;
+  state.minionReserved = true;
+  engine.startPhase(state, PHASE.P5);
+  driveWalk(state, [[/^Pass/, "no"], byType(PROMPT.ACTION, "no")]);
+  ok(
+    state.walk.result === WALK_RESULT.ACTION &&
+      /sets aside the Muster die it had kept for a minion/.test(
+        lastLogText(state),
+      ) &&
+      state.log.some(
+        (entry) =>
+          entry.text ===
+          "Queller used a Muster die — set aside for a minion, no action possible.",
+      ),
+    "the set-aside Muster die with no action is spent, and the walk is Queller's action",
+  );
+}
 // The army value calculator counts a Captain of the West once: he adds a combat die, not a point of his own.
 function captainOfTheWestCountsOnce() {
   const inputs = (extra) => ({
@@ -1626,6 +1649,35 @@ function ringUsedOnlyWhereRule46Allows() {
         /rule 46 does not allow it/.test(entry.text),
       ),
     "no ring for the Witch-king when he cannot join or create a mobile Army",
+  );
+}
+// Corruption's "Mordor win" box: without the tracker the bold question keeps "Fellowship on the Mordor Track"; with it,
+// and the Fellowship not on the Mordor Track, only the target part is asked.
+function mordorWinRingPartAsksWholeBoldCondition() {
+  const boldPrompt = (tracker) => {
+    const state = phase5State({
+      dice: false,
+      cards: false,
+      tracker,
+      wome: false,
+    });
+    engine.startPhase(state, PHASE.P5);
+    const seen = driveWalk(state, [
+      [/^\*Mobile\* Army \*adjacent\* to \*target\*$/, true],
+    ]);
+    return seen.find((prompt) => /would win the game/.test(prompt.text));
+  };
+  const untracked = boldPrompt(false);
+  ok(
+    untracked?.bold &&
+      /Fellowship on the Mordor Track/.test(untracked.text) &&
+      /would win the game/.test(untracked.text),
+    "tracker off: the bold question asks about the Mordor Track and the target's win",
+  );
+  const tracked = boldPrompt(true);
+  ok(
+    tracked?.bold && tracked.text === "*Target* would win the game",
+    "tracker on, Fellowship not on the Mordor Track: the bold question asks about the target only",
   );
 }
 // Dice off: a No to "Does Queller have … die?" goes on to offer the ring, and a ring for a step that was not possible
@@ -1990,6 +2042,82 @@ function wildResultOnlyForFactionSteps() {
         /a Wild result on the Faction die counts/.test(prompt.text),
       ),
     "dice off: the question for a Faction die says a Wild result counts",
+  );
+}
+// WoME p.8: an Elven Ring cannot change the Faction die, and an Action die cannot act on Faction figures, so a ring
+// never makes a die for a Faction step, with dice on or off.
+function ringMakesNoFactionDie() {
+  const ringSearch = (dice) => {
+    const state = phase5State(
+      { dice, cards: false, tracker: dice, wome: true },
+      STRATEGY.MILITARY,
+    );
+    state.board.rings = 1;
+    if (dice) state.dice.pool = [die("Eye")];
+    engine.startWalk(state, "M5", "Phase 5", { mode: "ringAny" });
+    return state;
+  };
+  const factionFaces = new Set([
+    "Wild",
+    DIE_REQUIREMENT.FACTION_RECRUIT,
+    DIE_REQUIREMENT.FACTION_PLAY,
+    DIE_REQUIREMENT.FACTION_DRAW,
+  ]);
+  const diceOn = ringSearch(true);
+  driveWalk(diceOn, [byType(PROMPT.ACTION, "no")]);
+  ok(
+    !diceOn.log.some((entry) => {
+      const changed = /Elven Ring: changed a \w+ die to (\w+)/.exec(entry.text);
+      return changed && factionFaces.has(changed[1]);
+    }),
+    "dice on: the rule 44 walk never changes a die for a Faction step",
+  );
+  const direct = ringSearch(true);
+  ok(
+    engine.ringChange(direct, DIE_REQUIREMENT.FACTION_RECRUIT) === null &&
+      direct.board.rings === 1 &&
+      direct.dice.pool[0].face === "Eye",
+    "dice on: ringChange makes no Faction die and keeps the ring",
+  );
+  const diceOff = ringSearch(false);
+  const factionOffers = driveWalk(diceOff, [
+    byType(PROMPT.ACTION, "no"),
+    byType(PROMPT.RING, false),
+  ]).filter(
+    (prompt) =>
+      prompt?.type === PROMPT.RING && engine.isFactionRequirement(prompt.req),
+  );
+  ok(
+    diceOff.walk.done && factionOffers.length === 0,
+    "dice off: the rule 44 walk offers no ring for a Faction step",
+  );
+  // a save from before this fix may hold a ring offer for a Faction step: a Yes to it uses no ring
+  const restored = ringSearch(false);
+  driveWalk(restored, [
+    byType(PROMPT.ACTION, "no"),
+    {
+      test: (prompt) =>
+        prompt.type === PROMPT.DIE_CHECK &&
+        prompt.req === DIE_REQUIREMENT.FACTION_PLAY,
+      answer: (prompt) => {
+        restored.walk.prompt = {
+          type: PROMPT.RING,
+          req: prompt.req,
+          label: prompt.label,
+          text: "Use an Elven Ring",
+        };
+        return true;
+      },
+    },
+  ]);
+  ok(
+    restored.walk.done &&
+      restored.board.rings === 1 &&
+      !restored.ringUsedThisTurn &&
+      restored.log.some((entry) =>
+        /cannot make a Faction die/.test(entry.text),
+      ),
+    "dice off: a Yes to a saved ring offer for a Faction step uses no ring",
   );
 }
 // Rule 30, Messenger of the Dark Tower: with the Mouth of Sauron in play and no Army or Army/Muster die, a Muster die
@@ -2370,6 +2498,7 @@ const SCENARIOS = [
   ["migrate", migrateUpgradesOldSaves],
   ["decks", emptyEventDecksFallBack],
   ["dice", wildResultOnlyForFactionSteps],
+  ["dice", ringMakesNoFactionDie],
   ["dice", messengerMusterDieActsAsArmyOncePerTurn],
   ["army", armyDieMovesTwoArmies],
   ["army", exposedMoveFallsBackToCharacterDie],
@@ -2387,9 +2516,11 @@ const SCENARIOS = [
   ["draft", eventPageChecksTheDie],
   ["migrate", savedWalkFromReleasedFlowchartResumes],
   ["draft", reservedDieSpentBeforeDiscardingAnother],
+  ["draft", reservedDieSpentWithDiceOff],
   ["calc", captainOfTheWestCountsOnce],
   ["rings", ringReturnedWhenItsStepIsNotPossible],
   ["rings", ringUsedOnlyWhereRule46Allows],
+  ["rings", mordorWinRingPartAsksWholeBoldCondition],
   ["rings", diceOffRingOfferedAndTurnedBack],
   ["rings", ringSettledWhereTheDieGoes],
   ["rings", ringSettledAtTheNextBoldBox],

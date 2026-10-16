@@ -63,6 +63,8 @@ export function armRing(state, key, isMainDecision, answer, ringCondition) {
 export function ringMayCreate(state, req) {
   const walk = state.walk;
   if (!engine.ringAvailable(state)) return false;
+  // WoME p.8: an Elven Ring cannot change the Faction die, and an Action die cannot act on Faction figures
+  if (engine.isFactionRequirement(req)) return false;
   if (walk.ringDeclined?.includes(req)) return false;
   if (walk.mode === "ringAny" || walk.ringDice === ANY_DIE) return true;
   return !!walk.ringDice?.includes(req);

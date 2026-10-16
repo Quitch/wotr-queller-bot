@@ -5,7 +5,7 @@ import { MODAL } from "../ui/constants.js";
 import { escapeHTML as esc } from "../ui/dom.js";
 import * as ui from "../ui/index.js";
 import { closeModal, renderModal } from "./framework.js";
-import { copyText, downloadText } from "./transfer.js";
+import { copyText, downloadText, wireShare } from "./transfer.js";
 
 const saveContent = () => ({
   title: "Save and load",
@@ -39,12 +39,12 @@ function saveHTML() {
       })
       .join("");
   html +=
-    '<h3>Transfer</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="dlBtn">Download save file</button><button class="btn" id="copyBtn">Copy save code</button></div><div id="dlNote" class="notice" role="status" aria-live="polite"></div>';
+    '<h3>Transfer</h3><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="dlBtn">Download save file</button><button type="button" class="btn" id="shareBtn" hidden>Share save file</button><button class="btn" id="copyBtn">Copy save code</button></div><div id="dlNote" class="notice" role="status" aria-live="polite"></div>';
   html += "<h3>Load</h3>" + loadHTML() + "</div>";
   return html;
 }
 export function loadHTML() {
-  return '<p class="notice" style="margin:0 0 6px">Paste a save code, or choose a save file.</p><label for="loadTxt" class="notice">Save code</label><textarea id="loadTxt" placeholder="Paste the save code here"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="loadTxtBtn">Load from code</button><label class="btn filebtn">Save file <input type="file" id="loadFile" accept=".json,application/json"></label></div><div id="loadErr" class="notice" role="alert" style="color:var(--bad)"></div>';
+  return '<p class="notice" style="margin:0 0 6px">Paste a save code, or choose a save file.</p><label for="loadTxt" class="notice">Save code</label><textarea id="loadTxt" placeholder="Paste the save code here"></textarea><div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;align-items:center"><button class="btn" id="loadTxtBtn">Load from code</button><label class="btn filebtn">Save file <input type="file" id="loadFile" accept=".json,.txt,application/json,text/plain"></label></div><div id="loadErr" class="notice" role="alert" style="color:var(--bad)"></div>';
 }
 // Replace the game with a parsed save.
 function replaceGame(save, title) {
@@ -157,12 +157,22 @@ function wireSaveModal(modal, el) {
     },
     el,
   );
+  const saveFileName = () => "queller-turn" + ui.state.turn + ".json";
+  const shareButton = el.querySelector("#shareBtn");
+  wireShare(shareButton, {
+    fileName: saveFileName,
+    data: () => JSON.stringify(ui.state),
+    noteEl: el.querySelector("#dlNote"),
+    fallbackLabel: "Copy save code",
+  });
   el.querySelector("#dlBtn").onclick = () =>
-    downloadText({
-      fileName: "queller-turn" + ui.state.turn + ".json",
+    void downloadText({
+      fileName: saveFileName(),
       data: JSON.stringify(ui.state),
       noteEl: el.querySelector("#dlNote"),
-      fallbackLabel: "Copy save code",
+      fallbackLabel: shareButton.hidden
+        ? "Copy save code"
+        : "Share save file or Copy save code",
     });
   el.querySelector("#copyBtn").onclick = () =>
     copyText({
