@@ -635,6 +635,119 @@ async function checkTransfer() {
   delete globalThis.window;
   delete globalThis.document;
 }
+// The Debug log and Save windows' transfer buttons wired onto fake elements: no DOM, so the debug log cannot be
+// built and the text box holds the build error, which is still a log to export.
+async function checkTransferWiring() {
+  const navigatorDescriptor = Object.getOwnPropertyDescriptor(
+    globalThis,
+    "navigator",
+  );
+  const shared = [];
+  Object.defineProperty(globalThis, "navigator", {
+    value: {
+      canShare: (data) => data.files[0].type === "text/plain",
+      share: async (data) => {
+        shared.push(data.files[0].name);
+      },
+    },
+    configurable: true,
+  });
+  const clicks = [];
+  globalThis.document = {
+    createElement: () => ({
+      click() {
+        clicks.push(this.download);
+      },
+    }),
+  };
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const store = {};
+  globalThis.localStorage = {
+    getItem: (key) => (key in store ? store[key] : null),
+    setItem: (key, value) => {
+      store[key] = String(value);
+    },
+    removeItem: (key) => delete store[key],
+  };
+  const fakeEl = (ids) => {
+    const nodes = Object.fromEntries(ids.map((id) => [id, { id }]));
+    return {
+      nodes,
+      querySelector: (selector) => nodes[selector.slice(1)],
+      querySelectorAll: () => [],
+    };
+  };
+  const state = engine.newState({ dice: true });
+  state.turn = 3;
+  ui.setState(state);
+  fakeWindow.QB_DEBUG.reset();
+
+  const debugEl = fakeEl([
+    "dbgTxt",
+    "dbgReport",
+    "dbgNote",
+    "dbgShare",
+    "dbgDl",
+    "dbgCopy",
+  ]);
+  fakeWindow.MODAL_REGISTRATIONS.debug.wire(null, debugEl);
+  const { dbgShare, dbgDl, dbgNote, dbgTxt } = debugEl.nodes;
+  ok(
+    dbgShare.hidden === false && /could not be built/.test(dbgTxt.value),
+    "the Debug log window shows Share where a file can be shared",
+  );
+  dbgDl.onclick();
+  await settle();
+  ok(
+    clicks.at(-1).startsWith("queller-debug-turn3-") &&
+      dbgNote.textContent ===
+        "If nothing downloaded, use Share debug log file or Copy debug log.",
+    "Download debug log names Share and Copy as the fallback",
+  );
+  dbgShare.onclick();
+  await settle();
+  ok(
+    /^queller-debug-turn3-.*\.txt$/.test(shared.at(-1)) &&
+      dbgNote.textContent === "Shared " + shared.at(-1) + ".",
+    "Share debug log file shares the log",
+  );
+  const exports = fakeWindow.QB_DEBUG.build()
+    .actions.filter((entry) => /^debugExport/.test(entry.action))
+    .map(
+      (entry) => entry.action + ":" + entry.how + ":" + (entry.outcome ?? ""),
+    );
+  ok(
+    exports.join(" ") ===
+      "debugExport:download: debugExportResult:download:link debugExport:share: debugExportResult:share:shared",
+    "each export records its click and then its outcome",
+  );
+
+  const saveEl = fakeEl(["shareBtn", "dlBtn", "copyBtn", "dlNote"]);
+  fakeWindow.MODAL_REGISTRATIONS.save.wire(null, saveEl);
+  const { shareBtn, dlBtn, dlNote } = saveEl.nodes;
+  ok(shareBtn.hidden === false, "the Save window shows Share too");
+  dlBtn.onclick();
+  await settle();
+  ok(
+    clicks.at(-1) === "queller-turn3.json" &&
+      dlNote.textContent ===
+        "If nothing downloaded, use Share save file or Copy save code.",
+    "Download save file names Share and Copy as the fallback",
+  );
+  shareBtn.onclick();
+  await settle();
+  ok(
+    shared.at(-1) === "queller-turn3.txt" &&
+      dlNote.textContent === "Shared queller-turn3.txt.",
+    "Share save file shares the game",
+  );
+
+  Object.defineProperty(globalThis, "navigator", navigatorDescriptor);
+  fakeWindow.QB_DEBUG.reset();
+  delete globalThis.document;
+  delete globalThis.localStorage;
+  ui.setState(null);
+}
 async function main() {
   checkTextHelpers();
   checkBoardPaths();
@@ -647,6 +760,7 @@ async function main() {
   checkTrailAndResult();
   checkCardFaces();
   await checkTransfer();
+  await checkTransferWiring();
   console.log(fails ? fails + " failure(s)" : "all UI checks passed");
   process.exit(fails ? 1 : 0);
 }
