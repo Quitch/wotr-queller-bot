@@ -641,26 +641,33 @@ function emptyEventDecksFallBack() {
       die: DIE_REQUIREMENT.EVENT,
       dieIndex: 0,
     });
-    driveWalk(walkState, []);
-    return walkState;
+    return { state: walkState, seen: driveWalk(walkState, []) };
   };
   const fallback = drawEvent2((walkState) => {
     walkState.cards.decks.C = [];
   });
   ok(
-    fallback.cards.hand.length === 1 &&
-      engine.cardById[fallback.cards.hand[0]].deck === engine.DECK.STRATEGY &&
-      fallback.walk.result === WALK_RESULT.ACTION,
-    '"Draw a Character Event card" draws a Strategy card when the Character deck is empty',
+    fallback.state.cards.hand.length === 1 &&
+      engine.cardById[fallback.state.cards.hand[0]].deck ===
+        engine.DECK.STRATEGY &&
+      fallback.state.walk.result === WALK_RESULT.ACTION &&
+      fallback.seen.some((prompt) =>
+        /the Character deck is empty: Queller drew a Strategy card/.test(
+          prompt?.text || "",
+        ),
+      ),
+    '"Draw a Character Event card" draws a Strategy card when the Character deck is empty, and says so',
   );
   const bothEmpty = drawEvent2((walkState) => {
     walkState.cards.decks.C = [];
     walkState.cards.decks.S = [];
   });
   ok(
-    bothEmpty.cards.hand.length === 0 &&
-      bothEmpty.dice.pool[0].status === DIE_STATE.AVAIL &&
-      bothEmpty.walk.trail.some((entry) => /rule 25/.test(entry.why || "")),
+    bothEmpty.state.cards.hand.length === 0 &&
+      bothEmpty.state.dice.pool[0].status === DIE_STATE.AVAIL &&
+      bothEmpty.state.walk.trail.some((entry) =>
+        /rule 25/.test(entry.why || ""),
+      ),
     "with both Event decks empty the draw is not possible and the die is kept",
   );
   const phase1 = engine.newState({
@@ -697,6 +704,44 @@ function emptyEventDecksFallBack() {
       state.cards.decks.F.length === factionCards.length - 1 &&
       entries.some((entry) => /keep one of 3 cards/.test(entry.text)),
     "Servants of Sauron topped the two-card Faction deck up from the discards and looked at three",
+  );
+  const faction = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: true,
+  });
+  faction.cards.discards.F = faction.cards.decks.F.splice(0);
+  const factionDiscards = faction.cards.discards.F.slice();
+  const drawnFaction = engine.drawCard(faction, engine.DECK.FACTION);
+  ok(
+    factionDiscards.includes(drawnFaction) &&
+      faction.cards.factionHand.length === 1 &&
+      faction.cards.discards.F.length === 0 &&
+      faction.cards.decks.F.length === factionDiscards.length - 1,
+    "an empty Faction Event deck is rebuilt from its discards before the draw",
+  );
+  const palantir = engine.newState({
+    dice: true,
+    cards: true,
+    tracker: true,
+    wome: false,
+  });
+  palantir.strategy = STRATEGY.CORRUPTION;
+  palantir.cards.decks.C = [];
+  const played = engine.CARDS.find(
+    (card) => card.deck === engine.DECK.CHARACTER,
+  );
+  const palantirEntries = engine.resolveCardEffects(palantir, played.id, {
+    combat: false,
+    die: DIE_REQUIREMENT.EVENT,
+    palantirBefore: true,
+  });
+  ok(
+    palantir.cards.hand.length === 1 &&
+      engine.cardById[palantir.cards.hand[0]].deck === engine.DECK.STRATEGY &&
+      palantirEntries.some((entry) => /drew a Strategy card/.test(entry.text)),
+    "the Palantír draws from the Strategy deck when the Character deck is empty",
   );
 }
 // The tracker's table triggers: Worn with Sorrow and Toil asks like Flocks of Crebain; Wormtongue leaves when Saruman does.

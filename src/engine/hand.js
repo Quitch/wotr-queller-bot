@@ -36,6 +36,13 @@ export function drawCard(state, deckKey) {
   );
   return id;
 }
+// The Event deck to draw from when `named` is Character or Strategy: `named`, or the other one when it is empty
+// (rule 25); null when both are empty.
+export function eventDeckToDraw(state, named) {
+  const other = named === DECK.CHARACTER ? DECK.STRATEGY : DECK.CHARACTER;
+  if (state.cards.decks[named].length) return named;
+  return state.cards.decks[other].length ? other : null;
+}
 export function deckName(deckKey) {
   if (deckKey === DECK.CHARACTER) return "Character";
   return deckKey === DECK.STRATEGY ? "Strategy" : "Faction Event";
