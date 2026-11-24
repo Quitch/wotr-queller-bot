@@ -45,7 +45,7 @@ npm run build
 
 ### Reporting a problem
 
-If the app itself goes wrong (a step that makes no sense, a card or die handled wrongly, a button that does nothing), open Settings and press Export debug log. Attach the log to a [GitHub issue](https://github.com/Quitch/wotr-queller-bot/issues) with a short description of what you expected. The log holds the game state, the last actions you took and any errors. It also shows Queller's hidden cards, so only read it if you do not mind seeing them.
+If the app itself goes wrong (a step that makes no sense or does not match the rules or flowcharts, a card or die handled wrongly, a button that does nothing), open Settings and press Export debug log. Attach the log to a [GitHub issue](https://github.com/Quitch/wotr-queller-bot/issues) with a short description of what you expected. The log holds the game state, the last actions you took and any errors. It also shows Queller's hidden cards, so only read it if you do not mind seeing them.
 
 ## Development
 

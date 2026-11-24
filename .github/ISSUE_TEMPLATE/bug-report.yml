@@ -1,5 +1,5 @@
 name: Bug report
-description: "The app did something wrong: a step that makes no sense, a card or die handled wrongly, a button that does nothing."
+description: "The app did something wrong: a step that makes no sense or does not match the rules or flowcharts, a card or die handled wrongly, a button that does nothing."
 assignees: [Quitch]
 type: Bug
 body:
