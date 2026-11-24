@@ -1,1 +1,5 @@
 blank_issues_enabled: false
+contact_links:
+  - name: Ask a question
+    url: https://github.com/Quitch/wotr-queller-bot/discussions/categories/q-a
+    about: How to use the app, or anything that is not a wrong step. Use the forms above when a step looks wrong.
